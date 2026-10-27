@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <!-- 雙模核心：WinExe 支援雙擊調試，同時產出 DLL 供 MVCON 動態掛載 -->
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <!-- 驅動命名規範：<DriverName>.Driver.dll / .Driver.exe -->
+    <AssemblyName>MockDevice.Driver</AssemblyName>
+    <RootNamespace>MVCON.Driver.MockDevice</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="11.0.10" />
+    <PackageReference Include="Avalonia.Desktop" Version="11.0.10" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="11.0.10" />
+    <ProjectReference Include="..\..\..\..\..\src\MVCON.Core\MVCON.Core.csproj" />
+  </ItemGroup>
+</Project>

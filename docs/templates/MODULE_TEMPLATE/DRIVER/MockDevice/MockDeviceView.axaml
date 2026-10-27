@@ -1,0 +1,20 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="MVCON.Driver.MockDevice.MockDeviceView">
+    <Border Background="#F8FAFC" Padding="16" CornerRadius="6" BorderBrush="#CBD5E1" BorderThickness="1">
+        <StackPanel Spacing="12">
+            <TextBlock Text="🛠️ MOCK DEVICE DRIVER CONTROL PANEL" FontWeight="Bold" Foreground="#1E293B" FontSize="14"/>
+            <Separator Height="1" Background="#E2E8F0"/>
+            
+            <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto">
+                <TextBlock Grid.Row="0" Grid.Column="0" Text="Status: " FontWeight="SemiBold" Foreground="#64748B"/>
+                <TextBlock Grid.Row="0" Grid.Column="1" x:Name="TxtStatus" Text="Connected" Foreground="#16A34A" FontWeight="Bold"/>
+
+                <TextBlock Grid.Row="1" Grid.Column="0" Text="Processed: " FontWeight="SemiBold" Foreground="#64748B" Margin="0,6,0,0"/>
+                <TextBlock Grid.Row="1" Grid.Column="1" x:Name="TxtCount" Text="0 tickets" Foreground="#0284C7" Margin="0,6,0,0"/>
+            </Grid>
+
+            <Button x:Name="BtnTestTicket" Content="⚡ 發送測試通訊票券 (Test Ticket)" Background="#2563EB" Foreground="#FFFFFF" CornerRadius="4" Padding="12,6"/>
+        </StackPanel>
+    </Border>
+</UserControl>

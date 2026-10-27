@@ -1,0 +1,156 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="MVCON.App.Dialogs.ParameterGuidanceWindow"
+        Title="MVCON Parameter Editor"
+        Width="580" Height="410"
+        WindowStartupLocation="CenterOwner"
+        CanResize="False"
+        RequestedThemeVariant="Light"
+        Background="#F8FAFC">
+
+    <Window.Styles>
+        <!-- 全域 TextBox 與 ComboBox 防護：純白底色、深黑字體、高對比游標 -->
+        <Style Selector="TextBox">
+            <Setter Property="Background" Value="#FFFFFF"/>
+            <Setter Property="Foreground" Value="#0F172A"/>
+            <Setter Property="CaretBrush" Value="#0F172A"/>
+            <Setter Property="SelectionBrush" Value="#2563EB"/>
+            <Setter Property="SelectionForegroundBrush" Value="#FFFFFF"/>
+            <Setter Property="CornerRadius" Value="4"/>
+        </Style>
+        <Style Selector="TextBox:focus /template/ Border#PART_BorderElement">
+            <Setter Property="Background" Value="#FFFFFF"/>
+            <Setter Property="BorderBrush" Value="#2563EB"/>
+            <Setter Property="BorderThickness" Value="1.5"/>
+        </Style>
+        <Style Selector="TextBox:pointerover /template/ Border#PART_BorderElement">
+            <Setter Property="Background" Value="#FFFFFF"/>
+            <Setter Property="BorderBrush" Value="#3B82F6"/>
+        </Style>
+        <Style Selector="TextBox[IsReadOnly=True]">
+            <Setter Property="Background" Value="#F1F5F9"/>
+            <Setter Property="Foreground" Value="#475569"/>
+            <Setter Property="BorderBrush" Value="#CBD5E1"/>
+        </Style>
+        <Style Selector="TextBox[IsReadOnly=True]:focus /template/ Border#PART_BorderElement">
+            <Setter Property="Background" Value="#F1F5F9"/>
+            <Setter Property="BorderBrush" Value="#CBD5E1"/>
+        </Style>
+        <Style Selector="TextBox[IsReadOnly=True]:pointerover /template/ Border#PART_BorderElement">
+            <Setter Property="Background" Value="#F1F5F9"/>
+            <Setter Property="BorderBrush" Value="#CBD5E1"/>
+        </Style>
+
+        <Style Selector="ComboBox">
+            <Setter Property="Background" Value="#FFFFFF"/>
+            <Setter Property="Foreground" Value="#0F172A"/>
+            <Setter Property="CornerRadius" Value="4"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+        </Style>
+    </Window.Styles>
+
+    <Grid RowDefinitions="Auto,Auto,*,Auto,Auto" Margin="16,14">
+        <!-- 頂部標題與模組指令標籤 -->
+        <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto" Margin="0,0,0,10">
+            <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                <Border Background="#EFF6FF" BorderBrush="#BFDBFE" BorderThickness="1" CornerRadius="4" Padding="6,2">
+                    <TextBlock Text="⚙️ PARAMETER GUIDANCE" FontSize="10" FontWeight="Bold" Foreground="#1D4ED8"/>
+                </Border>
+                <TextBlock Text="指令參數引導視窗" FontSize="13" FontWeight="Bold" Foreground="#0F172A" VerticalAlignment="Center"/>
+            </StackPanel>
+            <TextBlock x:Name="TxtWindowSubtitle" Grid.Column="2" Text="" FontSize="11" Foreground="#64748B" VerticalAlignment="Center"/>
+        </Grid>
+
+        <!-- 1. ParameterIn 上游輸入顯示區 -->
+        <StackPanel Grid.Row="1" Spacing="4" Margin="0,0,0,10">
+            <TextBlock Text="ParameterIn (原始輸入值)" FontWeight="SemiBold" FontSize="11" Foreground="#475569"/>
+            <TextBox x:Name="TxtParameterIn" IsReadOnly="True" Height="28" FontSize="12"
+                     VerticalContentAlignment="Center" Padding="8,0"/>
+        </StackPanel>
+
+        <!-- 2. 中央現代工控核心編輯卡片 -->
+        <Border Grid.Row="2" Background="#FFFFFF" BorderBrush="#CBD5E1" BorderThickness="1" 
+                CornerRadius="6" Padding="14,10" Margin="0,0,0,10"
+                BoxShadow="0 1 3 0 #10000000">
+            <Grid RowDefinitions="Auto,*">
+                <!-- 指令標籤與參數型別說明 (例如: IO@SetPort/ClrPort $IOName(,$Delay,ForceUpdate)) -->
+                <Grid Grid.Row="0" ColumnDefinitions="Auto,*" Margin="0,0,0,8">
+                    <TextBlock Text="📝 Target Signature: " FontWeight="Bold" FontSize="12" Foreground="#334155"/>
+                    <TextBlock x:Name="LblCommandSignature" Grid.Column="1" Text="IO@SetPort/ClrPort $IOName(,$Delay,ForceUpdate)" 
+                               FontWeight="Bold" FontSize="12" Foreground="#0284C7"/>
+                </Grid>
+
+                <!-- 方案 A：IO 專屬 3 段下拉選單面板 (比照原廠 MVCON 導引視窗) -->
+                <Grid x:Name="PnlIoGuidance" Grid.Row="1" ColumnDefinitions="*,Auto" VerticalAlignment="Center" IsVisible="True">
+                    <StackPanel Grid.Column="0" Spacing="8" Margin="0,0,12,0">
+                        <!-- 第一項：$IOName 自動帶出所有 PORTNAME (紅色高亮邊框) -->
+                        <Grid ColumnDefinitions="Auto,*">
+                            <TextBlock Text="$IOName: " FontWeight="Bold" FontSize="11" Foreground="#DC2626" Width="90" VerticalAlignment="Center"/>
+                            <ComboBox x:Name="CboIoName" Grid.Column="1" Height="32" HorizontalAlignment="Stretch"
+                                      BorderBrush="#DC2626" BorderThickness="1.5"
+                                      PlaceholderText="請選擇或輸入 PortName (例如: P0.0)"/>
+                        </Grid>
+
+                        <!-- 第二項：$Delay 延遲時間下拉 (藍色高亮邊框) -->
+                        <Grid ColumnDefinitions="Auto,*">
+                            <TextBlock Text="$Delay (s): " FontWeight="Bold" FontSize="11" Foreground="#2563EB" Width="90" VerticalAlignment="Center"/>
+                            <ComboBox x:Name="CboIoDelay" Grid.Column="1" Height="32" HorizontalAlignment="Stretch"
+                                      BorderBrush="#2563EB" BorderThickness="1.5"
+                                      PlaceholderText="可選: 延遲時間 (秒)"/>
+                        </Grid>
+
+                        <!-- 第三項：ForceUpdate 強制刷新下拉 (藍色高亮邊框) -->
+                        <Grid ColumnDefinitions="Auto,*">
+                            <TextBlock Text="ForceUpdate: " FontWeight="Bold" FontSize="11" Foreground="#2563EB" Width="90" VerticalAlignment="Center"/>
+                            <ComboBox x:Name="CboIoForceUpdate" Grid.Column="1" Height="32" HorizontalAlignment="Stretch"
+                                      BorderBrush="#2563EB" BorderThickness="1.5"
+                                      PlaceholderText="可選: 強制硬體刷新"/>
+                        </Grid>
+                    </StackPanel>
+
+                    <!-- 右側專屬綠色勾勾確認鈕 (比照原廠 MVCON 擺放位置) -->
+                    <Button x:Name="BtnIoCheckmark" Grid.Column="1" Width="46" Height="100"
+                            Background="#10B981" BorderThickness="0" CornerRadius="4"
+                            HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
+                            Cursor="Hand" ToolTip.Tip="確認套用變更 (Enter)" Click="OnConfirmClick">
+                        <TextBlock Text="✔" FontWeight="Black" FontSize="20" Foreground="#FFFFFF"/>
+                    </Button>
+                </Grid>
+
+                <!-- 方案 B：通用指令單一參數編輯框 (非 IO 指令時自動切換顯示) -->
+                <Grid x:Name="PnlGenericGuidance" Grid.Row="1" ColumnDefinitions="*,Auto" VerticalAlignment="Center" IsVisible="False">
+                    <TextBox x:Name="TxtParameterEdit" Grid.Column="0" Height="34" FontSize="13" FontWeight="SemiBold"
+                             Background="#FFFFFF" Foreground="#0F172A" BorderBrush="#2563EB" BorderThickness="1.5"
+                             VerticalContentAlignment="Center" Margin="0,0,8,0" Padding="8,0"/>
+
+                    <Button x:Name="BtnCheckmark" Grid.Column="1" Width="44" Height="34"
+                            Background="#10B981" BorderThickness="0" CornerRadius="4"
+                            HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
+                            Cursor="Hand" ToolTip.Tip="確認套用變更 (Enter)" Click="OnConfirmClick">
+                        <TextBlock Text="✔" FontWeight="Black" FontSize="16" Foreground="#FFFFFF"/>
+                    </Button>
+                </Grid>
+            </Grid>
+        </Border>
+
+        <!-- 3. ParameterOut 下游輸出預覽區 -->
+        <StackPanel Grid.Row="3" Spacing="4" Margin="0,0,0,10">
+            <TextBlock Text="ParameterOut (即時套用預覽)" FontWeight="SemiBold" FontSize="11" Foreground="#475569"/>
+            <TextBox x:Name="TxtParameterOut" IsReadOnly="True" Height="28" FontSize="12" FontWeight="Bold"
+                     Foreground="#0369A1" Background="#F0FDF4" BorderBrush="#A7F3D0"
+                     VerticalContentAlignment="Center" Padding="8,0"/>
+        </StackPanel>
+
+        <!-- 4. 底部說明與確認/取消控制列 -->
+        <Grid Grid.Row="4" ColumnDefinitions="*,Auto,Auto">
+            <TextBlock Grid.Column="0" Text="💡 提示: 選擇參數後點擊綠色勾勾 ✔ 或按 Enter 即可直接套用回表格" 
+                       FontSize="11" Foreground="#64748B" VerticalAlignment="Center"/>
+            <Button x:Name="BtnOk" Grid.Column="1" Content="✔ 確定套用" Width="100" Height="30" 
+                    Background="#2563EB" Foreground="#FFFFFF" FontWeight="Bold" FontSize="12"
+                    CornerRadius="4" Margin="0,0,8,0" Cursor="Hand" Click="OnConfirmClick"/>
+            <Button x:Name="BtnCancel" Grid.Column="2" Content="✖ 取消" Width="76" Height="30" 
+                    Background="#F1F5F9" BorderBrush="#CBD5E1" BorderThickness="1" Foreground="#475569" 
+                    FontWeight="SemiBold" FontSize="12" CornerRadius="4" Cursor="Hand" Click="OnCancelClick"/>
+        </Grid>
+    </Grid>
+</Window>

@@ -1,0 +1,656 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="clr-namespace:MVCON.App.Controls"
+        xmlns:ScottPlot="clr-namespace:ScottPlot.Avalonia;assembly=ScottPlot.Avalonia"
+        x:Class="MVCON.App.MainWindow"
+        Title="ARCOS / MVCON Automated Machine Controller (.NET 8 Avalonia - Win &amp; Linux)" 
+        Width="1280" Height="820" MinWidth="1024" MinHeight="700"
+        RequestedThemeVariant="Light"
+        Background="#F1F5F9" WindowStartupLocation="CenterScreen">
+
+    <Grid RowDefinitions="*">
+        <!-- 核心 10 大分頁導覽列 (方案 B 現代工控風：全寬等距均分 UniformGrid，預設聚焦 Capture) -->
+        <TabControl x:Name="MainTabControl" Grid.Row="0" TabStripPlacement="Bottom" Classes="modern-industrial-bottom" Background="#F1F5F9" Margin="0" Padding="0" SelectedIndex="1">
+            <!-- 關鍵：利用 UniformGrid Rows="1" 讓 10 個分頁在底部完全平均等距鋪滿 100% 寬度 -->
+            <TabControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <UniformGrid Rows="1" HorizontalAlignment="Stretch"/>
+                </ItemsPanelTemplate>
+            </TabControl.ItemsPanel>
+
+            <TabControl.Styles>
+                <Style Selector="TabControl.modern-industrial-bottom TabItem">
+                    <Setter Property="Height" Value="26"/>
+                    <Setter Property="MinHeight" Value="26"/>
+                    <Setter Property="MaxHeight" Value="26"/>
+                    <Setter Property="Padding" Value="2,0"/>
+                    <Setter Property="Margin" Value="0"/>
+                    <Setter Property="FontSize" Value="11"/>
+                    <Setter Property="FontWeight" Value="SemiBold"/>
+                    <Setter Property="VerticalContentAlignment" Value="Center"/>
+                    <Setter Property="HorizontalContentAlignment" Value="Center"/>
+                    <Setter Property="Foreground" Value="#475569"/>
+                    <Setter Property="Background" Value="#E2E8F0"/>
+                    <Setter Property="BorderBrush" Value="#CBD5E1"/>
+                    <Setter Property="BorderThickness" Value="0,1,1,0"/>
+                    <Setter Property="HorizontalAlignment" Value="Stretch"/>
+                </Style>
+                <Style Selector="TabControl.modern-industrial-bottom TabItem /template/ ContentPresenter#PART_ContentPresenter">
+                    <Setter Property="MinHeight" Value="0"/>
+                    <Setter Property="Padding" Value="0"/>
+                    <Setter Property="HorizontalAlignment" Value="Stretch"/>
+                    <Setter Property="HorizontalContentAlignment" Value="Center"/>
+                </Style>
+                <Style Selector="TabControl.modern-industrial-bottom TabItem:pointerover">
+                    <Setter Property="Background" Value="#F8FAFC"/>
+                    <Setter Property="Foreground" Value="#0F172A"/>
+                </Style>
+                <Style Selector="TabControl.modern-industrial-bottom TabItem:selected">
+                    <Setter Property="Foreground" Value="#0284C7"/>
+                    <Setter Property="Background" Value="#FFFFFF"/>
+                    <Setter Property="FontWeight" Value="Bold"/>
+                    <Setter Property="BorderBrush" Value="#0284C7"/>
+                    <Setter Property="BorderThickness" Value="0,2,1,0"/>
+                </Style>
+            </TabControl.Styles>
+
+            <!-- ========================================================= -->
+            <!-- 1. USER TAB (作業員與產線主畫面：左畫布+急停日誌，右常駐 Sequencer) -->
+            <!-- ========================================================= -->
+            <TabItem Header="User Tab">
+                <Grid ColumnDefinitions="*,460" Margin="4">
+                    <!-- 左側主工作區 (70%) -->
+                    <Grid Grid.Column="0" RowDefinitions="*,90" Margin="0,0,4,0">
+                        <!-- 上半部：User Front Panel 動態自訂畫布 -->
+                        <Border Grid.Row="0" Background="#FFFFFF" BorderBrush="#CBD5E1" BorderThickness="1" Margin="0,0,0,4" CornerRadius="6">
+                            <Grid RowDefinitions="Auto,*" Margin="12">
+                                <!-- 機台標題與統計區 (方案 B 精緻現代儀表板卡片) -->
+                                <Border Grid.Row="0" Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="1" Padding="14,8" CornerRadius="6" Margin="0,0,0,10">
+                                    <Grid ColumnDefinitions="*,Auto,Auto,Auto">
+                                        <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                            <TextBlock Text="STATION 01 : AUTO INSPECTION &amp; ASSEMBLY" FontWeight="Bold" FontSize="15" Foreground="#0F172A"/>
+                                            <TextBlock Text="Model: MVCON-PROD-2026 | Recipe: Master_V1.pro" FontSize="11.5" Foreground="#64748B"/>
+                                        </StackPanel>
+                                        <Border Grid.Column="1" Background="White" BorderBrush="#CBD5E1" BorderThickness="1" Padding="12,4" Margin="6,0" CornerRadius="4">
+                                            <StackPanel>
+                                                <TextBlock Text="TOTAL PARTS" FontSize="10" FontWeight="SemiBold" Foreground="#64748B" HorizontalAlignment="Center"/>
+                                                <TextBlock x:Name="TxtTotalCount" Text="1,248" FontSize="17" FontWeight="Black" Foreground="#0284C7" HorizontalAlignment="Center"/>
+                                            </StackPanel>
+                                        </Border>
+                                        <Border Grid.Column="2" Background="White" BorderBrush="#CBD5E1" BorderThickness="1" Padding="12,4" Margin="6,0" CornerRadius="4">
+                                            <StackPanel>
+                                                <TextBlock Text="OK / YIELD" FontSize="10" FontWeight="SemiBold" Foreground="#64748B" HorizontalAlignment="Center"/>
+                                                <TextBlock x:Name="TxtOkCount" Text="1,236 (99.0%)" FontSize="17" FontWeight="Black" Foreground="#10B981" HorizontalAlignment="Center"/>
+                                            </StackPanel>
+                                        </Border>
+                                        <Border Grid.Column="3" Background="White" BorderBrush="#CBD5E1" BorderThickness="1" Padding="12,4" Margin="6,0" CornerRadius="4">
+                                            <StackPanel>
+                                                <TextBlock Text="CYCLE TIME" FontSize="10" FontWeight="SemiBold" Foreground="#64748B" HorizontalAlignment="Center"/>
+                                                <TextBlock x:Name="TxtCycleTime" Text="1.82 s" FontSize="17" FontWeight="Black" Foreground="#F59E0B" HorizontalAlignment="Center"/>
+                                            </StackPanel>
+                                        </Border>
+                                    </Grid>
+                                </Border>
+
+                                <!-- 動態嵌入使用者前面板或產線狀態視覺化 (支援 SubPanel 熱插拔切換) -->
+                                <Grid Grid.Row="1" RowDefinitions="Auto,*">
+                                    <!-- SubPanel 儀表掛載控制列 -->
+                                    <Border Grid.Row="0" Background="#F1F5F9" BorderBrush="#CBD5E1" BorderThickness="1" CornerRadius="4" Padding="10,6" Margin="0,0,0,8">
+                                        <Grid ColumnDefinitions="Auto,*,Auto">
+                                            <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                                <TextBlock Text="🎛️ SUBPANEL VIEW:" FontWeight="Bold" FontSize="11" Foreground="#475569" VerticalAlignment="Center"/>
+                                                <ComboBox x:Name="CmbSubPanelSelect" Width="230" Height="28" FontSize="11" VerticalContentAlignment="Center">
+                                                    <ComboBoxItem Content="Station HMI (Default)" IsSelected="True"/>
+                                                    <ComboBoxItem Content="IO Dashboard (IO.csvi Front Panel)"/>
+                                                    <ComboBoxItem Content="MockIO Driver (MockIO.csvi Front Panel)"/>
+                                                </ComboBox>
+                                            </StackPanel>
+
+                                            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6">
+                                                <Button x:Name="BtnMountIoPanel" Content="Mount IO CSVI" Height="28" Padding="10,0" FontSize="11" FontWeight="SemiBold" Background="#0284C7" Foreground="White" CornerRadius="3"/>
+                                                <Button x:Name="BtnMountDriverPanel" Content="Mount Driver CSVI" Height="28" Padding="10,0" FontSize="11" FontWeight="SemiBold" Background="#0F766E" Foreground="White" CornerRadius="3"/>
+                                                <Button x:Name="BtnResetSubPanel" Content="Reset Default" Height="28" Padding="10,0" FontSize="11" Background="#E2E8F0" Foreground="#334155" CornerRadius="3"/>
+                                            </StackPanel>
+                                        </Grid>
+                                    </Border>
+
+                                    <!-- 動態掛載容器 -->
+                                    <Border Grid.Row="1" Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="6" Padding="10">
+                                        <ContentControl x:Name="UserFrontPanelContainer">
+                                            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="14">
+                                                <TextBlock Text="[ USER FRONT PANEL DISPLAY CANVAS ]" FontWeight="Bold" FontSize="15" Foreground="#64748B" HorizontalAlignment="Center"/>
+                                                <TextBlock Text="Dynamic HMI controls, Station indicators &amp; live interactive widgets render here." FontSize="12" Foreground="#94A3B8" HorizontalAlignment="Center"/>
+                                                <StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Center">
+                                                    <Button Content="Simulate Part Feed" Width="140" Height="32" Background="#0284C7" Foreground="White" FontWeight="SemiBold" CornerRadius="4"/>
+                                                    <Button Content="Reset Station Stats" Width="140" Height="32" Background="#E2E8F0" Foreground="#334155" FontWeight="SemiBold" CornerRadius="4"/>
+                                                </StackPanel>
+                                            </StackPanel>
+                                        </ContentControl>
+                                    </Border>
+                                </Grid>
+                            </Grid>
+                        </Border>
+
+                        <!-- 下半部：方案 B 現代精緻工控底欄 (PAUSE、急停 STOP、OK 狀態膠囊與終端日誌) -->
+                        <Border Grid.Row="1" Background="#FFFFFF" BorderBrush="#CBD5E1" BorderThickness="1" CornerRadius="6" Padding="8,6">
+                            <Grid ColumnDefinitions="Auto,*">
+                                <!-- 左側緊急控制與燈號膠囊 -->
+                                <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center" Margin="0,0,10,0">
+                                    <!-- 方案 B 現代藍調 PAUSE 按鈕 -->
+                                    <Button x:Name="BtnUserPause" Width="105" Height="46" 
+                                            Background="#F0F9FF" BorderBrush="#0284C7" BorderThickness="1.5" CornerRadius="4">
+                                        <StackPanel Orientation="Horizontal" Spacing="6" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                            <TextBlock Text="⏸" FontSize="15" Foreground="#0284C7" VerticalAlignment="Center"/>
+                                            <TextBlock Text="PAUSE" FontWeight="Black" FontSize="13" Foreground="#0284C7" VerticalAlignment="Center"/>
+                                        </StackPanel>
+                                    </Button>
+
+                                    <!-- 方案 B 工業純色高對比 !!STOP!! 急停按鈕 (現代深紅告警) -->
+                                    <Button x:Name="BtnUserStop" Width="125" Height="46" 
+                                            Background="#EF4444" BorderBrush="#DC2626" BorderThickness="1.5" CornerRadius="4">
+                                        <TextBlock Text="!! STOP !!" FontWeight="Black" FontSize="15" Foreground="#FFFFFF" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    </Button>
+
+                                    <!-- 方案 B 現代精緻 OK 狀態燈號膠囊 (微邊框 + 綠色呼吸 LED) -->
+                                    <Border Background="#F0FDF4" BorderBrush="#86EFAC" BorderThickness="1" CornerRadius="4" Height="46" Padding="10,0">
+                                        <StackPanel Orientation="Horizontal" Spacing="7" VerticalAlignment="Center" HorizontalAlignment="Center">
+                                            <Ellipse x:Name="LedUserOk" Width="14" Height="14" Fill="#10B981" Stroke="#059669" StrokeThickness="1.5"/>
+                                            <StackPanel VerticalAlignment="Center" Spacing="1">
+                                                <TextBlock Text="SYSTEM" FontSize="8.5" FontWeight="SemiBold" Foreground="#047857"/>
+                                                <TextBlock Text="READY" FontWeight="Black" FontSize="11" Foreground="#065F46"/>
+                                            </StackPanel>
+                                        </StackPanel>
+                                    </Border>
+                                </StackPanel>
+
+                                <!-- 右側即時滾動終端日誌 (Sunken Slate-50) -->
+                                <TextBox x:Name="TxtUserLogs" Grid.Column="1" Background="#F8FAFC" Foreground="#1E293B"
+                                         FontFamily="Cascadia Code, Consolas, monospace" FontSize="11" IsReadOnly="True" 
+                                         BorderBrush="#CBD5E1" BorderThickness="1" CornerRadius="4" Padding="6,4"
+                                         ScrollViewer.VerticalScrollBarVisibility="Auto" AcceptsReturn="True"/>
+                            </Grid>
+                        </Border>
+                    </Grid>
+
+                    <!-- 右側常駐 Sequencer 側邊欄 (30%) -->
+                    <Border Grid.Column="1" Background="#FFFFFF" BorderBrush="#CBD5E1" BorderThickness="1" CornerRadius="6">
+                        <controls:SequencerEditorControl x:Name="SequencerEditor"/>
+                    </Border>
+                </Grid>
+            </TabItem>
+
+            <!-- ========================================================= -->
+            <!-- 2. CAPTURE (視覺相機多工位、打光對位、無限 IO 虛擬化與 4 大運動控制) -->
+            <!-- ========================================================= -->
+            <TabItem x:Name="TabCapture" Header="Capture">
+                <Grid RowDefinitions="Auto,*" Margin="4">
+                    <!-- 上方相機分頁 (CAM0 ~ CAM11) -->
+                    <Border Grid.Row="0" Background="#FFFFFF" BorderBrush="#CBD5E1" BorderThickness="0,0,0,1" Margin="0,0,0,4" Padding="4,2">
+                        <StackPanel x:Name="PnlCamTabs" Orientation="Horizontal" Spacing="4">
+                            <RadioButton Content="CAM0" IsChecked="True" GroupName="CamSel" Height="26" FontSize="11" FontWeight="Bold" Margin="2,0"/>
+                            <RadioButton Content="CAM1" GroupName="CamSel" Height="26" FontSize="11" FontWeight="Bold" Margin="2,0"/>
+                            <RadioButton Content="CAM2" GroupName="CamSel" Height="26" FontSize="11" FontWeight="Bold" Margin="2,0"/>
+                            <RadioButton Content="CAM3" GroupName="CamSel" Height="26" FontSize="11" FontWeight="Bold" Margin="2,0"/>
+                            <RadioButton Content="CAM4" GroupName="CamSel" Height="26" FontSize="11" FontWeight="Bold" Margin="2,0"/>
+                            <RadioButton Content="CAM5" GroupName="CamSel" Height="26" FontSize="11" FontWeight="Bold" Margin="2,0"/>
+                            <RadioButton Content="CAM6" GroupName="CamSel" Height="26" FontSize="11" FontWeight="Bold" Margin="2,0"/>
+                            <RadioButton Content="CAM7" GroupName="CamSel" Height="26" FontSize="11" FontWeight="Bold" Margin="2,0"/>
+                            <RadioButton Content="CAM8" GroupName="CamSel" Height="26" FontSize="11" FontWeight="Bold" Margin="2,0"/>
+                            <RadioButton Content="CAM9" GroupName="CamSel" Height="26" FontSize="11" FontWeight="Bold" Margin="2,0"/>
+                            <RadioButton Content="CAM10" GroupName="CamSel" Height="26" FontSize="11" FontWeight="Bold" Margin="2,0"/>
+                            <RadioButton Content="CAM11" GroupName="CamSel" Height="26" FontSize="11" FontWeight="Bold" Margin="2,0"/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- 下方主內容區：第 1 欄硬體/指令 (150px)，第 2 欄無限 IO (235px)，第 3 欄影像與運動 (*) -->
+                    <Grid Grid.Row="1" ColumnDefinitions="150,235,*">
+                        <!-- 第 1 欄：硬體快捷清單、ROI STRING 與 CaptureCMD 快速指令 -->
+                        <Border Grid.Column="0" Background="#FFFFFF" BorderBrush="#CBD5E1" BorderThickness="1" CornerRadius="4" Padding="6" Margin="0,0,4,0">
+                            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                <StackPanel Spacing="6">
+                                    <!-- CamList 與 Snap 按鈕並排 (原版配置) -->
+                                    <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,2">
+                                        <TextBlock Text="CamList" FontWeight="Bold" FontSize="11" Foreground="#334155" VerticalAlignment="Center"/>
+                                        <Button x:Name="BtnCaptureSnap" Grid.Column="1" Content="Snap" Width="50" Height="22" 
+                                                Background="#10B981" Foreground="White" FontWeight="Bold" FontSize="10.5" CornerRadius="3"
+                                                ToolTip.Tip="單幀取像 Snap (Capture@UpdateImage)"/>
+                                    </Grid>
+                                    <ListBox x:Name="LstCaptureCameras" Height="70" Background="#F8FAFC" BorderBrush="#CBD5E1" BorderThickness="1"/>
+
+                                    <!-- ROI STRING 設定與即時回饋 (雙向綁定) -->
+                                    <TextBlock Text="ROI STRING" FontWeight="Bold" FontSize="11" Foreground="#334155" Margin="0,4,0,0"/>
+                                    <TextBox x:Name="TxtRoiString" Text="Rect(100,100,400,300)" Height="52" FontSize="10.5" 
+                                             AcceptsReturn="True" TextWrapping="Wrap"
+                                             Background="#F8FAFC" BorderBrush="#CBD5E1"
+                                             KeyUp="OnRoiStringKeyUp"/>
+
+                                    <!-- CaptureCMD 快速指令 (Capture@ 模組) -->
+                                    <TextBlock Text="CaptureCMD" FontWeight="Bold" FontSize="11" Foreground="#334155" Margin="0,4,0,0"/>
+                                    <Border Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="4" Padding="4">
+                                        <StackPanel Spacing="2">
+                                            <TextBlock Text="Command: UpdateImage" FontSize="10" Foreground="#475569"/>
+                                            <TextBlock Text="Parameter: -1" FontSize="10" Foreground="#475569"/>
+                                        </StackPanel>
+                                    </Border>
+
+                                    <!-- MotorList for IMAQ -->
+                                    <TextBlock Text="MotorList For IMAQ" FontWeight="Bold" FontSize="11" Foreground="#334155" Margin="0,4,0,0"/>
+                                    <ListBox x:Name="LstCaptureMotors" Height="70" Background="#F8FAFC" BorderBrush="#CBD5E1" BorderThickness="1"/>
+                                </StackPanel>
+                            </ScrollViewer>
+                        </Border>
+
+                        <!-- 第 2 欄：無限 IO 虛擬化點位監視與控制面板 (快速搜尋選單 + 虛擬滾動列表) -->
+                        <Border Grid.Column="1" Background="#FFFFFF" BorderBrush="#CBD5E1" BorderThickness="1" CornerRadius="4" Padding="5" Margin="0,0,4,0">
+                            <Grid RowDefinitions="Auto,*">
+                                <!-- 頂部：快速過濾／搜尋選單 (整欄寬度) -->
+                                <ComboBox x:Name="CmbIoFilter" Grid.Row="0" Height="24" Margin="0,0,0,4" HorizontalAlignment="Stretch"
+                                          Background="White" BorderBrush="#CBD5E1" FontSize="10.5"
+                                          SelectedIndex="0" SelectionChanged="OnIoFilterChanged">
+                                    <ComboBoxItem Content="All IO (512 Points + Virtual)"/>
+                                    <ComboBoxItem Content="Virtual IOs (TRUE / FALSE)"/>
+                                    <ComboBoxItem Content="P0.* (Bit 0~7)"/>
+                                    <ComboBoxItem Content="P1.* (Bit 0~7)"/>
+                                    <ComboBoxItem Content="P2.* (Bit 0~7)"/>
+                                    <ComboBoxItem Content="P3.* (Bit 0~7)"/>
+                                    <ComboBoxItem Content="P0.* ~ P7.* (Bank 0: 64 pts)"/>
+                                    <ComboBoxItem Content="P8.* ~ P15.* (Bank 1: 64 pts)"/>
+                                    <ComboBoxItem Content="P16.* ~ P31.* (Bank 2: 128 pts)"/>
+                                    <ComboBoxItem Content="P32.* ~ P63.* (Bank 3: 256 pts)"/>
+                                </ComboBox>
+
+                                <!-- 無限點位虛擬化列表 (滾動條恆常顯示，三大子元件完全獨立解耦) -->
+                                <ListBox x:Name="LstIoChannels" Grid.Row="1" Background="#F8FAFC" BorderBrush="#CBD5E1" BorderThickness="1"
+                                         Padding="1" 
+                                         ScrollViewer.VerticalScrollBarVisibility="Visible"
+                                         ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                         ScrollViewer.AllowAutoHide="False">
+                                    <ListBox.Styles>
+                                        <Style Selector="ListBoxItem">
+                                            <!-- 右側預留 20px 給常駐滾動條，確保 Boolean 按鈕與滾動條間距充足，絕不受遮擋 -->
+                                            <Setter Property="Padding" Value="1,1,20,1"/>
+                                            <Setter Property="MinHeight" Value="24"/>
+                                            <Setter Property="Margin" Value="0,0"/>
+                                        </Style>
+                                        <!-- 徹底關閉 ListBoxItem 的 hover 變色反白，維持純色工控靜態背景 -->
+                                        <Style Selector="ListBoxItem:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+                                            <Setter Property="Background" Value="Transparent"/>
+                                        </Style>
+                                        <Style Selector="ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter">
+                                            <Setter Property="Background" Value="Transparent"/>
+                                        </Style>
+                                    </ListBox.Styles>
+                                    <ListBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <!-- 單組 IO 點位列：左側 Port 標籤、中間獨立 PortName 文字框、右側獨立 22x22 方形 Boolean 按鈕 -->
+                                            <Grid ColumnDefinitions="44,*,22" Height="22" IsVisible="{Binding IsVisible}" Margin="0,1">
+                                                <!-- 1. PORT 位址標籤 (例如 P0.0, TRUE, FALSE，獨立卡片) -->
+                                                <Border Grid.Column="0" Background="#F1F5F9" BorderBrush="#CBD5E1" BorderThickness="1" CornerRadius="2" Margin="0,0,2,0">
+                                                    <TextBlock Text="{Binding Port}" FontSize="9.5" FontWeight="Bold" Foreground="#0284C7"
+                                                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                </Border>
+
+                                                <!-- 2. PORTNAME 獨立文字方塊 (自帶完整外框與邊距，文字絕不溢出或被蓋過) -->
+                                                <TextBox Grid.Column="1" Text="{Binding Name, Mode=TwoWay}" 
+                                                         Height="22" MinHeight="22" FontSize="10" Padding="5,2" Margin="0,0,2,0"
+                                                         Background="White" Foreground="#1E293B" 
+                                                         BorderBrush="#CBD5E1" BorderThickness="1" CornerRadius="2"
+                                                         VerticalContentAlignment="Center"/>
+
+                                                <!-- 3. 方形 BOOLEAN 按鈕：自訂 ControlTemplate 拔除 FluentTheme 懸浮 (pointerover) 反白變白特效，恆常保持 StateBrush 原色 -->
+                                                <Button Grid.Column="2" Width="22" Height="22" Padding="0" Cursor="Hand"
+                                                        Background="{Binding StateBrush}"
+                                                        Click="OnIoBitToggleClick" Tag="{Binding Port}"
+                                                        AutomationProperties.Name="{Binding AutomationId}"
+                                                        ToolTip.Tip="點擊切換輸出高低電位 (BOOLEAN)">
+                                                    <Button.Template>
+                                                        <ControlTemplate TargetType="Button">
+                                                            <Border Background="{TemplateBinding Background}" 
+                                                                    BorderBrush="#64748B" BorderThickness="1" CornerRadius="2"
+                                                                    Width="22" Height="22"/>
+                                                        </ControlTemplate>
+                                                    </Button.Template>
+                                                </Button>
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
+                            </Grid>
+                        </Border>
+
+                        <!-- 第 3 欄：中央視窗 + 坐標回饋 + 底部 4 大 MOTION 面板 -->
+                        <Grid Grid.Column="2" RowDefinitions="*,200">
+                            <!-- 上半部：中央視覺檢驗視窗 (NI VDM 浮動工具列 + 坐標轉換回饋) -->
+                            <Border Grid.Row="0" Background="#0F172A" BorderBrush="#CBD5E1" BorderThickness="1" CornerRadius="4" Margin="0,0,0,4">
+                                <Grid>
+                                    <!-- 影像本體 (含滑鼠移動與點擊選位監聽) -->
+                                    <Image x:Name="ImgLivePreview" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                           PointerMoved="OnImagePointerMoved" PointerPressed="OnImagePointerPressed"/>
+
+                                    <!-- NI VDM 繪圖量測輔助工具列 (左側懸浮) -->
+                                    <StackPanel Orientation="Vertical" HorizontalAlignment="Left" VerticalAlignment="Top" 
+                                                Background="#FFFFFF" Margin="6" Spacing="2" Opacity="0.95">
+                                        <Button x:Name="BtnToolZoom" Content="🔍" Width="26" Height="24" Padding="0" FontSize="11" ToolTip.Tip="Zoom 縮放" Click="OnToolSelected" Tag="Zoom"/>
+                                        <Button x:Name="BtnToolPan" Content="✋" Width="26" Height="24" Padding="0" FontSize="11" ToolTip.Tip="Pan 拖曳平移" Click="OnToolSelected" Tag="Pan"/>
+                                        <Button x:Name="BtnToolLine" Content="📏" Width="26" Height="24" Padding="0" FontSize="11" ToolTip.Tip="Line 直線量測" Click="OnToolSelected" Tag="Line"/>
+                                        <Button x:Name="BtnToolRect" Content="⬜" Width="26" Height="24" Padding="0" FontSize="11" ToolTip.Tip="Rect 正矩形" Click="OnToolSelected" Tag="Rect"/>
+                                        <Button x:Name="BtnToolRotRect" Content="⬚" Width="26" Height="24" Padding="0" FontSize="11" ToolTip.Tip="RotatedRect 旋轉矩形" Click="OnToolSelected" Tag="RotatedRect"/>
+                                        <Button x:Name="BtnToolCircle" Content="⭕" Width="26" Height="24" Padding="0" FontSize="11" ToolTip.Tip="Circle 圓形" Click="OnToolSelected" Tag="Circle"/>
+                                        <Button x:Name="BtnToolAnnulus" Content="◎" Width="26" Height="24" Padding="0" FontSize="11" ToolTip.Tip="Annulus 圓環" Click="OnToolSelected" Tag="Annulus"/>
+                                        <Button x:Name="BtnToolCrosshair" Content="🎯" Width="26" Height="24" Padding="0" FontSize="11" ToolTip.Tip="Crosshair 十字靶心" Click="OnToolSelected" Tag="Crosshair"/>
+                                    </StackPanel>
+
+                                    <!-- 底部座標回饋列 (IMAQSelectPoint 點選選位 + IMAQPosition 即時座標) -->
+                                    <Border VerticalAlignment="Bottom" Background="#1E293B" Opacity="0.92" Padding="8,4">
+                                        <DockPanel LastChildFill="True">
+                                            <!-- IMAQSelectPoint (滑鼠點擊鎖定物理位置) -->
+                                            <StackPanel Orientation="Horizontal" Spacing="6" DockPanel.Dock="Left" VerticalAlignment="Center">
+                                                <TextBlock Text="IMAQSelectPoint:" FontSize="11" FontWeight="SemiBold" Foreground="#38BDF8"/>
+                                                <TextBox x:Name="TxtImaqSelectPoint" Text="[None]" Height="22" FontSize="11" Padding="4,1"
+                                                         IsReadOnly="True" Background="#0F172A" Foreground="#38BDF8" BorderBrush="#0284C7"/>
+                                            </StackPanel>
+
+                                            <!-- IMAQPosition (即時換算物理 mm 座標，無校正秀 Pixel) -->
+                                            <TextBlock x:Name="TxtImaqPosition" Text="IMAQPosition: (0.000, 0.000) [Uncalibrated px]" 
+                                                       FontSize="11" FontWeight="Bold" Foreground="#10B981" 
+                                                       HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                                        </DockPanel>
+                                    </Border>
+                                </Grid>
+                            </Border>
+
+                            <!-- 下半部：MOTION 4 大核心功能模組化面板 (JOG / GO / GOPOINT / GOPALLET + 7 軸 DRO) -->
+                            <Border Grid.Row="1" Background="#FFFFFF" BorderBrush="#CBD5E1" BorderThickness="1" CornerRadius="4" Padding="6">
+                                <TabControl Background="#FFFFFF" Padding="0">
+                                    <!-- 1. Motion 主控制子頁 -->
+                                    <TabItem Header="Motion" FontSize="11" FontWeight="Bold">
+                                        <Grid RowDefinitions="*,Auto" Margin="2">
+                                            <!-- 上部：4 大功能卡片並排 -->
+                                            <Grid Grid.Row="0" ColumnDefinitions="90,1.3*,1.3*,1.4*" Margin="0,0,0,4">
+                                                <!-- 功能卡片 1：狀態與馬達 (Running LED + IMAQMotor) -->
+                                                <Border Grid.Column="0" Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="4" Padding="4" Margin="0,0,3,0">
+                                                    <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="4">
+                                                        <Ellipse x:Name="LedMotionRunning" Width="22" Height="22" Fill="#10B981" Stroke="#059669" StrokeThickness="1.5"/>
+                                                        <TextBlock Text="RUNNING" FontSize="9" FontWeight="Black" Foreground="#047857" HorizontalAlignment="Center"/>
+                                                        <TextBlock Text="IMAQMotor" FontSize="9.5" FontWeight="SemiBold" Foreground="#64748B" HorizontalAlignment="Center"/>
+                                                    </StackPanel>
+                                                </Border>
+
+                                                <!-- 功能卡片 2：JOG (寸動手動微步控制) -->
+                                                <Border Grid.Column="1" Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="4" Padding="6,4" Margin="3,0">
+                                                    <Grid RowDefinitions="Auto,Auto,Auto">
+                                                        <TextBlock Grid.Row="0" Text="1. JOG (寸動手動控制)" FontWeight="Bold" FontSize="10.5" Foreground="#0284C7" Margin="0,0,0,3"/>
+                                                        <Grid Grid.Row="1" ColumnDefinitions="Auto,*,Auto,*" Margin="0,0,0,4">
+                                                            <TextBlock Grid.Column="0" Text="Axis:" FontSize="10.5" VerticalAlignment="Center" Margin="0,0,3,0"/>
+                                                            <ComboBox x:Name="CmbJogAxis" Grid.Column="1" Height="22" FontSize="10" SelectedIndex="0" Background="White" BorderBrush="#CBD5E1">
+                                                                <ComboBoxItem Content="XYZ"/>
+                                                                <ComboBoxItem Content="X"/>
+                                                                <ComboBoxItem Content="Y"/>
+                                                                <ComboBoxItem Content="Z"/>
+                                                            </ComboBox>
+                                                            <TextBlock Grid.Column="2" Text="Step:" FontSize="10.5" VerticalAlignment="Center" Margin="4,0,3,0"/>
+                                                            <ComboBox x:Name="CmbJogStep" Grid.Column="3" Height="22" FontSize="10" SelectedIndex="2" Background="White" BorderBrush="#CBD5E1">
+                                                                <ComboBoxItem Content="0.01"/>
+                                                                <ComboBoxItem Content="0.10"/>
+                                                                <ComboBoxItem Content="1.00"/>
+                                                                <ComboBoxItem Content="10.00"/>
+                                                            </ComboBox>
+                                                        </Grid>
+                                                        <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="4" HorizontalAlignment="Center">
+                                                            <Button x:Name="BtnJogMinus" Content="&lt;&lt;--" Width="44" Height="24" FontSize="10" FontWeight="Bold" Background="#F1F5F9" BorderBrush="#CBD5E1" CornerRadius="2"/>
+                                                            <Button x:Name="BtnGetPos" Content="GetPos" Width="50" Height="24" FontSize="10" FontWeight="Bold" Background="#F1F5F9" BorderBrush="#CBD5E1" CornerRadius="2"/>
+                                                            <Button x:Name="BtnJogPlus" Content="++&gt;&gt;" Width="44" Height="24" FontSize="10" FontWeight="Bold" Background="#F1F5F9" BorderBrush="#CBD5E1" CornerRadius="2"/>
+                                                        </StackPanel>
+                                                    </Grid>
+                                                </Border>
+
+                                                <!-- 功能卡片 3：GO (定位運動) -->
+                                                <Border Grid.Column="2" Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="4" Padding="6,4" Margin="3,0">
+                                                    <Grid RowDefinitions="Auto,Auto,Auto">
+                                                        <TextBlock Grid.Row="0" Text="2. GO (目標定位運動)" FontWeight="Bold" FontSize="10.5" Foreground="#0284C7" Margin="0,0,0,3"/>
+                                                        <Grid Grid.Row="1" ColumnDefinitions="Auto,*,Auto,*" Margin="0,0,0,4">
+                                                            <TextBlock Grid.Column="0" Text="Spd:" FontSize="10.5" VerticalAlignment="Center" Margin="0,0,3,0"/>
+                                                            <TextBox x:Name="TxtMotionSpeed" Grid.Column="1" Text="20.0" Height="22" FontSize="10" Background="White" BorderBrush="#CBD5E1"/>
+                                                            <TextBlock Grid.Column="2" Text="Axis:" FontSize="10.5" VerticalAlignment="Center" Margin="4,0,3,0"/>
+                                                            <ComboBox x:Name="CmbMotionAxis" Grid.Column="3" Height="22" FontSize="10" SelectedIndex="0" Background="White" BorderBrush="#CBD5E1">
+                                                                <ComboBoxItem Content="XYZ"/>
+                                                                <ComboBoxItem Content="XY"/>
+                                                                <ComboBoxItem Content="Z"/>
+                                                            </ComboBox>
+                                                        </Grid>
+                                                        <Grid Grid.Row="2" ColumnDefinitions="*,Auto,Auto">
+                                                            <TextBox x:Name="TxtMotionTarget" Grid.Column="0" Text="0.0, 0.0, 0.0" Height="24" FontSize="10" Background="White" BorderBrush="#CBD5E1" Margin="0,0,4,0"/>
+                                                            <Button x:Name="BtnMotionGo" Grid.Column="1" Content="▶ Go" Width="42" Height="24" Background="#10B981" Foreground="White" FontWeight="Bold" FontSize="10" CornerRadius="2" Margin="0,0,3,0"/>
+                                                            <Button x:Name="BtnMotionStop" Grid.Column="2" Content="⏹ Stop" Width="44" Height="24" Background="#EF4444" Foreground="White" FontWeight="Bold" FontSize="10" CornerRadius="2"/>
+                                                        </Grid>
+                                                    </Grid>
+                                                </Border>
+
+                                                <!-- 功能卡片 4：GOPOINT & GOPALLET (點位與料盤跳轉) -->
+                                                <Border Grid.Column="3" Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="4" Padding="6,4" Margin="3,0,0,0">
+                                                    <Grid RowDefinitions="Auto,Auto,Auto">
+                                                        <TextBlock Grid.Row="0" Text="3. GOPOINT &amp; GOPALLET" FontWeight="Bold" FontSize="10.5" Foreground="#0284C7" Margin="0,0,0,3"/>
+                                                        <Grid Grid.Row="1" ColumnDefinitions="*,Auto,Auto" Margin="0,0,0,4">
+                                                            <ComboBox x:Name="CmbMotionPoints" Grid.Column="0" Height="22" FontSize="10" Background="White" BorderBrush="#CBD5E1" Margin="0,0,3,0"
+                                                                      SelectionChanged="OnMotionPointSelectionChanged"/>
+                                                            <Button x:Name="BtnGoPoint" Grid.Column="1" Content="Go Point" Width="58" Height="22" Background="#0284C7" Foreground="White" FontSize="10" FontWeight="Bold" CornerRadius="2" Margin="0,0,2,0"/>
+                                                            <Button x:Name="BtnGoPallet" Grid.Column="2" Content="Go Pallet" Width="58" Height="22" Background="#0284C7" Foreground="White" FontSize="10" FontWeight="Bold" CornerRadius="2"/>
+                                                        </Grid>
+                                                        <!-- 預選點位 7 軸坐標即時預覽 -->
+                                                        <Border Grid.Row="2" Background="White" BorderBrush="#CBD5E1" BorderThickness="1" CornerRadius="2" Padding="4,2">
+                                                            <TextBlock x:Name="TxtTargetPointCoords" Text="Target: X 100.0 Y 200.0 Z -50.0" FontSize="9.5" Foreground="#475569" TextTrimming="CharacterEllipsis"/>
+                                                        </Border>
+                                                    </Grid>
+                                                </Border>
+                                            </Grid>
+
+                                            <!-- 下部：7 軸即時坐標數位讀表看板 (DRO, Digital Readout) -->
+                                            <Border Grid.Row="1" Background="#0F172A" BorderBrush="#334155" BorderThickness="1" CornerRadius="3" Padding="8,4">
+                                                <Grid ColumnDefinitions="*,*,*,*,*,*,*">
+                                                    <TextBlock Grid.Column="0" x:Name="TxtDroX" Text="X: 000.000" FontWeight="Bold" FontSize="11" Foreground="#38BDF8" HorizontalAlignment="Center"/>
+                                                    <TextBlock Grid.Column="1" x:Name="TxtDroY" Text="Y: 000.000" FontWeight="Bold" FontSize="11" Foreground="#38BDF8" HorizontalAlignment="Center"/>
+                                                    <TextBlock Grid.Column="2" x:Name="TxtDroZ" Text="Z: 000.000" FontWeight="Bold" FontSize="11" Foreground="#38BDF8" HorizontalAlignment="Center"/>
+                                                    <TextBlock Grid.Column="3" x:Name="TxtDroU" Text="U: 000.000" FontSize="10.5" Foreground="#94A3B8" HorizontalAlignment="Center"/>
+                                                    <TextBlock Grid.Column="4" x:Name="TxtDroV" Text="V: 000.000" FontSize="10.5" Foreground="#94A3B8" HorizontalAlignment="Center"/>
+                                                    <TextBlock Grid.Column="5" x:Name="TxtDroW" Text="W: 000.000" FontSize="10.5" Foreground="#94A3B8" HorizontalAlignment="Center"/>
+                                                    <TextBlock Grid.Column="6" x:Name="TxtDroH" Text="H: 000" FontSize="10.5" Foreground="#94A3B8" HorizontalAlignment="Center"/>
+                                                </Grid>
+                                            </Border>
+                                        </Grid>
+                                    </TabItem>
+
+                                    <!-- 其他子頁佔位 -->
+                                    <TabItem Header="Point&amp;Path" FontSize="11">
+                                        <TextBlock Text="Point&amp;Path calculation &amp; coordinate transformation quick panel." Margin="10" Foreground="#666666"/>
+                                    </TabItem>
+                                    <TabItem Header="Capture" FontSize="11">
+                                        <TextBlock Text="Exposure, Gain, Light Strobe &amp; Trigger Settings." Margin="10" Foreground="#666666"/>
+                                    </TabItem>
+                                    <TabItem Header="Camera" FontSize="11">
+                                        <TextBlock Text="Hardware Camera Attributes &amp; Calibration matrix." Margin="10" Foreground="#666666"/>
+                                    </TabItem>
+                                </TabControl>
+                            </Border>
+                        </Grid>
+                    </Grid>
+                </Grid>
+            </TabItem>
+
+            <!-- ========================================================= -->
+            <!-- 3. IMAQ Array (多幀飛拍庫) -->
+            <!-- ========================================================= -->
+            <TabItem Header="IMAQ Array">
+                <Grid Margin="15" RowDefinitions="Auto,*">
+                    <StackPanel Orientation="Horizontal" Spacing="10" Margin="0,0,0,10">
+                        <Button Content="GetList" Width="80" Height="28" Background="#007ACC" Foreground="White"/>
+                        <ComboBox Width="180" Height="28"/>
+                        <Ellipse Width="12" Height="12" Fill="#00CC44" VerticalAlignment="Center" Margin="5,0"/>
+                        <TextBlock Text="IMAQLast?" VerticalAlignment="Center" FontWeight="Bold"/>
+                    </StackPanel>
+                    <Grid Grid.Row="1" ColumnDefinitions="300,*">
+                        <ListBox Background="White" BorderBrush="#A0A0A0" BorderThickness="1" Margin="0,0,10,0"/>
+                        <Border Grid.Column="1" Background="#121212" CornerRadius="4"/>
+                    </Grid>
+                </Grid>
+            </TabItem>
+
+            <!-- ========================================================= -->
+            <!-- 4. Point&Path (空間點位與軌跡陣列) -->
+            <!-- ========================================================= -->
+            <TabItem Header="Point&amp;Path">
+                <Grid Margin="15" ColumnDefinitions="200,*,*">
+                    <ListBox Grid.Column="0" Background="White" BorderBrush="#A0A0A0" BorderThickness="1" Margin="0,0,10,0"/>
+                    <DataGrid x:Name="GridPoints" Grid.Column="1" Background="White" Margin="0,0,10,0"/>
+                    <ListBox Grid.Column="2" Background="White" BorderBrush="#A0A0A0" BorderThickness="1"/>
+                </Grid>
+            </TabItem>
+
+            <!-- ========================================================= -->
+            <!-- 5. Modules Info (模組硬體前面板容器與日誌) -->
+            <!-- ========================================================= -->
+            <TabItem Header="Modules Info">
+                <TabControl Margin="10">
+                    <TabControl.Styles>
+                        <Style Selector="TabItem">
+                            <Setter Property="Width" Value="125"/>
+                            <Setter Property="Height" Value="28"/>
+                            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+                            <Setter Property="VerticalContentAlignment" Value="Center"/>
+                            <Setter Property="FontSize" Value="12"/>
+                            <Setter Property="FontWeight" Value="SemiBold"/>
+                        </Style>
+                    </TabControl.Styles>
+                    <TabItem Header="System">
+                        <Grid ColumnDefinitions="*,*">
+                            <TextBox Margin="5" AcceptsReturn="True" IsReadOnly="True"/>
+                            <ListBox Grid.Column="1" Margin="5" Background="White"/>
+                        </Grid>
+                    </TabItem>
+                    <TabItem Header="IO">
+                        <Grid ColumnDefinitions="240,*">
+                            <Border Background="White" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="4" Margin="5" Padding="8">
+                                <Grid RowDefinitions="Auto,*">
+                                    <TextBlock Grid.Row="0" Text="Discovered Drivers (*.csvi):" FontWeight="Bold" FontSize="12" Foreground="#334155" Margin="0,0,0,6"/>
+                                    <ListBox x:Name="LstIoDrivers" Grid.Row="1" Background="#F8FAFC" BorderBrush="#CBD5E1" BorderThickness="1" CornerRadius="4"/>
+                                </Grid>
+                            </Border>
+                            <ContentControl x:Name="DriverViewContainer" Grid.Column="1" Margin="5" Background="White"/>
+                        </Grid>
+                    </TabItem>
+                    <TabItem Header="Motion">
+                        <TextBlock Text="Motion Modules Info &amp; Driver FrontPanel" Margin="15"/>
+                    </TabItem>
+                    <TabItem Header="DAQ">
+                        <TextBlock Text="DAQ Modules Info &amp; Channels" Margin="15"/>
+                    </TabItem>
+                    <TabItem Header="MultiStation">
+                        <TextBlock Text="MultiStation Carousel &amp; Index Table status" Margin="15"/>
+                    </TabItem>
+                    <TabItem Header="ExternalModule">
+                        <TextBlock Text="Redis, Python, AIAgent External Modules" Margin="15"/>
+                    </TabItem>
+                </TabControl>
+            </TabItem>
+
+            <!-- ========================================================= -->
+            <!-- 6. Threads (13 主執行緒並行 PC 矩陣) -->
+            <!-- ========================================================= -->
+            <TabItem Header="Threads">
+                <TabControl Margin="10">
+                    <TabItem Header="Thread 1~6">
+                        <Grid ColumnDefinitions="260,*,*">
+                            <!-- Thread Main (Thread 0) -->
+                            <Border Grid.Column="0" Background="White" BorderBrush="#A0A0A0" BorderThickness="1" Margin="4">
+                                <StackPanel Margin="6">
+                                    <TextBlock Text="Thread Main (0)" FontWeight="Bold" Foreground="#0055CC" Margin="0,0,0,6"/>
+                                    <DataGrid Height="480" Background="White"/>
+                                </StackPanel>
+                            </Border>
+                            <!-- Thread 1, 3, 5 -->
+                            <StackPanel Grid.Column="1" Spacing="6" Margin="4">
+                                <TextBlock Text="Thread 1 / 3 / 5" FontWeight="Bold"/>
+                                <DataGrid Height="150" Background="White"/>
+                                <DataGrid Height="150" Background="White"/>
+                                <DataGrid Height="150" Background="White"/>
+                            </StackPanel>
+                            <!-- Thread 2, 4, 6 -->
+                            <StackPanel Grid.Column="2" Spacing="6" Margin="4">
+                                <TextBlock Text="Thread 2 / 4 / 6" FontWeight="Bold"/>
+                                <DataGrid Height="150" Background="White"/>
+                                <DataGrid Height="150" Background="White"/>
+                                <DataGrid Height="150" Background="White"/>
+                            </StackPanel>
+                        </Grid>
+                    </TabItem>
+                    <TabItem Header="Thread 7~12">
+                        <TextBlock Text="Thread 7~12 Parallel Execution Monitor" Margin="15"/>
+                    </TabItem>
+                    <TabItem Header="SubThread">
+                        <TextBlock Text="Dynamic SubThreads Pool" Margin="15"/>
+                    </TabItem>
+                </TabControl>
+            </TabItem>
+
+            <!-- ========================================================= -->
+            <!-- 7. Parameter&Variable (變數與配方) -->
+            <!-- ========================================================= -->
+            <TabItem Header="Parameter&amp;Variable">
+                <Grid Margin="15" ColumnDefinitions="240,*,*">
+                    <StackPanel Grid.Column="0" Margin="0,0,10,0" Spacing="8">
+                        <Button Content="Update Parameter&amp;Variable" Height="28" Background="#007ACC" Foreground="White"/>
+                        <TextBlock Text="Section: Global" FontWeight="Bold" Foreground="#CC0000"/>
+                        <TextBox Watermark="Key" Height="26"/>
+                        <TextBox Watermark="Value" Height="80" AcceptsReturn="True"/>
+                        <Button Content="Set Parameter&amp;Variable" Height="28" Background="#2E7D32" Foreground="White"/>
+                    </StackPanel>
+                    <DataGrid x:Name="GridVariables" Grid.Column="1" Background="White" Margin="0,0,10,0"/>
+                    <ListBox Grid.Column="2" Background="White"/>
+                </Grid>
+            </TabItem>
+
+            <!-- ========================================================= -->
+            <!-- 8. WaveForm (示波器與 DAQ) -->
+            <!-- ========================================================= -->
+            <TabItem Header="WaveForm">
+                <Grid Margin="15" ColumnDefinitions="240,*">
+                    <StackPanel Grid.Column="0" Margin="0,0,10,0" Spacing="8">
+                        <Button Content="GetWaveForm" Height="28" Background="#007ACC" Foreground="White"/>
+                        <ComboBox Width="200" Height="28"/>
+                        <ListBox Height="350" Background="White"/>
+                    </StackPanel>
+                    <ScottPlot:AvaPlot x:Name="DaqPlot" Grid.Column="1"/>
+                </Grid>
+            </TabItem>
+
+            <!-- ========================================================= -->
+            <!-- 9. Panel CMD -->
+            <!-- ========================================================= -->
+            <TabItem Header="Panel CMD">
+                <Grid Margin="20" RowDefinitions="Auto,*">
+                    <StackPanel Orientation="Horizontal" Spacing="10" Margin="0,0,0,10">
+                        <TextBlock Text="Manual CMD:" VerticalAlignment="Center" FontWeight="Bold"/>
+                        <TextBox Width="400" Height="28" Text="IO@SetPort::P0.0;"/>
+                        <Button Content="Execute" Width="90" Height="28" Background="#007ACC" Foreground="White"/>
+                    </StackPanel>
+                    <TextBox Grid.Row="1" Background="White" FontFamily="Consolas" IsReadOnly="True"/>
+                </Grid>
+            </TabItem>
+
+            <!-- ========================================================= -->
+            <!-- 10. Remote (Telnet 2800~2812) -->
+            <!-- ========================================================= -->
+            <TabItem Header="Remote">
+                <Grid Margin="15" ColumnDefinitions="220,*,260">
+                    <ListBox Grid.Column="0" Background="White" Margin="0,0,10,0"/>
+                    <DataGrid Grid.Column="1" Background="White" Margin="0,0,10,0"/>
+                    <StackPanel Grid.Column="2" Spacing="6">
+                        <Button Content="$SetIO,P0.0=1" Height="26" Background="#E0E0E0"/>
+                        <Button Content="$GetIO,P0.0" Height="26" Background="#E0E0E0"/>
+                        <Button Content="$Execute (Run Script)" Height="26" Background="#E0E0E0"/>
+                        <TextBox Height="200" Background="White" FontFamily="Consolas" IsReadOnly="True" Margin="0,10,0,0"/>
+                    </StackPanel>
+                </Grid>
+            </TabItem>
+        </TabControl>
+    </Grid>
+</Window>

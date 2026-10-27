@@ -1,0 +1,49 @@
+# Build and Output
+bin/
+obj/
+dist/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Huge Legacy LabVIEW Reference (4.6 GB)
+ARCOS-Code2022/
+
+# IDE and System
+.vs/
+.vscode/
+.idea/
+
+# Scratch & Temporary Analysis Files
+*.jpg
+*.png
+*.tmp
+*.log
+click_capture.py
+mvcon_ui_preview.html
+analyze_*.py
+char_map*.py
+check_*.py
+crop_*.py
+enlarge_*.py
+find_*.py
+generate_*.py
+gen_*.py
+inspect_*.py
+ocr_*.py
+print_*.py
+zoom_*.py
+test_ocr.py
+map_coords.py
+mockio_run.txt
+trace.txt
+compare_view.html
+capture_*_preview.html
+generate_*_preview.html
+labview_rows_view.html
+mvcon_ui_*_preview.html
+scheme_b_*_preview.html
+scheme_b_live_verification.html
+sequencer_workflow_preview.html
+zoom_view.html

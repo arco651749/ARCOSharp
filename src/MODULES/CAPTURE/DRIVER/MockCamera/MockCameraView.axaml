@@ -1,0 +1,37 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="MVCON.Driver.MockCamera.MockCameraView"
+             Background="#1E1E1E">
+    <Grid Margin="15" RowDefinitions="Auto,Auto,*">
+        <!-- 頂部資訊列 -->
+        <Border Grid.Row="0" Background="#2D2D30" CornerRadius="4" Padding="10" Margin="0,0,0,10">
+            <DockPanel>
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock Text="[Capture 視覺相機] " FontWeight="Bold" Foreground="#4EC9B0" FontSize="14"/>
+                    <TextBlock x:Name="TxtDeviceInfo" Text="Device: Cam0" Foreground="#CCCCCC" FontSize="14"/>
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                    <Ellipse x:Name="LedOk" Width="14" Height="14" Fill="Gray" Stroke="White" Margin="4,0"/>
+                    <TextBlock Text="OK?" Foreground="LightGray" VerticalAlignment="Center"/>
+                </StackPanel>
+            </DockPanel>
+        </Border>
+
+        <!-- 操作按鈕列 -->
+        <Border Grid.Row="1" Background="#252526" BorderBrush="#3F3F46" BorderThickness="1" CornerRadius="4" Padding="10" Margin="0,0,0,10">
+            <StackPanel Orientation="Horizontal">
+                <Button x:Name="BtnSnap" Content="觸發單張取像 (Snap)" Width="160" Height="30" Background="#0E639C" Foreground="White" Margin="0,0,10,0"/>
+                <TextBlock Text="累計幀數: " Foreground="LightGray" VerticalAlignment="Center"/>
+                <TextBlock x:Name="TxtFrameCount" Text="0" FontWeight="Bold" Foreground="#4EC9B0" FontSize="15" VerticalAlignment="Center"/>
+            </StackPanel>
+        </Border>
+
+        <!-- 影像預覽顯示區 -->
+        <Border Grid.Row="2" Background="#111111" BorderBrush="#3F3F46" BorderThickness="1" CornerRadius="4">
+            <Grid>
+                <TextBlock x:Name="TxtPlaceholder" Text="尚無影像，請點擊 Snap 取像" Foreground="Gray" HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="16"/>
+                <Image x:Name="ImgPreview" Stretch="Uniform" Margin="10"/>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

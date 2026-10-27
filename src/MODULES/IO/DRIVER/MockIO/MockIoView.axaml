@@ -1,0 +1,37 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="MVCON.Driver.MockIO.MockIoView"
+             Background="#1E1E1E">
+    <Grid Margin="15" RowDefinitions="Auto,*">
+        <!-- 頂部資訊列 -->
+        <Border Grid.Row="0" Background="#2D2D30" CornerRadius="4" Padding="10" Margin="0,0,0,10">
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Text="[IO 驅動] " FontWeight="Bold" Foreground="#4EC9B0" FontSize="14"/>
+                <TextBlock x:Name="TxtDeviceInfo" Text="Device: IO1" Foreground="#CCCCCC" FontSize="14"/>
+            </StackPanel>
+        </Border>
+
+        <!-- 主體：左側 Input 手動開關，右側 Output LED 燈號 -->
+        <Grid Grid.Row="1" ColumnDefinitions="*,*">
+            <!-- 左側：Simulated Inputs (感測器開關) -->
+            <Border Grid.Column="0" BorderBrush="#3F3F46" BorderThickness="1" CornerRadius="4" Padding="10" Margin="0,0,5,0" Background="#252526">
+                <DockPanel>
+                    <TextBlock DockPanel.Dock="Top" Text="模擬輸入 (Simulated Inputs)" FontWeight="Bold" Foreground="#9CDCFE" Margin="0,0,0,8"/>
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <WrapPanel x:Name="InputsPanel" Orientation="Horizontal"/>
+                    </ScrollViewer>
+                </DockPanel>
+            </Border>
+
+            <!-- 右側：Readback Outputs (作動器 LED 燈號) -->
+            <Border Grid.Column="1" BorderBrush="#3F3F46" BorderThickness="1" CornerRadius="4" Padding="10" Margin="5,0,0,0" Background="#252526">
+                <DockPanel>
+                    <TextBlock DockPanel.Dock="Top" Text="輸出監控 (Readback Outputs)" FontWeight="Bold" Foreground="#CE9178" Margin="0,0,0,8"/>
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <WrapPanel x:Name="OutputsPanel" Orientation="Horizontal"/>
+                    </ScrollViewer>
+                </DockPanel>
+            </Border>
+        </Grid>
+    </Grid>
+</UserControl>

@@ -1,0 +1,43 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="MVCON.Driver.MockDAQ.MockDaqView"
+             Background="#1E1E1E">
+    <Grid Margin="15" RowDefinitions="Auto,Auto,*">
+        <!-- 頂部資訊列 -->
+        <Border Grid.Row="0" Background="#2D2D30" CornerRadius="4" Padding="10" Margin="0,0,0,10">
+            <DockPanel>
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock Text="[DAQ 採樣儀] " FontWeight="Bold" Foreground="#4EC9B0" FontSize="14"/>
+                    <TextBlock x:Name="TxtDeviceInfo" Text="Device: Daq0" Foreground="#CCCCCC" FontSize="14"/>
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                    <Ellipse x:Name="LedSampling" Width="14" Height="14" Fill="Gray" Stroke="White" Margin="4,0"/>
+                    <TextBlock Text="Running" Foreground="LightGray" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                    <Ellipse x:Name="LedOk" Width="14" Height="14" Fill="Gray" Stroke="White" Margin="4,0"/>
+                    <TextBlock Text="OK?" Foreground="LightGray" VerticalAlignment="Center"/>
+                </StackPanel>
+            </DockPanel>
+        </Border>
+
+        <!-- 即時數值與控制列 -->
+        <Border Grid.Row="1" Background="#252526" BorderBrush="#3F3F46" BorderThickness="1" CornerRadius="4" Padding="10" Margin="0,0,0,10">
+            <DockPanel>
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock Text="即時數值: " Foreground="LightGray" VerticalAlignment="Center"/>
+                    <TextBlock x:Name="TxtInstant" Text="0.00" FontSize="18" FontWeight="Bold" Foreground="#4EC9B0" Margin="0,0,20,0" VerticalAlignment="Center"/>
+                    <Button x:Name="BtnSample" Content="單批採樣 (Sample)" Width="140" Height="30" Background="#0E639C" Foreground="White" Margin="0,0,8,0"/>
+                    <Button x:Name="BtnStart" Content="連續採樣 (Start)" Width="130" Height="30" Background="#3E3E42" Foreground="White" Margin="0,0,8,0"/>
+                    <Button x:Name="BtnStop" Content="停止 (Stop)" Width="90" Height="30" Background="#A1260D" Foreground="White"/>
+                </StackPanel>
+            </DockPanel>
+        </Border>
+
+        <!-- 波形預覽圖表 -->
+        <Border Grid.Row="2" Background="#111111" BorderBrush="#3F3F46" BorderThickness="1" CornerRadius="4" Padding="10">
+            <Grid>
+                <TextBlock x:Name="TxtChartPlaceholder" Text="點擊 Sample 或 Start 產生採樣波形" Foreground="Gray" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                <Canvas x:Name="WaveCanvas" ClipToBounds="True"/>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

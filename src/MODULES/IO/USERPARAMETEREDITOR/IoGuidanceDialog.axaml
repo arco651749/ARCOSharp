@@ -1,0 +1,184 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="MVCON.Module.IO.Guidance.IoGuidanceDialog"
+        Title="IO Parameter Guidance"
+        Width="640" Height="480"
+        CanResize="False" WindowStartupLocation="CenterOwner"
+        Background="#F8FAFC">
+
+    <Grid RowDefinitions="Auto,*,Auto" Margin="16">
+        <!-- 頂部資訊卡片 -->
+        <Border Grid.Row="0" Background="#FFFFFF" CornerRadius="6" Padding="12" BorderBrush="#E2E8F0" BorderThickness="1">
+            <StackPanel Spacing="4">
+                <TextBlock x:Name="TxtCommandTitle" Text="⚙️ PARAMETER GUIDANCE : IO 指令參數引導" FontWeight="Bold" Foreground="#1E293B" FontSize="14"/>
+                <TextBlock x:Name="TxtSignature" Text="Signature: IO@SetPort $port(,$second,ForceUpdate)" Foreground="#0284C7" FontSize="11" FontWeight="SemiBold"/>
+                <TextBlock x:Name="TxtParamIn" Text="ParameterIn (原始輸入值):" Foreground="#64748B" FontSize="11" FontFamily="Consolas"/>
+            </StackPanel>
+        </Border>
+
+        <!-- 中央主要參數配置區 -->
+        <Border Grid.Row="1" Background="#FFFFFF" CornerRadius="6" Padding="16" Margin="0,12" BorderBrush="#CBD5E1" BorderThickness="1">
+            <Grid ColumnDefinitions="*,110">
+                <!-- 左側：依指令切換的控制面板容器 -->
+                <Panel Grid.Column="0">
+                    <!-- 1. SetPort / ClrPort 控制項 -->
+                    <StackPanel x:Name="PnlSetClrPort" Spacing="12" IsVisible="True">
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="🔴 $port (點位名稱 / 別名):" FontWeight="SemiBold" Foreground="#DC2626" FontSize="12"/>
+                            <ComboBox x:Name="CmbSetPortName" HorizontalAlignment="Stretch" BorderBrush="#DC2626" BorderThickness="1.5" CornerRadius="4"/>
+                        </StackPanel>
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="🔵 $second (延遲秒數):" FontWeight="SemiBold" Foreground="#2563EB" FontSize="12"/>
+                            <ComboBox x:Name="CmbSetPortDelay" HorizontalAlignment="Stretch" BorderBrush="#2563EB" BorderThickness="1.5" CornerRadius="4"/>
+                        </StackPanel>
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="🔵 ForceUpdate (強制刷新選項):" FontWeight="SemiBold" Foreground="#2563EB" FontSize="12"/>
+                            <ComboBox x:Name="CmbSetPortForce" HorizontalAlignment="Stretch" BorderBrush="#2563EB" BorderThickness="1.5" CornerRadius="4"/>
+                        </StackPanel>
+                    </StackPanel>
+
+                    <!-- 2. Flash(OnOff) / Flash(OffOn) 控制項 -->
+                    <StackPanel x:Name="PnlFlash" Spacing="12" IsVisible="False">
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="🔴 $port (閃爍點位):" FontWeight="SemiBold" Foreground="#DC2626" FontSize="12"/>
+                            <ComboBox x:Name="CmbFlashPort" HorizontalAlignment="Stretch" BorderBrush="#DC2626" BorderThickness="1.5" CornerRadius="4"/>
+                        </StackPanel>
+                        <StackPanel Spacing="4">
+                            <TextBlock x:Name="LblFlashT1" Text="🔵 $onSecond (第一階段秒數):" FontWeight="SemiBold" Foreground="#2563EB" FontSize="12"/>
+                            <ComboBox x:Name="CmbFlashT1" HorizontalAlignment="Stretch" BorderBrush="#2563EB" BorderThickness="1.5" CornerRadius="4"/>
+                        </StackPanel>
+                        <StackPanel Spacing="4">
+                            <TextBlock x:Name="LblFlashT2" Text="🔵 $offSecond (第二階段秒數):" FontWeight="SemiBold" Foreground="#2563EB" FontSize="12"/>
+                            <ComboBox x:Name="CmbFlashT2" HorizontalAlignment="Stretch" BorderBrush="#2563EB" BorderThickness="1.5" CornerRadius="4"/>
+                        </StackPanel>
+                    </StackPanel>
+
+                    <!-- 3. WaitPortOn / WaitPortOff 控制項 -->
+                    <StackPanel x:Name="PnlWaitPort" Spacing="10" IsVisible="False">
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="🔴 $port (等待輸入點位):" FontWeight="SemiBold" Foreground="#DC2626" FontSize="12"/>
+                            <ComboBox x:Name="CmbWaitPort" HorizontalAlignment="Stretch" BorderBrush="#DC2626" BorderThickness="1.5" CornerRadius="4"/>
+                        </StackPanel>
+                        <Grid ColumnDefinitions="*,*">
+                            <StackPanel Grid.Column="0" Spacing="4" Margin="0,0,6,0">
+                                <TextBlock Text="🔵 $timeout (超時秒數):" FontWeight="SemiBold" Foreground="#2563EB" FontSize="12"/>
+                                <ComboBox x:Name="CmbWaitTimeout" HorizontalAlignment="Stretch" BorderBrush="#2563EB" BorderThickness="1.5" CornerRadius="4"/>
+                            </StackPanel>
+                            <StackPanel Grid.Column="1" Spacing="4" Margin="6,0,0,0">
+                                <TextBlock Text="🟣 [[$label]] (異常自癒標籤):" FontWeight="SemiBold" Foreground="#9333EA" FontSize="12"/>
+                                <ComboBox x:Name="CmbWaitLabel" HorizontalAlignment="Stretch" BorderBrush="#9333EA" BorderThickness="1.5" CornerRadius="4"/>
+                            </StackPanel>
+                        </Grid>
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="🟢 $message (錯誤提示訊息):" FontWeight="SemiBold" Foreground="#16A34A" FontSize="12"/>
+                            <TextBox x:Name="TxtWaitMessage" CornerRadius="4" BorderBrush="#16A34A" BorderThickness="1.5"/>
+                        </StackPanel>
+                    </StackPanel>
+
+                    <!-- 4. CheckLogicOn / CheckLogicOff 控制項 -->
+                    <StackPanel x:Name="PnlCheckLogic" Spacing="10" IsVisible="False">
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="🔴 $logic (布林表達式，如 P0.0|P0.1 或 P0.0&amp;P0.1):" FontWeight="SemiBold" Foreground="#DC2626" FontSize="12"/>
+                            <TextBox x:Name="TxtLogicExpr" CornerRadius="4" BorderBrush="#DC2626" BorderThickness="1.5"/>
+                        </StackPanel>
+                        <Grid ColumnDefinitions="*,*">
+                            <StackPanel Grid.Column="0" Spacing="4" Margin="0,0,6,0">
+                                <TextBlock Text="🔵 $timeout (超時秒數):" FontWeight="SemiBold" Foreground="#2563EB" FontSize="12"/>
+                                <ComboBox x:Name="CmbLogicTimeout" HorizontalAlignment="Stretch" BorderBrush="#2563EB" BorderThickness="1.5" CornerRadius="4"/>
+                            </StackPanel>
+                            <StackPanel Grid.Column="1" Spacing="4" Margin="6,0,0,0">
+                                <TextBlock Text="🟣 [[$label]] (異常自癒標籤):" FontWeight="SemiBold" Foreground="#9333EA" FontSize="12"/>
+                                <ComboBox x:Name="CmbLogicLabel" HorizontalAlignment="Stretch" BorderBrush="#9333EA" BorderThickness="1.5" CornerRadius="4"/>
+                            </StackPanel>
+                        </Grid>
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="🟢 $message (錯誤提示訊息):" FontWeight="SemiBold" Foreground="#16A34A" FontSize="12"/>
+                            <TextBox x:Name="TxtLogicMessage" CornerRadius="4" BorderBrush="#16A34A" BorderThickness="1.5"/>
+                        </StackPanel>
+                    </StackPanel>
+
+                    <!-- 5. SetPortName 控制項 -->
+                    <StackPanel x:Name="PnlSetPortName" Spacing="12" IsVisible="False">
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="🔴 $port (實體點位代號，如 P0.0):" FontWeight="SemiBold" Foreground="#DC2626" FontSize="12"/>
+                            <ComboBox x:Name="CmbRenamePort" HorizontalAlignment="Stretch" BorderBrush="#DC2626" BorderThickness="1.5" CornerRadius="4"/>
+                        </StackPanel>
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="🟢 $newname (自訂別名 - Input 結尾需帶 ?，Output 嚴禁帶 ?):" FontWeight="SemiBold" Foreground="#16A34A" FontSize="12"/>
+                            <TextBox x:Name="TxtNewPortName" CornerRadius="4" BorderBrush="#16A34A" BorderThickness="1.5"/>
+                        </StackPanel>
+                    </StackPanel>
+
+                    <!-- 6. AddVirtualIO 控制項 -->
+                    <StackPanel x:Name="PnlAddVirtualIO" Spacing="12" IsVisible="False">
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="🔴 $port (虛擬點位名稱):" FontWeight="SemiBold" Foreground="#DC2626" FontSize="12"/>
+                            <TextBox x:Name="TxtVirtualPortName" CornerRadius="4" BorderBrush="#DC2626" BorderThickness="1.5"/>
+                        </StackPanel>
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="🔵 Initial Value (初始狀態):" FontWeight="SemiBold" Foreground="#2563EB" FontSize="12"/>
+                            <ComboBox x:Name="CmbVirtualState" HorizontalAlignment="Stretch" BorderBrush="#2563EB" BorderThickness="1.5" CornerRadius="4"/>
+                        </StackPanel>
+                    </StackPanel>
+
+                    <!-- 7. AddIODriver 控制項 -->
+                    <StackPanel x:Name="PnlAddIODriver" Spacing="10" IsVisible="False">
+                        <Grid ColumnDefinitions="*,*">
+                            <StackPanel Grid.Column="0" Spacing="4" Margin="0,0,6,0">
+                                <TextBlock Text="🔴 $io (設備自訂名稱，如 IO1):" FontWeight="SemiBold" Foreground="#DC2626" FontSize="12"/>
+                                <TextBox x:Name="TxtDriverDeviceName" CornerRadius="4" BorderBrush="#DC2626" BorderThickness="1.5"/>
+                            </StackPanel>
+                            <StackPanel Grid.Column="1" Spacing="4" Margin="6,0,0,0">
+                                <TextBlock Text="🔵 $driver (驅動型態):" FontWeight="SemiBold" Foreground="#2563EB" FontSize="12"/>
+                                <ComboBox x:Name="CmbDriverType" HorizontalAlignment="Stretch" BorderBrush="#2563EB" BorderThickness="1.5" CornerRadius="4"/>
+                            </StackPanel>
+                        </Grid>
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="🟢 Driver Parameters (配置參數，如 OutStart=P0.0,OutPorts=8):" FontWeight="SemiBold" Foreground="#16A34A" FontSize="12"/>
+                            <TextBox x:Name="TxtDriverParams" CornerRadius="4" BorderBrush="#16A34A" BorderThickness="1.5"/>
+                        </StackPanel>
+                    </StackPanel>
+
+                    <!-- 8. InitIOPort / ForceUpdate 控制項 -->
+                    <StackPanel x:Name="PnlDeviceOnly" Spacing="12" IsVisible="False">
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="🔴 $io (已註冊之 IO 設備名稱):" FontWeight="SemiBold" Foreground="#DC2626" FontSize="12"/>
+                            <ComboBox x:Name="CmbDeviceName" HorizontalAlignment="Stretch" BorderBrush="#DC2626" BorderThickness="1.5" CornerRadius="4"/>
+                        </StackPanel>
+                    </StackPanel>
+
+                    <!-- 9. Shift 控制項 -->
+                    <StackPanel x:Name="PnlShift" Spacing="12" IsVisible="False">
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="🔴 $io1, $io2, $io3... (參與位移之點位清單，以逗號分隔):" FontWeight="SemiBold" Foreground="#DC2626" FontSize="12"/>
+                            <TextBox x:Name="TxtShiftPorts" CornerRadius="4" BorderBrush="#DC2626" BorderThickness="1.5"/>
+                        </StackPanel>
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="🔵 Shift Amount (位移步數，負值為反向):" FontWeight="SemiBold" Foreground="#2563EB" FontSize="12"/>
+                            <ComboBox x:Name="CmbShiftAmount" HorizontalAlignment="Stretch" BorderBrush="#2563EB" BorderThickness="1.5" CornerRadius="4"/>
+                        </StackPanel>
+                    </StackPanel>
+                </Panel>
+
+                <!-- 右側大綠勾套用按鈕 -->
+                <Button Grid.Column="1" x:Name="BtnApplyBig" Margin="14,14,0,0"
+                        Background="#10B981" Foreground="#FFFFFF" FontSize="36" FontWeight="Bold"
+                        CornerRadius="6" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
+                        HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
+                        Content="✔" ToolTip.Tip="點擊立即套用並返回"/>
+            </Grid>
+        </Border>
+
+        <!-- 底部預覽與操作卡片 -->
+        <Border Grid.Row="2" Background="#FFFFFF" CornerRadius="6" Padding="12" BorderBrush="#E2E8F0" BorderThickness="1">
+            <Grid ColumnDefinitions="*,Auto,Auto">
+                <StackPanel Grid.Column="0" Spacing="2">
+                    <TextBlock Text="ParameterOut (即時動態語法拼接預覽):" FontSize="10" Foreground="#64748B"/>
+                    <TextBox x:Name="TxtParamOut" IsReadOnly="True" FontWeight="Bold" Foreground="#0284C7" FontSize="12" FontFamily="Consolas"/>
+                </StackPanel>
+                <Button Grid.Column="1" x:Name="BtnOk" Content="✔ 確定套用" Background="#2563EB" Foreground="#FFFFFF" Margin="12,0,0,0" Padding="14,6" CornerRadius="4"/>
+                <Button Grid.Column="2" x:Name="BtnCancel" Content="✖ 取消" Background="#94A3B8" Foreground="#FFFFFF" Margin="8,0,0,0" Padding="14,6" CornerRadius="4"/>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>
