@@ -198,3 +198,22 @@ UserSubPanelHost.Content = driver?.CreateDriverView();
 ```
 
 這達成了真正的 **UI 複用性**：同一個 IO 面板控制項，既是手動測試按鈕，也是執行狀態指示燈，更是硬體驅動的維護人機。
+
+---
+
+## 六、 CSVI 3.0 可攜式原始碼封裝與獨立 `CSVI Studio` 工具鏈
+
+為了徹底解決產線現場無網路、無 Visual Studio 時的即時微調需求，同時避免外掛函式庫版本衝突（DLL Hell），CSVI 架構進一步支援 **可選式內嵌原始碼（`.cs` + `.axaml`）** 與獨立的 **`CSVI_Studio.exe`** 開發調試工作站：
+
+1. **PE 原生內嵌原始碼 (`ManifestResource`)**：
+   - 保持 `.csvi` 為 100% 標準 .NET PE 組件（主程式 `Assembly.Load(byte[])` 零解壓開銷）。
+   - 於 `.rsrc` 區段選擇性封裝 `CSVI.Manifest.json`、`CSVI.RuntimeXaml.*` 與 `CSVI.Source.Bundle`（含 `.cs` 邏輯與 `.axaml` 介面）。
+2. **三段式安全封裝模式（使用者可選）**：
+   - 🟢 **`PortableOpen`（開放攜帶模式）**：內嵌明文 `.cs` + `.axaml`，複製單一 `.csvi` 至任何工控機皆可用 `CSVI Studio` 開啟修改並現場重編。
+   - 🟡 **`PasswordLocked`（密碼鎖定模式）**：以 AES-256-GCM 加密內嵌原始碼，主程式可正常執行，但於 `CSVI Studio` 修改源碼需輸入工程師密碼（對標 LabVIEW Block Diagram Password）。
+   - 🔴 **`StrippedRelease`（純執行剝離模式）**：完全剝離 `.cs` 原始碼，僅保留編譯後 IL 與執行期 UI，保護核心演算法機密（對標 LabVIEW Remove Block Diagram）。
+3. **獨立工具鏈工作站 (`CSVI_Studio.exe`)**：
+   - 獨立於 `MVCON.App.exe` 之外的專用 IDE 與四位一體沙盒測試器（全面取代舊式 `GuidanceRunner.exe`）。
+   - **完整內建 Toolchain（Roslyn C# 編譯器 + `AvaloniaRuntimeXamlLoader` + 標準鎖定版 SDK 參考庫）**：所有 `.csvi` 必須對齊 `CSVI Studio` 的函式庫與 Runtime ABI 進行編譯與校驗，徹底消滅版本不相容問題。
+
+> 📄 **完整二進位規格與實作藍圖請參閱**：[`docs/CSVI_STUDIO_AND_PORTABLE_SPEC.md`](./CSVI_STUDIO_AND_PORTABLE_SPEC.md)

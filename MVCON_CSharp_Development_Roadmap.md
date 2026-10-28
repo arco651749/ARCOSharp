@@ -444,3 +444,22 @@ flowchart TD
     - 點位下拉選單與快速定位按鈕（`Go Point`、`Go Pallet`）。
 - [x] **其餘 8 大工程師分頁佔位與資料流保持**：`IMAQ Array`、`Point&Path`、`Modules Info`、`Threads`、`Parameter&Variable`、`WaveForm` (ScottPlot 示波器)、`Panel CMD`、`Remote` 皆保留乾淨結構與底層引擎介面。
 - [x] **`MVCON.Remoter`**：獨立 Sidecar Companion 應用程式（TCP Port 2800~2812 MC Protocol / Telnet 監聽器，支援 `$GetIO`, `$SetIO`, `$GetVariable`, `$SetVariable`, `$GetPoint`, `$SetPoint`, `$Execute`）。
+
+---
+
+## 📌 第七階段：CSVI 3.0 可攜式原始碼封裝與獨立 `CSVI Studio` 工具鏈 (`MVCON.CsviStudio`)
+> 詳細規格請參閱：[`docs/CSVI_STUDIO_AND_PORTABLE_SPEC.md`](docs/CSVI_STUDIO_AND_PORTABLE_SPEC.md)
+
+- [ ] **CSVI 3.0 可攜式自包含容器 (`MVCON.Core/Csvi`)**：
+  - 維持標準 `.NET PE` 二進位格式（`Assembly.Load(byte[])` 零解壓開銷），將 `CSVI.Manifest.json`、`CSVI.RuntimeXaml.*` 與 `CSVI.Source.Bundle`（`.cs` + `.axaml`）封裝於 PE `ManifestResource`。
+  - **三段式安全封裝模式（使用者可選）**：
+    - 🟢 `PortableOpen`：攜帶明文 `.cs` + `.axaml`，隨插即改。
+    - 🟡 `PasswordLocked`：AES-256-GCM 加密原始碼，於 `CSVI Studio` 輸入密碼方可解鎖編輯。
+    - 🔴 `StrippedRelease`：徹底剝離 `.cs` 原始碼，保護核心演算法機密。
+  - **內嵌修改歷史 (`RevisionHistory` Unified Diff)**：每次現場重編自動記錄 SHA-256 與代碼差異，防止產線魔改失控。
+- [ ] **雙軌動態 XAML 載入器 (`CsviXamlLoader`)**：
+  - 優先由內嵌 `CSVI.RuntimeXaml.*` 串流透過 `AvaloniaRuntimeXamlLoader` 動態解析，完美支援無 MSBuild 環境下的 Roslyn 記憶體重編與 0 秒延遲 Live UI Preview。
+- [ ] **獨立開發與調試工作站 `src/MVCON.CsviStudio` (`CSVI_Studio.exe`)**：
+  - **內建完整 Toolchain 與鎖定版 SDK 參考庫**：封裝 Roslyn (`Microsoft.CodeAnalysis.CSharp`)、Runtime XAML 解析器與標準 SDK 引用，強制所有 `.csvi` 對齊主程式 Runtime ABI。
+  - **雙欄源碼編輯器 + 四位一體即時沙盒測試台**：免開主程式即可單獨測試 `Execute()`、彈出導引視窗、即時預覽並互動操作 FrontPanel，全面取代舊式 `GuidanceRunner.exe`。
+  - **與主程式 `MVCON.App` 外部連動**：Supervisor 模式下右鍵呼叫 `CSVI_Studio.exe` 編輯，存檔後透過 `FileSystemWatcher` 即時熱重載。
