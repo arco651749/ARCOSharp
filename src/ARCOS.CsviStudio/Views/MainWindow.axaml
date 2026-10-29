@@ -47,9 +47,9 @@
         </Border>
 
         <!-- Main Workspace: Split Left (Source Tabs) & Right (Live Preview / Sandbox) -->
-        <Grid Grid.Row="2" ColumnDefinitions="*, 490" Background="#FBFBFA">
+        <Grid Grid.Row="2" ColumnDefinitions="*, 6, 520" Background="#FBFBFA">
             <!-- Left: Source Code Tabs (Clean Paper Tone) -->
-            <Border Grid.Row="0" Background="#FFFFFF" BorderBrush="#E5E5DF" BorderThickness="0,0,1,0">
+            <Border Grid.Column="0" Background="#FFFFFF" BorderBrush="#E5E5DF" BorderThickness="0,0,1,0">
                 <TabControl Name="SourceTabs">
                     <TabItem Header="📄 Logic.cs" FontSize="13" FontWeight="SemiBold">
                         <TextBox Name="LogicEditor" AcceptsReturn="True" AcceptsTab="True" 
@@ -74,8 +74,11 @@
                 </TabControl>
             </Border>
 
+            <!-- GridSplitter to resize Left / Right panels -->
+            <GridSplitter Grid.Column="1" Width="6" Background="#E2E8F0" ResizeDirection="Columns"/>
+
             <!-- Right: Four-in-One Sandbox & Live Preview -->
-            <Grid Grid.Column="1" RowDefinitions="Auto, *" Background="#F8F8F5">
+            <Grid Grid.Column="2" RowDefinitions="Auto, *" Background="#F8F8F5">
                 <Border Background="#F4F4F0" Padding="12,8" BorderBrush="#E5E5DF" BorderThickness="0,0,0,1">
                     <TextBlock Text="🔍 LIVE SANDBOX &amp; PREVIEW" FontWeight="Bold" Foreground="#2C7A7B" FontSize="13"/>
                 </Border>
@@ -102,11 +105,13 @@
                     </TabItem>
 
                     <TabItem Header="🎨 Live XAML Preview" FontSize="13" FontWeight="SemiBold">
-                        <Border Name="XamlPreviewHost" Background="#FFFFFF" BorderBrush="#E2E8F0" BorderThickness="1" 
+                        <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
+                            <Border Name="XamlPreviewHost" Background="#FFFFFF" BorderBrush="#E2E8F0" BorderThickness="1" 
                                 Margin="12" CornerRadius="6" Padding="14">
                             <TextBlock Text="Live preview rendered from Wizard.axaml" Foreground="#A0AEC0" 
                                        HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                        </Border>
+                            </Border>
+                        </ScrollViewer>
                     </TabItem>
                 </TabControl>
             </Grid>
