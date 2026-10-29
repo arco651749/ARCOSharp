@@ -21,4 +21,9 @@
     <ProjectReference Include="..\..\..\..\MVCON.Core\MVCON.Core.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <EmbeddedResource Include="CSVI.Manifest.json" LogicalName="CSVI.Manifest.json" />
+    <EmbeddedResource Include="CSVI.Source.Bundle" LogicalName="CSVI.Source.Bundle" />
+  </ItemGroup>
+
 </Project>

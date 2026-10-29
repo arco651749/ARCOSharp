@@ -17,7 +17,7 @@ internal class Program
         }
 
         // 2. 否則啟動 Avalonia 雙欄 GUI 工作站供人類工程師操作
-        string? openFilePath = args.FirstOrDefault(a => !a.StartsWith("-") && a.EndsWith(".csvi", StringComparison.OrdinalIgnoreCase));
+        string? openFilePath = args.Select(a => a.Trim('"')).FirstOrDefault(a => !a.StartsWith("-") && a.EndsWith(".csvi", StringComparison.OrdinalIgnoreCase));
         BuildAvaloniaApp(openFilePath)
             .StartWithClassicDesktopLifetime(args);
 

@@ -1,0 +1,17 @@
+{
+  "Module": "IO",
+  "CommandKey": "MockIO",
+  "ComponentType": 1,
+  "PackagingMode": 0,
+  "LastCompiledUtc": "2026-10-29T12:00:00Z",
+  "LastAuthor": "ARCO\\Engineer",
+  "SourceSha256": "8d905e243a44a849c804653d5e4b0e9e5664f0f2c0966310686fcab81ed80ba6",
+  "RevisionHistory": [
+    {
+      "Revision": 1,
+      "TimestampUtc": "2026-10-29T12:00:00Z",
+      "Author": "ARCO\\Engineer",
+      "Summary": "CSVI 3.0 Grand-Unified MockIO Driver (HAL Point Mapping & FrontPanel HMI)"
+    }
+  ]
+}

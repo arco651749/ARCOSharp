@@ -1,7 +1,7 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="MVCON.App.Dialogs.ParameterGuidanceWindow"
-        Title="MVCON Parameter Editor"
+        Title="ARCOS Parameter Editor"
         Width="580" Height="410"
         WindowStartupLocation="CenterOwner"
         CanResize="False"

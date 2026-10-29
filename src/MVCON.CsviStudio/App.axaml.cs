@@ -25,7 +25,14 @@ public partial class App : Application
     {
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
-            desktop.MainWindow = new MainWindow(_initialFilePath);
+            string? file = _initialFilePath;
+            if (string.IsNullOrEmpty(file) && desktop.Args != null)
+            {
+                file = desktop.Args
+                    .Select(a => a.Trim('"').Trim())
+                    .FirstOrDefault(a => !a.StartsWith("-") && a.EndsWith(".csvi", StringComparison.OrdinalIgnoreCase));
+            }
+            desktop.MainWindow = new MainWindow(file);
         }
 
         base.OnFrameworkInitializationCompleted();

@@ -19,6 +19,7 @@ public class MockIoDriver : IDriver
     public string DeviceName { get; private set; } = string.Empty;
     public string Category => "IO";
     public string DriverType => "MockIO";
+    public string Device { get; private set; } = "Virtual";
 
     public string OutStart { get; private set; } = "P0.0";
     public int OutPorts { get; private set; } = 16;
@@ -36,11 +37,12 @@ public class MockIoDriver : IDriver
         DeviceName = deviceName;
         _engines = engines;
 
-        // 解析參數：OutStart=P0.0,OutPorts=16,InStart=P1.0,InPorts=16,Interval=25
-        var args = ArgParaHelper.ParseKeyValueArgs(param, out _);
-        if (args.TryGetValue("OutStart", out var outStart)) OutStart = outStart;
+        // 解析參數：支援 Device=COM1 或 Device=IP:Port，OutStart/OutSart、InputStart/InStart 容錯解析
+        var args = ArgParaHelper.ParseKeyValueArgs(param, out var posArgs);
+        if (args.TryGetValue("Device", out var dev)) Device = dev;
+        if (args.TryGetValue("OutStart", out var outStart) || args.TryGetValue("OutSart", out outStart)) OutStart = outStart;
         if (args.TryGetValue("OutPorts", out var outPorts) && int.TryParse(outPorts, out int op)) OutPorts = op;
-        if (args.TryGetValue("InStart", out var inStart)) InStart = inStart;
+        if (args.TryGetValue("InputStart", out var inStart) || args.TryGetValue("InStart", out inStart)) InStart = inStart;
         if (args.TryGetValue("InPorts", out var inPorts) && int.TryParse(inPorts, out int ip)) InPorts = ip;
         if (args.TryGetValue("Interval", out var interval) && int.TryParse(interval, out int iv)) IntervalMs = iv;
 
@@ -60,6 +62,21 @@ public class MockIoDriver : IDriver
 
         _cts = new CancellationTokenSource();
         _workerTask = Task.Run(() => WorkerLoop(_cts.Token));
+    }
+
+    public string GetInputPortName(int index) => GetPortNameAtOffset(InStart, index);
+    public string GetOutputPortName(int index) => GetPortNameAtOffset(OutStart, index);
+
+    public static string GetPortNameAtOffset(string startPort, int offset)
+    {
+        if (MVCON.Core.Engines.IoEngine.TryParsePhysicalPort(startPort, out int sp, out int sb))
+        {
+            int total = sp * 8 + sb + offset;
+            int port = total / 8;
+            int bit = total % 8;
+            return $"P{port}.{bit}";
+        }
+        return $"{startPort}+{offset}";
     }
 
     private static bool TryGetPortOffset(string startPort, string targetPort, out int offset)

@@ -2,9 +2,9 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="MVCON.CsviStudio.Views.MainWindow"
         Title="🛠️ CSVI Studio 3.0 - Grand Unified Instrument IDE"
-        Width="1240" Height="820"
+        Width="1000" Height="700"
         Background="#FBFBFA"
-        WindowStartupLocation="CenterScreen">
+        WindowStartupLocation="Manual">
 
     <Grid RowDefinitions="Auto, Auto, *, 130">
         <!-- Top Toolbar (Warm Light Cream) -->
@@ -32,7 +32,7 @@
                         Background="#FFFFFF" Foreground="#2D3748" BorderBrush="#D1D5DB" Padding="10,6"/>
 
                 <Border Background="#E6FFFA" BorderBrush="#81E6D9" BorderThickness="1" CornerRadius="4" Padding="8,4" Margin="16,0,0,0" VerticalAlignment="Center">
-                    <TextBlock Name="SdkStatusBlock" Text="SDK: MVCON-SDK-8.0.1 [✔ ALIGNED]" 
+                    <TextBlock Name="SdkStatusBlock" Text="SDK: ARCOS-SDK-8.0.1 [✔ ALIGNED]" 
                                Foreground="#234E52" FontWeight="SemiBold" FontSize="12"/>
                 </Border>
             </StackPanel>

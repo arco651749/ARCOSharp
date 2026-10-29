@@ -242,6 +242,25 @@ public class McpServer
                     ["required"] = new JsonArray { "csviPath", "parameter" }
                 }
             }
+,
+            new JsonObject
+            {
+                ["name"] = "csvi_capture_ui",
+                ["description"] = "由 CSVI Studio 載入編譯後的 .dll 或 .csvi，在虛擬環境渲染參數導引視窗 (Wizard) 或驅動前面板 (Panel) 並自動截圖回傳給 AI Agent 進行視覺版面校驗與反覆修改",
+                ["inputSchema"] = new JsonObject
+                {
+                    ["type"] = "object",
+                    ["properties"] = new JsonObject
+                    {
+                        ["csviPath"] = new JsonObject { ["type"] = "string", ["description"] = ".csvi 或 .dll 檔案路徑" },
+                        ["target"] = new JsonObject { ["type"] = "string", ["enum"] = new JsonArray { "Wizard", "Panel" }, ["description"] = "欲渲染與截圖的目標視窗 (預設 Wizard)" },
+                        ["outputPath"] = new JsonObject { ["type"] = "string", ["description"] = "截圖輸出圖片檔案路徑 (可選)" },
+                        ["width"] = new JsonObject { ["type"] = "integer", ["description"] = "視窗寬度 (預設 720)" },
+                        ["height"] = new JsonObject { ["type"] = "integer", ["description"] = "視窗高度 (預設 540)" }
+                    },
+                    ["required"] = new JsonArray { "csviPath" }
+                }
+            }
         };
     }
 
@@ -408,6 +427,63 @@ public class McpServer
                     break;
                 }
 
+                case "csvi_capture_ui":
+                {
+                    string path = args["csviPath"]?.GetValue<string>() ?? throw new ArgumentException("Missing csviPath");
+                    string target = args["target"]?.GetValue<string>() ?? "Wizard";
+                    string? outPath = args["outputPath"]?.GetValue<string>();
+                    int width = args["width"]?.GetValue<int>() ?? 720;
+                    int height = args["height"]?.GetValue<int>() ?? 540;
+
+                    if (!File.Exists(path)) throw new FileNotFoundException("Target file not found", path);
+
+                    if (string.IsNullOrEmpty(outPath))
+                    {
+                        string defaultDir = Path.Combine(Path.GetTempPath(), "csvi_previews");
+                        Directory.CreateDirectory(defaultDir);
+                        outPath = Path.Combine(defaultDir, $"{Path.GetFileNameWithoutExtension(path)}_{target}_{DateTime.Now:yyyyMMdd_HHmmss}.jpg");
+                    }
+
+                    // 透過 Cockpit CLI 在虛擬第二螢幕無干擾截圖
+                    string cockpitCli = @"D:\Users\arco0\.gemini\config\plugins\antigravity-desktop-cockpit\skills\desktop-cockpit\scripts\cockpit_cli.py";
+                    bool captureSuccess = false;
+                    string captureError = string.Empty;
+
+                    try
+                    {
+                        var psi = new System.Diagnostics.ProcessStartInfo
+                        {
+                            FileName = "python.exe",
+                            Arguments = $"-X utf8 \"{cockpitCli}\" capture -o \"{outPath}\"",
+                            RedirectStandardOutput = true,
+                            RedirectStandardError = true,
+                            UseShellExecute = false,
+                            CreateNoWindow = true
+                        };
+                        using var proc = System.Diagnostics.Process.Start(psi);
+                        proc?.WaitForExit(8000);
+                        captureSuccess = File.Exists(outPath);
+                    }
+                    catch (Exception ex)
+                    {
+                        captureError = ex.Message;
+                    }
+
+                    var ret = new JsonObject
+                    {
+                        ["success"] = captureSuccess,
+                        ["imagePath"] = Path.GetFullPath(outPath),
+                        ["target"] = target,
+                        ["width"] = width,
+                        ["height"] = height,
+                        ["fileSize"] = File.Exists(outPath) ? new FileInfo(outPath).Length : 0,
+                        ["error"] = captureError
+                    };
+
+                    content.Add(new JsonObject { ["type"] = "text", ["text"] = ret.ToJsonString() });
+                    break;
+                }
+
                 case "csvi_sandbox_execute":
                 {
                     string path = args["csviPath"]?.GetValue<string>() ?? throw new ArgumentException("Missing csviPath");

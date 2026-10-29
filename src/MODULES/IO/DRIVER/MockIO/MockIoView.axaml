@@ -1,37 +1,234 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              x:Class="MVCON.Driver.MockIO.MockIoView"
-             Background="#1E1E1E">
-    <Grid Margin="15" RowDefinitions="Auto,*">
-        <!-- 頂部資訊列 -->
-        <Border Grid.Row="0" Background="#2D2D30" CornerRadius="4" Padding="10" Margin="0,0,0,10">
-            <StackPanel Orientation="Horizontal">
-                <TextBlock Text="[IO 驅動] " FontWeight="Bold" Foreground="#4EC9B0" FontSize="14"/>
-                <TextBlock x:Name="TxtDeviceInfo" Text="Device: IO1" Foreground="#CCCCCC" FontSize="14"/>
-            </StackPanel>
+             Background="#181A20"
+             Foreground="#E2E8F0">
+
+    <UserControl.Styles>
+        <Style Selector="TabItem">
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Foreground" Value="#94A3B8"/>
+            <Setter Property="Padding" Value="16,8"/>
+        </Style>
+        <Style Selector="TabItem:selected">
+            <Setter Property="Foreground" Value="#60A5FA"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+        </Style>
+    </UserControl.Styles>
+
+    <Grid RowDefinitions="Auto,*" Margin="12">
+        <!-- 頂部資訊列：設備名稱、通訊狀態、心跳 -->
+        <Border Grid.Row="0" Background="#222530" BorderBrush="#2D3242" BorderThickness="1" CornerRadius="6" Padding="12,8" Margin="0,0,0,10">
+            <Grid ColumnDefinitions="Auto,*,Auto">
+                <!-- 左側：設備代號與通訊資訊 -->
+                <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                    <Border Background="#10B981" CornerRadius="4" Padding="6,2">
+                        <TextBlock Text="DRIVER" FontSize="11" FontWeight="Bold" Foreground="#064E3B"/>
+                    </Border>
+                    <TextBlock x:Name="TxtHeaderDevice" Text="IO1 (MockIO)" FontSize="15" FontWeight="Bold" Foreground="#F8FAFC" VerticalAlignment="Center"/>
+                    <Border Background="#2D3242" CornerRadius="4" Padding="6,2">
+                        <TextBlock x:Name="TxtHeaderBus" Text="Bus: com1" FontSize="12" Foreground="#94A3B8" VerticalAlignment="Center"/>
+                    </Border>
+                </StackPanel>
+
+                <!-- 中間：映射區間摘要 -->
+                <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Center" Spacing="12" VerticalAlignment="Center">
+                    <TextBlock x:Name="TxtSummaryOut" Text="DO: P0.0 ~ P3.7 (32點)" Foreground="#34D399" FontSize="12" FontWeight="SemiBold"/>
+                    <TextBlock Text="|" Foreground="#475569" FontSize="12"/>
+                    <TextBlock x:Name="TxtSummaryIn" Text="DI: P4.0 ~ P7.7 (32點)" Foreground="#60A5FA" FontSize="12" FontWeight="SemiBold"/>
+                </StackPanel>
+
+                <!-- 右側：掃描狀態與心跳 -->
+                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                    <Ellipse x:Name="LedHeartbeat" Width="10" Height="10" Fill="#10B981"/>
+                    <TextBlock x:Name="TxtScanRate" Text="25ms (40Hz)" FontSize="12" Foreground="#94A3B8" VerticalAlignment="Center"/>
+                    <Button x:Name="BtnForceUpdate" Content="⚡ 刷新" FontSize="11" Padding="8,3" Background="#334155" Foreground="#F8FAFC" CornerRadius="4"/>
+                </StackPanel>
+            </Grid>
         </Border>
 
-        <!-- 主體：左側 Input 手動開關，右側 Output LED 燈號 -->
-        <Grid Grid.Row="1" ColumnDefinitions="*,*">
-            <!-- 左側：Simulated Inputs (感測器開關) -->
-            <Border Grid.Column="0" BorderBrush="#3F3F46" BorderThickness="1" CornerRadius="4" Padding="10" Margin="0,0,5,0" Background="#252526">
-                <DockPanel>
-                    <TextBlock DockPanel.Dock="Top" Text="模擬輸入 (Simulated Inputs)" FontWeight="Bold" Foreground="#9CDCFE" Margin="0,0,0,8"/>
-                    <ScrollViewer VerticalScrollBarVisibility="Auto">
-                        <WrapPanel x:Name="InputsPanel" Orientation="Horizontal"/>
-                    </ScrollViewer>
-                </DockPanel>
-            </Border>
+        <!-- 主體內容：頁籤切換 HMI 前面板 vs 參數導引 (Wizard) -->
+        <TabControl Grid.Row="1" Background="Transparent">
+            <!-- 頁籤一：🎛️ 驅動前面板 HMI (嵌入 SubPanel 供調機與即時監控) -->
+            <TabItem>
+                <TabItem.Header>
+                    <TextBlock Text="🎛️ 驅動前面板 HMI (Front Panel)" FontSize="13" FontWeight="Bold" Foreground="#60A5FA"/>
+                </TabItem.Header>
+                <Grid ColumnDefinitions="*,*" Margin="0,8,0,0">
+                    <!-- 左半部：數位輸入 (DI / Sensors) -->
+                    <Border Grid.Column="0" Background="#1E212B" BorderBrush="#2D3242" BorderThickness="1" CornerRadius="6" Padding="10" Margin="0,0,6,0">
+                        <Grid RowDefinitions="Auto,Auto,*">
+                            <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="0,0,0,6">
+                                <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                    <TextBlock Text="🔵 數位輸入 (DI / Simulated Inputs)" FontWeight="Bold" FontSize="13" Foreground="#60A5FA"/>
+                                    <TextBlock x:Name="TxtInTotalBadge" Text="[32 點]" FontSize="12" Foreground="#94A3B8"/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4">
+                                    <Button x:Name="BtnClearAllIn" Content="全關 (0)" FontSize="10" Padding="6,2" Background="#334155" Foreground="#CBD5E1" CornerRadius="3"/>
+                                    <Button x:Name="BtnSetAllIn" Content="全開 (1)" FontSize="10" Padding="6,2" Background="#334155" Foreground="#CBD5E1" CornerRadius="3"/>
+                                </StackPanel>
+                            </Grid>
+                            <TextBlock Grid.Row="1" Text="手動點擊切換感測器觸發狀態，自動同步寫入 IoEngine.SetBatch" FontSize="11" Foreground="#64748B" Margin="0,0,0,8"/>
+                            
+                            <!-- 輸入點位清單容器 (依 Byte 自動分組) -->
+                            <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
+                                <StackPanel x:Name="InputsContainer" Spacing="8"/>
+                            </ScrollViewer>
+                        </Grid>
+                    </Border>
 
-            <!-- 右側：Readback Outputs (作動器 LED 燈號) -->
-            <Border Grid.Column="1" BorderBrush="#3F3F46" BorderThickness="1" CornerRadius="4" Padding="10" Margin="5,0,0,0" Background="#252526">
-                <DockPanel>
-                    <TextBlock DockPanel.Dock="Top" Text="輸出監控 (Readback Outputs)" FontWeight="Bold" Foreground="#CE9178" Margin="0,0,0,8"/>
+                    <!-- 右半部：數位輸出 (DO / Actuators) -->
+                    <Border Grid.Column="1" Background="#1E212B" BorderBrush="#2D3242" BorderThickness="1" CornerRadius="6" Padding="10" Margin="6,0,0,0">
+                        <Grid RowDefinitions="Auto,Auto,*">
+                            <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="6" Margin="0,0,0,6">
+                                <TextBlock Text="🟢 數位輸出監控 (DO / Readback Outputs)" FontWeight="Bold" FontSize="13" Foreground="#34D399"/>
+                                <TextBlock x:Name="TxtOutTotalBadge" Text="[32 點]" FontSize="12" Foreground="#94A3B8"/>
+                            </StackPanel>
+                            <TextBlock Grid.Row="1" Text="微秒級監聽 IoEngine.GetBatch 狀態，即時呈現閥體/氣缸/馬達致動器燈號" FontSize="11" Foreground="#64748B" Margin="0,0,0,8"/>
+                            
+                            <!-- 輸出燈號清單容器 (依 Byte 自動分組) -->
+                            <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
+                                <StackPanel x:Name="OutputsContainer" Spacing="8"/>
+                            </ScrollViewer>
+                        </Grid>
+                    </Border>
+                </Grid>
+            </TabItem>
+
+            <!-- 頁籤二：⚙️ 驅動參數設定導引 (Driver Wizard) -->
+            <TabItem>
+                <TabItem.Header>
+                    <TextBlock Text="⚙️ 參數導引與映射 (Driver Wizard)" FontSize="13" FontWeight="Bold" Foreground="#FCD34D"/>
+                </TabItem.Header>
+                <Border Background="#1E212B" BorderBrush="#2D3242" BorderThickness="1" CornerRadius="6" Padding="16" Margin="0,8,0,0">
                     <ScrollViewer VerticalScrollBarVisibility="Auto">
-                        <WrapPanel x:Name="OutputsPanel" Orientation="Horizontal"/>
+                        <StackPanel Spacing="14" MaxWidth="680" HorizontalAlignment="Left">
+                            <!-- 1. 設備代號 -->
+                            <StackPanel Spacing="4">
+                                <TextBlock Text="🏷️ 設備識別名稱 ($io):" FontWeight="SemiBold" FontSize="12" Foreground="#CBD5E1"/>
+                                <TextBox x:Name="TxtWizDeviceName" Text="IO1" Width="240" HorizontalAlignment="Left" Background="#262A36" BorderBrush="#3B4254" CornerRadius="4"/>
+                            </StackPanel>
+
+                            <!-- 2. 通訊介面配置 -->
+                            <Border Background="#242834" BorderBrush="#333A4D" BorderThickness="1" CornerRadius="6" Padding="12">
+                                <StackPanel Spacing="10">
+                                    <TextBlock Text="🔌 通訊介面總線 (Device / Interface):" FontWeight="Bold" FontSize="12" Foreground="#93C5FD"/>
+                                    <StackPanel Orientation="Horizontal" Spacing="16">
+                                        <RadioButton x:Name="RadSerial" Content="RS-232 / COM 埠" IsChecked="True" Foreground="#CBD5E1"/>
+                                        <RadioButton x:Name="RadTcp" Content="Ethernet / TCP-IP" Foreground="#CBD5E1"/>
+                                    </StackPanel>
+                                    
+                                    <!-- COM 設定 -->
+                                    <StackPanel x:Name="PnlSerialConfig" Orientation="Horizontal" Spacing="12">
+                                        <StackPanel Spacing="2">
+                                            <TextBlock Text="COM 埠號:" FontSize="11" Foreground="#94A3B8"/>
+                                            <ComboBox x:Name="CmbComPort" SelectedIndex="0" Width="120" Background="#262A36" BorderBrush="#3B4254">
+                                                <ComboBoxItem Content="com1"/>
+                                                <ComboBoxItem Content="com2"/>
+                                                <ComboBoxItem Content="com3"/>
+                                                <ComboBoxItem Content="com4"/>
+                                            </ComboBox>
+                                        </StackPanel>
+                                        <StackPanel Spacing="2">
+                                            <TextBlock Text="波特率 (Baud Rate):" FontSize="11" Foreground="#94A3B8"/>
+                                            <ComboBox x:Name="CmbBaudRate" SelectedIndex="1" Width="120" Background="#262A36" BorderBrush="#3B4254">
+                                                <ComboBoxItem Content="9600"/>
+                                                <ComboBoxItem Content="115200"/>
+                                                <ComboBoxItem Content="38400"/>
+                                                <ComboBoxItem Content="19200"/>
+                                            </ComboBox>
+                                        </StackPanel>
+                                    </StackPanel>
+
+                                    <!-- TCP 設定 -->
+                                    <StackPanel x:Name="PnlTcpConfig" Orientation="Horizontal" Spacing="12" IsVisible="False">
+                                        <StackPanel Spacing="2">
+                                            <TextBlock Text="IP 位址:" FontSize="11" Foreground="#94A3B8"/>
+                                            <TextBox x:Name="TxtTcpIp" Text="192.168.0.1" Width="160" Background="#262A36" BorderBrush="#3B4254"/>
+                                        </StackPanel>
+                                        <StackPanel Spacing="2">
+                                            <TextBlock Text="連接埠 (Port):" FontSize="11" Foreground="#94A3B8"/>
+                                            <TextBox x:Name="TxtTcpPort" Text="5000" Width="80" Background="#262A36" BorderBrush="#3B4254"/>
+                                        </StackPanel>
+                                    </StackPanel>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- 3. 點位映射引擎 (Output & Input Mapping) -->
+                            <Grid ColumnDefinitions="*,*" Margin="0,2">
+                                <!-- 輸出點位 -->
+                                <Border Grid.Column="0" Background="#242834" BorderBrush="#10B981" BorderThickness="1" CornerRadius="6" Padding="12" Margin="0,0,6,0">
+                                    <StackPanel Spacing="8">
+                                        <TextBlock Text="🟢 輸出點位映射 (Output Mapping):" FontWeight="Bold" FontSize="12" Foreground="#34D399"/>
+                                        <Grid ColumnDefinitions="*,*">
+                                            <StackPanel Grid.Column="0" Spacing="2" Margin="0,0,4,0">
+                                                <TextBlock Text="起始點位 (OutStart):" FontSize="11" Foreground="#94A3B8"/>
+                                                <TextBox x:Name="TxtWizOutStart" Text="p0.0" Background="#262A36" BorderBrush="#3B4254"/>
+                                            </StackPanel>
+                                            <StackPanel Grid.Column="1" Spacing="2" Margin="4,0,0,0">
+                                                <TextBlock Text="點數 (OutPorts):" FontSize="11" Foreground="#94A3B8"/>
+                                                <ComboBox x:Name="CmbWizOutPorts" SelectedIndex="2" HorizontalAlignment="Stretch" Background="#262A36" BorderBrush="#3B4254">
+                                                    <ComboBoxItem Content="8"/>
+                                                    <ComboBoxItem Content="16"/>
+                                                    <ComboBoxItem Content="32"/>
+                                                    <ComboBoxItem Content="64"/>
+                                                </ComboBox>
+                                            </StackPanel>
+                                        </Grid>
+                                        <Border Background="#064E3B" CornerRadius="4" Padding="8,4">
+                                            <TextBlock x:Name="TxtWizOutBadge" Text="👉 區間: P0.0 ~ P3.7 (32 點)" FontSize="11" Foreground="#A7F3D0" FontWeight="SemiBold"/>
+                                        </Border>
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- 輸入點位 -->
+                                <Border Grid.Column="1" Background="#242834" BorderBrush="#3B82F6" BorderThickness="1" CornerRadius="6" Padding="12" Margin="6,0,0,0">
+                                    <StackPanel Spacing="8">
+                                        <TextBlock Text="🔵 輸入點位映射 (Input Mapping):" FontWeight="Bold" FontSize="12" Foreground="#60A5FA"/>
+                                        <Grid ColumnDefinitions="*,*">
+                                            <StackPanel Grid.Column="0" Spacing="2" Margin="0,0,4,0">
+                                                <TextBlock Text="起始點位 (InputStart):" FontSize="11" Foreground="#94A3B8"/>
+                                                <TextBox x:Name="TxtWizInStart" Text="p4.0" Background="#262A36" BorderBrush="#3B4254"/>
+                                            </StackPanel>
+                                            <StackPanel Grid.Column="1" Spacing="2" Margin="4,0,0,0">
+                                                <TextBlock Text="點數 (InPorts):" FontSize="11" Foreground="#94A3B8"/>
+                                                <ComboBox x:Name="CmbWizInPorts" SelectedIndex="2" HorizontalAlignment="Stretch" Background="#262A36" BorderBrush="#3B4254">
+                                                    <ComboBoxItem Content="8"/>
+                                                    <ComboBoxItem Content="16"/>
+                                                    <ComboBoxItem Content="32"/>
+                                                    <ComboBoxItem Content="64"/>
+                                                </ComboBox>
+                                            </StackPanel>
+                                        </Grid>
+                                        <Border Background="#1E3A8A" CornerRadius="4" Padding="8,4">
+                                            <TextBlock x:Name="TxtWizInBadge" Text="👉 區間: P4.0 ~ P7.7 (32 點)" FontSize="11" Foreground="#BFDBFE" FontWeight="SemiBold"/>
+                                        </Border>
+                                    </StackPanel>
+                                </Border>
+                            </Grid>
+
+                            <!-- 4. 輪詢週期 -->
+                            <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                                <TextBlock Text="⏱️ 內部輪詢週期 (Interval):" FontSize="12" Foreground="#CBD5E1" VerticalAlignment="Center"/>
+                                <TextBox x:Name="TxtWizInterval" Text="25" Width="60" Background="#262A36" BorderBrush="#3B4254"/>
+                                <TextBlock Text="毫秒 (ms)" FontSize="12" Foreground="#94A3B8" VerticalAlignment="Center"/>
+                            </StackPanel>
+
+                            <!-- 5. 即時生成指令字串與套用按鈕 -->
+                            <Border Background="#181B24" BorderBrush="#2D3344" BorderThickness="1" CornerRadius="6" Padding="12">
+                                <StackPanel Spacing="6">
+                                    <TextBlock Text="📜 即時生成之驅動參數字串 (Live Generated Parameter):" FontWeight="Bold" FontSize="12" Foreground="#FCD34D"/>
+                                    <Grid ColumnDefinitions="*,Auto">
+                                        <TextBox x:Name="TxtGeneratedParam" IsReadOnly="True" Text="IO1,Device=com1,OutStart=p0.0,OutPorts=32,InputStart=p4.0,InPorts=32" Background="#111318" Foreground="#FCD34D" BorderBrush="#451A03" FontFamily="Consolas,Cascadia Code,Monospace" FontSize="12"/>
+                                        <Button Grid.Column="1" x:Name="BtnApplyWiz" Content="🚀 套用配置 (Apply)" Margin="8,0,0,0" Padding="14,6" Background="#2563EB" Foreground="#FFFFFF" FontWeight="Bold" CornerRadius="4"/>
+                                    </Grid>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
                     </ScrollViewer>
-                </DockPanel>
-            </Border>
-        </Grid>
+                </Border>
+            </TabItem>
+        </TabControl>
     </Grid>
 </UserControl>

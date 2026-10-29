@@ -185,4 +185,61 @@ public class DriverManagerTests
         Assert.Contains("MockCamera", captureDrivers);
         Assert.Contains("MockDAQ", daqDrivers);
     }
+    [Fact]
+    public void IoDriver_MultipleDevices_HardwarePointMapping_ShouldWorkCleanly()
+    {
+        var (engines, manager) = CreateEnvironment();
+
+        // 模擬使用者的配置：
+        // IO1: COM1, Out: P0.0 (32點, P0.0~P3.7), In: P4.0 (32點, P4.0~P7.7)
+        var ioDev1 = manager.AddDevice("IO", "IO1", "MockIO", "Device=com1,OutSart=p0.0,OutPorts=32,InputStart=p4.0,InPorts=32", engines) as MockIoDriver;
+        Assert.NotNull(ioDev1);
+        Assert.Equal("com1", ioDev1.Device);
+        Assert.Equal("p0.0", ioDev1.OutStart);
+        Assert.Equal(32, ioDev1.OutPorts);
+        Assert.Equal("p4.0", ioDev1.InStart);
+        Assert.Equal(32, ioDev1.InPorts);
+
+        // IO2: 192.168.0.1:5000, Out: P8.0 (32點, P8.0~P11.7), In: P12.0 (32點, P12.0~P15.7)
+        var ioDev2 = manager.AddDevice("IO", "IO2", "MockIO", "Device=192.168.0.1:5000,OutSart=p8.0,OutPorts=32,InputStart=p12.0,InPorts=32", engines) as MockIoDriver;
+        Assert.NotNull(ioDev2);
+        Assert.Equal("192.168.0.1:5000", ioDev2.Device);
+        Assert.Equal("p8.0", ioDev2.OutStart);
+        Assert.Equal(32, ioDev2.OutPorts);
+        Assert.Equal("p12.0", ioDev2.InStart);
+        Assert.Equal(32, ioDev2.InPorts);
+
+        // 1. 驗證從上層 IoEngine 輸出，雙向反映至對應的 Driver ReadbackOutputs
+        engines.Io.SetPort("P0.0", true);
+        engines.Io.SetPort("P3.7", true); // 第 32 個 output (3*8 + 7 = 31)
+        engines.Io.SetPort("P8.0", true);
+        engines.Io.SetPort("P11.7", true); // 第 32 個 output (11*8 + 7 = 95 - 64 = 31)
+
+        // 強制更新
+        ioDev1.PostTicket(new DriverTicket("FORCE_UPDATE"));
+        ioDev2.PostTicket(new DriverTicket("FORCE_UPDATE"));
+        Thread.Sleep(50);
+
+        Assert.True(ioDev1.ReadbackOutputs[0]);  // P0.0
+        Assert.True(ioDev1.ReadbackOutputs[31]); // P3.7
+        Assert.True(ioDev2.ReadbackOutputs[0]);  // P8.0
+        Assert.True(ioDev2.ReadbackOutputs[31]); // P11.7
+
+        // 2. 驗證 Driver 面板手動撥動 Input，自動寫入 IoEngine 正確點位且兩者不干擾
+        ioDev1.SetSimulatedInput(0, true);   // P4.0
+        ioDev1.SetSimulatedInput(31, true);  // P7.7
+        ioDev2.SetSimulatedInput(0, true);   // P12.0
+        ioDev2.SetSimulatedInput(31, true);  // P15.7
+
+        Assert.True(engines.Io.GetPort("P4.0"));
+        Assert.True(engines.Io.GetPort("P7.7"));
+        Assert.True(engines.Io.GetPort("P12.0"));
+        Assert.True(engines.Io.GetPort("P15.7"));
+
+        // 未設置的點位保持 False
+        Assert.False(engines.Io.GetPort("P4.1"));
+        Assert.False(engines.Io.GetPort("P12.1"));
+
+        manager.ShutdownAll();
+    }
 }

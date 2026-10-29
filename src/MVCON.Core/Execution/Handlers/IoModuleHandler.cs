@@ -241,10 +241,10 @@ public class IoModuleHandler : IModuleHandler
         // 7. AddIODriver
         if (action.Equals("AddIODriver", StringComparison.OrdinalIgnoreCase))
         {
-            if (posArgs.Count >= 2)
+            if (posArgs.Count >= 1)
             {
                 string ioName = posArgs[0];
-                string driverType = posArgs[1];
+                string driverType = posArgs.Count >= 2 ? posArgs[1] : (parsed.TryGetValue("Driver", out var dt) ? dt : "MockIO");
                 try
                 {
                     ctx.Drivers.AddDevice("IO", ioName, driverType, filteredParam, ctx.Engines);

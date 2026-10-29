@@ -3,7 +3,7 @@
         xmlns:controls="clr-namespace:MVCON.App.Controls"
         xmlns:ScottPlot="clr-namespace:ScottPlot.Avalonia;assembly=ScottPlot.Avalonia"
         x:Class="MVCON.App.MainWindow"
-        Title="ARCOS / MVCON Automated Machine Controller (.NET 8 Avalonia - Win &amp; Linux)" 
+        Title="ARCOS Automated Machine Controller (.NET 8 Avalonia - Win &amp; Linux)" 
         Width="1280" Height="820" MinWidth="1024" MinHeight="700"
         RequestedThemeVariant="Light"
         Background="#F1F5F9" WindowStartupLocation="CenterScreen">
@@ -69,7 +69,7 @@
                                     <Grid ColumnDefinitions="*,Auto,Auto,Auto">
                                         <StackPanel Grid.Column="0" VerticalAlignment="Center">
                                             <TextBlock Text="STATION 01 : AUTO INSPECTION &amp; ASSEMBLY" FontWeight="Bold" FontSize="15" Foreground="#0F172A"/>
-                                            <TextBlock Text="Model: MVCON-PROD-2026 | Recipe: Master_V1.pro" FontSize="11.5" Foreground="#64748B"/>
+                                            <TextBlock Text="Model: ARCOS-PROD-2026 | Recipe: Master_V1.pro" FontSize="11.5" Foreground="#64748B"/>
                                         </StackPanel>
                                         <Border Grid.Column="1" Background="White" BorderBrush="#CBD5E1" BorderThickness="1" Padding="12,4" Margin="6,0" CornerRadius="4">
                                             <StackPanel>
