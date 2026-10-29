@@ -1,6 +1,6 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        x:Class="MVCON.Guidance.ActionOne.ActionOneDialog"
+        x:Class="ARCOS.Guidance.ActionOne.ActionOneDialog"
         Title="Template@ActionOne__Parameter.vi"
         Width="580" Height="420"
         CanResize="False" WindowStartupLocation="CenterOwner"

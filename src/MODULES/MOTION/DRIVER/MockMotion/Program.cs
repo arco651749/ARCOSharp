@@ -2,10 +2,10 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Themes.Fluent;
-using MVCON.Core.Drivers;
-using MVCON.Core.Engines;
+using ARCOS.Core.Drivers;
+using ARCOS.Core.Engines;
 
-namespace MVCON.Driver.MockMotion;
+namespace ARCOS.Driver.MockMotion;
 
 public static class Program
 {

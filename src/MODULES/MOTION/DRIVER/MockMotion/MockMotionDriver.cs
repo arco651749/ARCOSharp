@@ -1,9 +1,9 @@
 using System.Threading.Channels;
-using MVCON.Core.Common;
-using MVCON.Core.Drivers;
-using MVCON.Core.Model;
+using ARCOS.Core.Common;
+using ARCOS.Core.Drivers;
+using ARCOS.Core.Model;
 
-namespace MVCON.Driver.MockMotion;
+namespace ARCOS.Driver.MockMotion;
 
 /// <summary>
 /// 模擬運動控制器驅動 (MockMotionDriver)
@@ -63,7 +63,7 @@ public class MockMotionDriver : IDriver
         {
             try
             {
-                // 阻斷式等待來自 MVCON 呼叫端的私有信號 Ticket
+                // 阻斷式等待來自 ARCOS 呼叫端的私有信號 Ticket
                 var ticket = await _ticketQueue.Reader.ReadAsync(token);
                 await ExecuteCaseAsync(ticket, token);
             }

@@ -1,5 +1,5 @@
 ﻿param (
-    [string]$OutputDir = "$PSScriptRoot\..\dist\MVCON_Runtime"
+    [string]$OutputDir = "$PSScriptRoot\..\dist\ARCOS_Runtime"
 )
 
 $ErrorActionPreference = "Stop"
@@ -7,7 +7,7 @@ $env:DOTNET_ROOT = "$env:LOCALAPPDATA\dotnet"
 $env:Path = "$env:LOCALAPPDATA\dotnet;$env:Path"
 
 Write-Host "==========================================================" -ForegroundColor Cyan
-Write-Host " [MVCON] Packaging MVCON Runtime Deployment Bundle" -ForegroundColor Cyan
+Write-Host " [ARCOS] Packaging ARCOS Runtime Deployment Bundle" -ForegroundColor Cyan
 Write-Host " Destination: $OutputDir" -ForegroundColor Gray
 Write-Host "==========================================================" -ForegroundColor Cyan
 
@@ -30,22 +30,22 @@ New-Item -ItemType Directory -Path "$OutputDir\Pictures\CamTop" -Force | Out-Nul
 New-Item -ItemType Directory -Path "$OutputDir\Waveforms" -Force | Out-Null
 New-Item -ItemType Directory -Path "$OutputDir\Python" -Force | Out-Null
 
-# 2. Publish MVCON.App Host
-Write-Host "`n[1/5] Publishing MVCON.App Host..." -ForegroundColor Yellow
-dotnet publish "$PSScriptRoot\..\src\MVCON.App\MVCON.App.csproj" -c Release -o "$OutputDir" --nologo -v q
+# 2. Publish ARCOS.App Host
+Write-Host "`n[1/5] Publishing ARCOS.App Host..." -ForegroundColor Yellow
+dotnet publish "$PSScriptRoot\..\src\ARCOS.App\ARCOS.App.csproj" -c Release -o "$OutputDir" --nologo -v q
 
 $rootDlls = Get-ChildItem -Path $OutputDir -Filter "*.dll" | Select-Object -ExpandProperty Name
 
 # 3. Publish MODULE Command Execution DLLs and Deduplicate Shared DLLs
 Write-Host "`n[2/5] Publishing Module Command Execution DLLs..." -ForegroundColor Yellow
 $moduleProjects = @(
-    @{ Proj = "$PSScriptRoot\..\src\MODULES\IO\MVCON.Module.IO.csproj"; Out = "$OutputDir\MODULES\IO"; Name = "IO.Module" },
-    @{ Proj = "$PSScriptRoot\..\src\MODULES\MOTION\MVCON.Module.Motion.csproj"; Out = "$OutputDir\MODULES\MOTION"; Name = "Motion.Module" },
-    @{ Proj = "$PSScriptRoot\..\src\MODULES\CAPTURE\MVCON.Module.Capture.csproj"; Out = "$OutputDir\MODULES\CAPTURE"; Name = "Capture.Module" },
-    @{ Proj = "$PSScriptRoot\..\src\MODULES\DAQ\MVCON.Module.Daq.csproj"; Out = "$OutputDir\MODULES\DAQ"; Name = "DAQ.Module" },
-    @{ Proj = "$PSScriptRoot\..\src\MODULES\SYSTEM\MVCON.Module.System.csproj"; Out = "$OutputDir\MODULES\SYSTEM"; Name = "System.Module" },
-    @{ Proj = "$PSScriptRoot\..\src\MODULES\THREAD\MVCON.Module.Thread.csproj"; Out = "$OutputDir\MODULES\THREAD"; Name = "Thread.Module" },
-    @{ Proj = "$PSScriptRoot\..\src\MODULES\VARIABLE\MVCON.Module.Variable.csproj"; Out = "$OutputDir\MODULES\VARIABLE"; Name = "Variable.Module" }
+    @{ Proj = "$PSScriptRoot\..\src\MODULES\IO\ARCOS.Module.IO.csproj"; Out = "$OutputDir\MODULES\IO"; Name = "IO.Module" },
+    @{ Proj = "$PSScriptRoot\..\src\MODULES\MOTION\ARCOS.Module.Motion.csproj"; Out = "$OutputDir\MODULES\MOTION"; Name = "Motion.Module" },
+    @{ Proj = "$PSScriptRoot\..\src\MODULES\CAPTURE\ARCOS.Module.Capture.csproj"; Out = "$OutputDir\MODULES\CAPTURE"; Name = "Capture.Module" },
+    @{ Proj = "$PSScriptRoot\..\src\MODULES\DAQ\ARCOS.Module.Daq.csproj"; Out = "$OutputDir\MODULES\DAQ"; Name = "DAQ.Module" },
+    @{ Proj = "$PSScriptRoot\..\src\MODULES\SYSTEM\ARCOS.Module.System.csproj"; Out = "$OutputDir\MODULES\SYSTEM"; Name = "System.Module" },
+    @{ Proj = "$PSScriptRoot\..\src\MODULES\THREAD\ARCOS.Module.Thread.csproj"; Out = "$OutputDir\MODULES\THREAD"; Name = "Thread.Module" },
+    @{ Proj = "$PSScriptRoot\..\src\MODULES\VARIABLE\ARCOS.Module.Variable.csproj"; Out = "$OutputDir\MODULES\VARIABLE"; Name = "Variable.Module" }
 )
 
 foreach ($m in $moduleProjects) {
@@ -69,10 +69,10 @@ foreach ($m in $moduleProjects) {
 # 4. Publish MODULE Drivers (Directory-Per-Driver Isolation)
 Write-Host "`n[3/5] Publishing Module Drivers (Directory-Per-Driver Isolation)..." -ForegroundColor Yellow
 $driverProjects = @(
-    @{ Proj = "$PSScriptRoot\..\src\MODULES\IO\DRIVER\MockIO\MVCON.Driver.MockIO.csproj"; Out = "$OutputDir\MODULES\IO\DRIVER\MockIO"; Name = "MockIO.Driver" },
-    @{ Proj = "$PSScriptRoot\..\src\MODULES\MOTION\DRIVER\MockMotion\MVCON.Driver.MockMotion.csproj"; Out = "$OutputDir\MODULES\MOTION\DRIVER\MockMotion"; Name = "MockMotion.Driver" },
-    @{ Proj = "$PSScriptRoot\..\src\MODULES\CAPTURE\DRIVER\MockCamera\MVCON.Driver.MockCamera.csproj"; Out = "$OutputDir\MODULES\CAPTURE\DRIVER\MockCamera"; Name = "MockCamera.Driver" },
-    @{ Proj = "$PSScriptRoot\..\src\MODULES\DAQ\DRIVER\MockDAQ\MVCON.Driver.MockDaq.csproj"; Out = "$OutputDir\MODULES\DAQ\DRIVER\MockDAQ"; Name = "MockDAQ.Driver" }
+    @{ Proj = "$PSScriptRoot\..\src\MODULES\IO\DRIVER\MockIO\ARCOS.Driver.MockIO.csproj"; Out = "$OutputDir\MODULES\IO\DRIVER\MockIO"; Name = "MockIO.Driver" },
+    @{ Proj = "$PSScriptRoot\..\src\MODULES\MOTION\DRIVER\MockMotion\ARCOS.Driver.MockMotion.csproj"; Out = "$OutputDir\MODULES\MOTION\DRIVER\MockMotion"; Name = "MockMotion.Driver" },
+    @{ Proj = "$PSScriptRoot\..\src\MODULES\CAPTURE\DRIVER\MockCamera\ARCOS.Driver.MockCamera.csproj"; Out = "$OutputDir\MODULES\CAPTURE\DRIVER\MockCamera"; Name = "MockCamera.Driver" },
+    @{ Proj = "$PSScriptRoot\..\src\MODULES\DAQ\DRIVER\MockDAQ\ARCOS.Driver.MockDaq.csproj"; Out = "$OutputDir\MODULES\DAQ\DRIVER\MockDAQ"; Name = "MockDAQ.Driver" }
 )
 
 foreach ($d in $driverProjects) {
@@ -115,7 +115,7 @@ foreach ($d in $driverProjects) {
 # 5. Publish CSVI Virtual Instruments (四位一體：各指令獨立 CSVI 直接放入 MODULES\IO)
 Write-Host "`n[4/5] Publishing CSVI Virtual Instruments (Pure 4-in-1 Architecture)..." -ForegroundColor Yellow
 $tempBuild = "$OutputDir\MODULES\IO\temp_csvi_build"
-$guidanceProj = "$PSScriptRoot\..\src\MODULES\IO\USERPARAMETEREDITOR\MVCON.Module.IO.Guidance.csproj"
+$guidanceProj = "$PSScriptRoot\..\src\MODULES\IO\USERPARAMETEREDITOR\ARCOS.Module.IO.Guidance.csproj"
 dotnet build "$guidanceProj" -c Release -o "$tempBuild" --nologo -v q
 
 $ioCommands = @(
@@ -158,13 +158,13 @@ Remove-Item -Path $oldEditorSrc -Force -ErrorAction SilentlyContinue
 Write-Host "`n[5/5] Verifying Clean Deployment Topology:" -ForegroundColor Green
 foreach ($m in $moduleProjects) {
     $files = (Get-ChildItem -Path $m.Out -File | Select-Object -ExpandProperty Name) -join ", "
-    Write-Host "  -> $($m.Out.Replace($OutputDir, 'MVCON_Runtime')) : [ $files ]" -ForegroundColor Cyan
+    Write-Host "  -> $($m.Out.Replace($OutputDir, 'ARCOS_Runtime')) : [ $files ]" -ForegroundColor Cyan
 }
 foreach ($d in $driverProjects) {
     $files = (Get-ChildItem -Path $d.Out -File | Select-Object -ExpandProperty Name) -join ", "
-    Write-Host "  -> $($d.Out.Replace($OutputDir, 'MVCON_Runtime')) : [ $files ]" -ForegroundColor Cyan
+    Write-Host "  -> $($d.Out.Replace($OutputDir, 'ARCOS_Runtime')) : [ $files ]" -ForegroundColor Cyan
 }
 $ioCsvis = (Get-ChildItem -Path "$OutputDir\MODULES\IO" -Filter "*.csvi" | Select-Object -ExpandProperty Name) -join ", "
 Write-Host "  -> MODULES\IO CSVI Instruments : [ $ioCsvis ]" -ForegroundColor Cyan
 
-Write-Host "`n[SUCCESS] MVCON Runtime Bundle successfully packaged at: $OutputDir" -ForegroundColor Green
+Write-Host "`n[SUCCESS] ARCOS Runtime Bundle successfully packaged at: $OutputDir" -ForegroundColor Green

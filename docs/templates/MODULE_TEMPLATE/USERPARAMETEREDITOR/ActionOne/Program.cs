@@ -4,7 +4,7 @@ using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Themes.Fluent;
 
-namespace MVCON.Guidance.ActionOne;
+namespace ARCOS.Guidance.ActionOne;
 
 /// <summary>
 /// 雙模 Standalone EXE 進入點：

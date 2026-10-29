@@ -1,6 +1,6 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             x:Class="MVCON.Driver.MockMotion.MockMotionView"
+             x:Class="ARCOS.Driver.MockMotion.MockMotionView"
              Background="#1E1E1E">
     <Grid Margin="15" RowDefinitions="Auto,Auto,*">
         <!-- 頂部資訊列與狀態燈 -->

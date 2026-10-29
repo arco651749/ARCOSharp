@@ -4,12 +4,12 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
-using MVCON.Core.Common;
-using MVCON.Core.Execution;
-using MVCON.Core.Guidance;
-using ExecutionContext = MVCON.Core.Execution.ExecutionContext;
+using ARCOS.Core.Common;
+using ARCOS.Core.Execution;
+using ARCOS.Core.Guidance;
+using ExecutionContext = ARCOS.Core.Execution.ExecutionContext;
 
-namespace MVCON.Module.IO;
+namespace ARCOS.Module.IO;
 
 /// <summary>
 /// IO 模組智慧調度跳板 (IO Module Trampoline Dispatcher)
@@ -26,7 +26,7 @@ namespace MVCON.Module.IO;
 ///    嚴密 try-catch 包覆外部客製化代碼，隔離所有 Crash 與 NullReferenceException，保護主排程器永不當機。
 /// 5. 官方保底邏輯：找不到客製化組件時，無縫回退至 Core 內建標準邏輯。
 /// </summary>
-public sealed class IoModuleHandler : MVCON.Core.Execution.Handlers.IoModuleHandler, IDisposable
+public sealed class IoModuleHandler : ARCOS.Core.Execution.Handlers.IoModuleHandler, IDisposable
 {
     private readonly ConcurrentDictionary<string, IParameterGuidance?> _guidanceCache = new(StringComparer.OrdinalIgnoreCase);
     private readonly string _ioDir;

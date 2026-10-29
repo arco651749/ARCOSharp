@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using Avalonia.Controls;
 using Avalonia.Input;
 
-namespace MVCON.Guidance.ActionOne;
+namespace ARCOS.Guidance.ActionOne;
 
 public partial class ActionOneDialog : Window
 {

@@ -2,13 +2,13 @@ using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Avalonia.Controls;
-using MVCON.Core.Common;
-using MVCON.Core.Drivers;
-using MVCON.Core.Execution;
-using MVCON.Core.Guidance;
-using ExecutionContext = MVCON.Core.Execution.ExecutionContext;
+using ARCOS.Core.Common;
+using ARCOS.Core.Drivers;
+using ARCOS.Core.Execution;
+using ARCOS.Core.Guidance;
+using ExecutionContext = ARCOS.Core.Execution.ExecutionContext;
 
-namespace MVCON.Module.IO.Guidance;
+namespace ARCOS.Module.IO.Guidance;
 
 /// <summary>
 /// IO 指令參數導引與 C# 執行基底類別 (對標 LabVIEW Front Panel + Block Diagram)

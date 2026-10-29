@@ -1,8 +1,8 @@
 using System.Threading.Tasks;
 using Avalonia.Controls;
-using MVCON.Core.Drivers;
+using ARCOS.Core.Drivers;
 
-namespace MVCON.Guidance.ActionOne;
+namespace ARCOS.Guidance.ActionOne;
 
 /// <summary>
 /// 雙模導引視窗進入點 (對標 LabVIEW 動態呼叫 VI：傳遞 live BasicEngines)

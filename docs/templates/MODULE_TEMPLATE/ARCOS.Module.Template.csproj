@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <!-- 模組指令庫命名規範：<ModuleName>.Module.dll -->
+    <AssemblyName>Template.Module</AssemblyName>
+    <RootNamespace>ARCOS.Module.Template</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Remove="DRIVER\**" />
+    <Compile Remove="USERPARAMETEREDITOR\**" />
+    <EmbeddedResource Remove="DRIVER\**" />
+    <EmbeddedResource Remove="USERPARAMETEREDITOR\**" />
+    <None Remove="DRIVER\**" />
+    <None Remove="USERPARAMETEREDITOR\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\src\ARCOS.Core\ARCOS.Core.csproj" />
+  </ItemGroup>
+</Project>

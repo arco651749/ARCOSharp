@@ -1,6 +1,6 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             x:Class="MVCON.Driver.MockCamera.MockCameraView"
+             x:Class="ARCOS.Driver.MockCamera.MockCameraView"
              Background="#1E1E1E">
     <Grid Margin="15" RowDefinitions="Auto,Auto,*">
         <!-- 頂部資訊列 -->

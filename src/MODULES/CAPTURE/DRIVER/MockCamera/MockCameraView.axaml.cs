@@ -5,10 +5,10 @@ using Avalonia.Markup.Xaml;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Threading;
-using MVCON.Core.Drivers;
+using ARCOS.Core.Drivers;
 using OpenCvSharp;
 
-namespace MVCON.Driver.MockCamera;
+namespace ARCOS.Driver.MockCamera;
 
 public partial class MockCameraView : UserControl
 {

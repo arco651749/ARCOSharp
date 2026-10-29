@@ -1,8 +1,8 @@
 using System.Threading.Channels;
-using MVCON.Core.Common;
-using MVCON.Core.Drivers;
+using ARCOS.Core.Common;
+using ARCOS.Core.Drivers;
 
-namespace MVCON.Driver.MockDAQ;
+namespace ARCOS.Driver.MockDAQ;
 
 public enum MockWaveType
 {

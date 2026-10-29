@@ -2,9 +2,9 @@ using System;
 using System.Collections.Concurrent;
 using System.Threading;
 using System.Threading.Tasks;
-using MVCON.Core.Drivers;
+using ARCOS.Core.Drivers;
 
-namespace MVCON.Driver.MockDevice;
+namespace ARCOS.Driver.MockDevice;
 
 /// <summary>
 /// 雙模硬體驅動範本 (實作 IDriver，支援同進程 DLL 掛載與桌面 EXE 雙擊調試)

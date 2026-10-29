@@ -2,9 +2,9 @@ using System;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using Avalonia.Media;
-using MVCON.Core.Drivers;
+using ARCOS.Core.Drivers;
 
-namespace MVCON.Module.IO.Guidance.Views;
+namespace ARCOS.Module.IO.Guidance.Views;
 
 public class IoBitItem : INotifyPropertyChanged
 {

@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <!-- 雙模核心：WinExe 支援桌面雙擊秒測，同時生成 DLL 供主程式同進程載入 -->
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <!-- 禁用生成 deps.json，讓 Standalone EXE 能在無冗餘相依 DLL 下直接經由 AssemblyResolve 共用根目錄 DLL -->
+    <GenerateDependencyFile>false</GenerateDependencyFile>
+    <!-- 產出名稱統一為 IO.Guidance.dll 與 IO.Guidance.exe，全數放平於 USERPARAMETEREDITOR/ -->
+    <AssemblyName>IO.Guidance</AssemblyName>
+    <RootNamespace>ARCOS.Module.IO.Guidance</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="11.0.10" />
+    <PackageReference Include="Avalonia.Desktop" Version="11.0.10" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="11.0.10" />
+    <ProjectReference Include="..\..\..\..\src\ARCOS.Core\ARCOS.Core.csproj" />
+  </ItemGroup>
+</Project>

@@ -4,9 +4,9 @@ using Avalonia.Controls.Shapes;
 using Avalonia.Markup.Xaml;
 using Avalonia.Media;
 using Avalonia.Threading;
-using MVCON.Core.Drivers;
+using ARCOS.Core.Drivers;
 
-namespace MVCON.Driver.MockMotion;
+namespace ARCOS.Driver.MockMotion;
 
 public partial class MockMotionView : UserControl
 {

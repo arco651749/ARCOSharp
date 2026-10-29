@@ -1,9 +1,9 @@
-# MVCON 指令參數導引視窗與 CSVI 設計原則規格書 (Guidance Window & CSVI Principles)
+# ARCOS 指令參數導引視窗與 CSVI 設計原則規格書 (Guidance Window & CSVI Principles)
 
 ## 一、 核心哲學：零記憶負荷原則 (Zero Cognitive Load Principle)
 
 > [!IMPORTANT]
-> **MVCON 參數導引的核心金科玉律：**
+> **ARCOS 參數導引的核心金科玉律：**
 > **「只要這個參數內容在系統中查得到，導引視窗就必須自動感知並帶出來給使用者選，嚴禁要求工程師手動默背與拼寫輸入！」**
 
 在現代精密自動化機台與產線中，存在成百上千個 IO 點位、馬達軸代號、點位座標變數、相機名稱、演算法 ROI 與流程標籤。若要求工程師在編寫腳本時手動輸入純文字，極易發生拼寫錯誤（Typo）、大小寫不一致、點位名稱遺忘等致命失誤，導致機台撞機或流程異常。
@@ -43,7 +43,7 @@
 
 ```mermaid
 flowchart TD
-    subgraph GuidanceWindow ["導引視窗 (MVCON Parameter Guidance Window)"]
+    subgraph GuidanceWindow ["導引視窗 (ARCOS Parameter Guidance Window)"]
         TitleBar["頂部：⚙️ PARAMETER GUIDANCE 模組指令標籤"]
         InCard["ParameterIn：唯讀顯示原始字串 (例如: P0.0,0.2)"]
         

@@ -1,4 +1,4 @@
-# ARCOS / MVCON 影像系統：ROI 與 OVERLAY 統一文字表示格式規範
+# ARCOS / ARCOS 影像系統：ROI 與 OVERLAY 統一文字表示格式規範
 **文件版本**：1.0.0  
 **適用模組**：`Capture` 模組（`Capture@...` 指令群）  
 **架構相容性**：相容 NI VDM（NI Vision Development Module）幾何描述規範  
@@ -8,7 +8,7 @@
 
 ## 1. 核心設計架構與理念
 
-在 ARCOS / MVCON 機器視覺架構中，**ROI（Region of Interest，感興趣區域）** 與 **OVERLAY（非破壞性視覺疊加圖層）** 共享**完全同構的幾何數據結構與序列化文字表示格式（Shape DSL）**：
+在 ARCOS / ARCOS 機器視覺架構中，**ROI（Region of Interest，感興趣區域）** 與 **OVERLAY（非破壞性視覺疊加圖層）** 共享**完全同構的幾何數據結構與序列化文字表示格式（Shape DSL）**：
 
 ```
                     ┌──────────────────────────────┐
@@ -93,7 +93,7 @@
 
 ## 5. Sequencer 腳本指令應用範例（嚴格使用 `Capture@...` 模組）
 
-在 ARCOS / MVCON 執行序腳本中，所有影像擷取、檢驗視野、動態圖層指令均歸屬於 **`Capture`** 模組：
+在 ARCOS / ARCOS 執行序腳本中，所有影像擷取、檢驗視野、動態圖層指令均歸屬於 **`Capture`** 模組：
 
 ### 範例 1：設定檢驗工位搜尋視野（`Capture@SetROI`）
 ```text

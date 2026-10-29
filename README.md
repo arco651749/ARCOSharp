@@ -31,7 +31,7 @@
 | **[`docs/DYNAMIC_ARCHITECTURE_AND_GUIDANCE_SPEC.md`](docs/DYNAMIC_ARCHITECTURE_AND_GUIDANCE_SPEC.md)** | **ARCOSharp CSVI 四位一體全局架構、目錄驅動探索與非鎖檔熱插拔規格書** |
 | **[`docs/GUIDANCE_DESIGN_PRINCIPLES.md`](docs/GUIDANCE_DESIGN_PRINCIPLES.md)** | **參數導引視窗設計原則（零記憶負荷原則與八大模組資源自動感知矩陣）** |
 | **[`docs/MODULE_DEVELOPMENT_TEMPLATE_AND_SPEC.md`](docs/MODULE_DEVELOPMENT_TEMPLATE_AND_SPEC.md)** | **CSVI 模組與硬體驅動標準開發指南與程式碼範本** |
-| **[`MVCON_CSharp_Development_Roadmap.md`](MVCON_CSharp_Development_Roadmap.md)** | **系統七大階段開發路線圖、API 規格檢核表與模組 CSVI 遷移里程碑** |
+| **[`ARCOS_CSharp_Development_Roadmap.md`](ARCOS_CSharp_Development_Roadmap.md)** | **系統七大階段開發路線圖、API 規格檢核表與模組 CSVI 遷移里程碑** |
 | **[`LabVIEW_to_CSharp_Migration_Guide.md`](LabVIEW_to_CSharp_Migration_Guide.md)** | **LabVIEW (ARCOS) 轉 C# (.NET 8 / Avalonia) 語法、狀態機與 CSVI 映射對照手冊** |
 
 ---
@@ -44,8 +44,8 @@ git clone https://github.com/arco651749/ARCOSharp.git
 cd ARCOSharp
 
 # 2. 執行全套單元測試 (86 項測試)
-dotnet test MVCON.sln
+dotnet test ARCOS.sln
 
-# 3. 打包完整 Runtime 與所有 CSVI 虛擬儀表至 dist/MVCON_Runtime
+# 3. 打包完整 Runtime 與所有 CSVI 虛擬儀表至 dist/ARCOS_Runtime
 powershell.exe -ExecutionPolicy Bypass -File .\tools\pack_runtime.ps1
 ```

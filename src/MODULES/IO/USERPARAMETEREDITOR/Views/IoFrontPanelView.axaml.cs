@@ -2,7 +2,7 @@ using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
 
-namespace MVCON.Module.IO.Guidance.Views;
+namespace ARCOS.Module.IO.Guidance.Views;
 
 public partial class IoFrontPanelView : UserControl
 {

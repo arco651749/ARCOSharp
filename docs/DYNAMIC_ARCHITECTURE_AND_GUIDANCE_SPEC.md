@@ -1,4 +1,4 @@
-# MVCON SHARP CSVI 虛擬儀表全局架構與動態探索規格書 (Grand Unified CSVI Architecture Spec)
+# ARCOS SHARP CSVI 虛擬儀表全局架構與動態探索規格書 (Grand Unified CSVI Architecture Spec)
 
 > **版本**：2.0 (Grand Unified CSVI Edition)  
 > **更新日期**：2026-10-27  
@@ -8,7 +8,7 @@
 
 ## 一、 核心哲學：CSVI「四位一體」統一虛擬儀表 (Grand Unified CSVI)
 
-在傳統 LabVIEW MVCON 架構中，每個功能被拆解為多個相互脫鉤的檔案：
+在傳統 LabVIEW ARCOS 架構中，每個功能被拆解為多個相互脫鉤的檔案：
 - **執行端**：`CoreModules/IO Module/IO.vi`（龐大的 Case Structure）
 - **編輯端**：`USERPARAMETEREDITOR/IO/IO@SetPort__Parameter.vi`（獨立的彈窗 VI）
 - **驅動端**：`Drivers/IO/Advantech.vi`（獨立的驅動 VI）
@@ -21,7 +21,7 @@
 
 ### CSVI 終極方案：單一組件，四個面向 (1 Assembly, 4 Facets)
 
-在 **MVCON SHARP** 中，每一個指令與驅動都是一個 `.csvi`（C# Virtual Instrument，實質為標準 .NET 動態組件）。**一個 `.csvi` 檔案，完美具備四種面向**：
+在 **ARCOS SHARP** 中，每一個指令與驅動都是一個 `.csvi`（C# Virtual Instrument，實質為標準 .NET 動態組件）。**一個 `.csvi` 檔案，完美具備四種面向**：
 
 ```mermaid
 flowchart TD
@@ -32,7 +32,7 @@ flowchart TD
         F4["【面向 4：人機與驅動子面板 (SubPanel & Driver HMI)】<br/>GetFrontPanelControl()<br/>提供 Avalonia 原生控制項，可嵌入 User Tab 或作為 Driver 面板"]
     end
 
-    Host["MVCON.App 主程式 (Host)"] -->|量產執行 (無 UI)| F1
+    Host["ARCOS.App 主程式 (Host)"] -->|量產執行 (無 UI)| F1
     Host -->|表格雙擊編輯| F2
     Host -->|執行狀態連動| F3
     Host -->|動態掛載至 SubPanel| F4
@@ -54,7 +54,7 @@ flowchart TD
 
 ## 二、 目錄驅動探索機制 (Directory-Driven Discovery)
 
-MVCON SHARP 主程式**徹底廢除任何寫死的指令清單與驅動類別註冊碼**。主程式完全由實體檔案目錄驅動：
+ARCOS SHARP 主程式**徹底廢除任何寫死的指令清單與驅動類別註冊碼**。主程式完全由實體檔案目錄驅動：
 
 ### 2.1 指令探索規則：目錄下有多少 `.csvi`，就有多少指令
 - 探索目錄：`MODULES/<Module>/`（例如 `MODULES/IO/`）
@@ -70,8 +70,8 @@ MVCON SHARP 主程式**徹底廢除任何寫死的指令清單與驅動類別註
 ### 2.3 物理目錄結構範例
 
 ```text
-dist/MVCON_Runtime/
-├── MVCON.App.exe                  <-- 主程式 (純粹的 UI 支架骨架)
+dist/ARCOS_Runtime/
+├── ARCOS.App.exe                  <-- 主程式 (純粹的 UI 支架骨架)
 ├── MODULES/
 │   ├── IO/
 │   │   ├── SetPort.csvi           <-- 指令 1: 內建純執行 + 導引視窗 + 前面板
@@ -109,26 +109,26 @@ dist/MVCON_Runtime/
 
 Windows 原生載入 DLL 時（如 `Assembly.LoadFrom`）會強制佔用檔案句柄（File Handle Lock），導致產線運轉或程式開啟時無法覆蓋或升級組件。
 
-MVCON SHARP 採用 **全位元組非鎖檔載入（`File.ReadAllBytes`）** 機制：
+ARCOS SHARP 採用 **全位元組非鎖檔載入（`File.ReadAllBytes`）** 機制：
 
 ```csharp
-// MVCON.Core / DriverManager.cs & IoModuleHandler.cs
+// ARCOS.Core / DriverManager.cs & IoModuleHandler.cs
 byte[] assemblyBytes = File.ReadAllBytes(csviPath);
 var assembly = Assembly.Load(assemblyBytes);
 ```
 
 ### 優勢：
-1. **熱替換無阻礙**：機台運作時，工程師可直接編譯並覆蓋磁碟上的 `SetPort.csvi`，無需重啟 MVCON 主程式。
+1. **熱替換無阻礙**：機台運作時，工程師可直接編譯並覆蓋磁碟上的 `SetPort.csvi`，無需重啟 ARCOS 主程式。
 2. **FileSystemWatcher 自動重整**：模組閘道器監聽檔案變更事件，一旦磁碟上的 `.csvi` 更新，自動清空快取，下次調用時立即生效。
 
 ---
 
-## 四、 核心介面契約規範 ([`IParameterGuidance.cs`](file:///d:/AntiGravity/MVCON2CSharp/src/MVCON.Core/Guidance/IParameterGuidance.cs))
+## 四、 核心介面契約規範 ([`IParameterGuidance.cs`](file:///d:/AntiGravity/ARCOS2CSharp/src/ARCOS.Core/Guidance/IParameterGuidance.cs))
 
 所有 `.csvi` 虛擬儀表必須實作統一的 `IParameterGuidance` 契約：
 
 ```csharp
-namespace MVCON.Core.Guidance;
+namespace ARCOS.Core.Guidance;
 
 public interface IParameterGuidance
 {
@@ -213,7 +213,7 @@ UserSubPanelHost.Content = driver?.CreateDriverView();
    - 🟡 **`PasswordLocked`（密碼鎖定模式）**：以 AES-256-GCM 加密內嵌原始碼，主程式可正常執行，但於 `CSVI Studio` 修改源碼需輸入工程師密碼（對標 LabVIEW Block Diagram Password）。
    - 🔴 **`StrippedRelease`（純執行剝離模式）**：完全剝離 `.cs` 原始碼，僅保留編譯後 IL 與執行期 UI，保護核心演算法機密（對標 LabVIEW Remove Block Diagram）。
 3. **獨立工具鏈工作站 (`CSVI_Studio.exe`)**：
-   - 獨立於 `MVCON.App.exe` 之外的專用 IDE 與四位一體沙盒測試器（全面取代舊式 `GuidanceRunner.exe`）。
+   - 獨立於 `ARCOS.App.exe` 之外的專用 IDE 與四位一體沙盒測試器（全面取代舊式 `GuidanceRunner.exe`）。
    - **完整內建 Toolchain（Roslyn C# 編譯器 + `AvaloniaRuntimeXamlLoader` + 標準鎖定版 SDK 參考庫）**：所有 `.csvi` 必須對齊 `CSVI Studio` 的函式庫與 Runtime ABI 進行編譯與校驗，徹底消滅版本不相容問題。
 
 > 📄 **完整二進位規格與實作藍圖請參閱**：[`docs/CSVI_STUDIO_AND_PORTABLE_SPEC.md`](./CSVI_STUDIO_AND_PORTABLE_SPEC.md)

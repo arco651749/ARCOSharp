@@ -21,7 +21,7 @@ ARCOS-Code2022/
 *.tmp
 *.log
 click_capture.py
-mvcon_ui_preview.html
+arcos_ui_preview.html
 analyze_*.py
 char_map*.py
 check_*.py
@@ -42,7 +42,7 @@ compare_view.html
 capture_*_preview.html
 generate_*_preview.html
 labview_rows_view.html
-mvcon_ui_*_preview.html
+arcos_ui_*_preview.html
 scheme_b_*_preview.html
 scheme_b_live_verification.html
 sequencer_workflow_preview.html

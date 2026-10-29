@@ -6,10 +6,10 @@ using Avalonia.Markup.Xaml;
 using Avalonia.Media;
 using Avalonia.Threading;
 using Avalonia.Controls.Primitives;
-using MVCON.Core.Common;
-using MVCON.Core.Drivers;
+using ARCOS.Core.Common;
+using ARCOS.Core.Drivers;
 
-namespace MVCON.Driver.MockIO;
+namespace ARCOS.Driver.MockIO;
 
 public partial class MockIoView : UserControl
 {
@@ -392,7 +392,7 @@ public partial class MockIoView : UserControl
 
                     // 取得現有引擎引用重新 Init
                     var enginesField = typeof(MockIoDriver).GetField("_engines", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-                    if (enginesField?.GetValue(_driver) is MVCON.Core.Drivers.BasicEngines engines)
+                    if (enginesField?.GetValue(_driver) is ARCOS.Core.Drivers.BasicEngines engines)
                     {
                         _driver.Init(devName, paramStr, engines);
                         UpdateHeaderInfo();

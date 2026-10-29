@@ -1,7 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:views="clr-namespace:MVCON.Module.IO.Guidance.Views"
-             x:Class="MVCON.Module.IO.Guidance.Views.IoFrontPanelView"
+             xmlns:views="clr-namespace:ARCOS.Module.IO.Guidance.Views"
+             x:Class="ARCOS.Module.IO.Guidance.Views.IoFrontPanelView"
              Background="#0F172A">
 
     <Border Background="#1E293B" BorderBrush="#334155" BorderThickness="1" CornerRadius="8" Padding="14">

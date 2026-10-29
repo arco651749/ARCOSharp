@@ -5,9 +5,9 @@ using Avalonia.Controls.Shapes;
 using Avalonia.Markup.Xaml;
 using Avalonia.Media;
 using Avalonia.Threading;
-using MVCON.Core.Drivers;
+using ARCOS.Core.Drivers;
 
-namespace MVCON.Driver.MockDAQ;
+namespace ARCOS.Driver.MockDAQ;
 
 public partial class MockDaqView : UserControl
 {

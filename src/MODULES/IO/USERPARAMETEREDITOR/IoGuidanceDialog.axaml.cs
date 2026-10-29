@@ -3,9 +3,9 @@ using System.Collections.Generic;
 using System.Linq;
 using Avalonia.Controls;
 using Avalonia.Input;
-using MVCON.Core.Drivers;
+using ARCOS.Core.Drivers;
 
-namespace MVCON.Module.IO.Guidance;
+namespace ARCOS.Module.IO.Guidance;
 
 public partial class IoGuidanceDialog : Window
 {

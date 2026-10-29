@@ -1,9 +1,9 @@
 using System.Threading.Channels;
-using MVCON.Core.Common;
-using MVCON.Core.Drivers;
+using ARCOS.Core.Common;
+using ARCOS.Core.Drivers;
 using OpenCvSharp;
 
-namespace MVCON.Driver.MockCamera;
+namespace ARCOS.Driver.MockCamera;
 
 /// <summary>
 /// 模擬視覺相機驅動 (MockCameraDriver)

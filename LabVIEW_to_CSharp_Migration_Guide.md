@@ -1,6 +1,6 @@
 # LabVIEW 轉 C# (.NET / WPF) 基本作業語法與架構對照手冊
 
-本手冊專為熟悉 **LabVIEW 資料流（Dataflow）與模組化架構（如 MVCON / QMH / Actor Framework）** 的工程師設計，旨在提供轉換為 **C# (.NET 8+ / WPF)** 時的語法對應、平行處理、動態載入與 UI 整合的實戰參考。
+本手冊專為熟悉 **LabVIEW 資料流（Dataflow）與模組化架構（如 ARCOS / QMH / Actor Framework）** 的工程師設計，旨在提供轉換為 **C# (.NET 8+ / WPF)** 時的語法對應、平行處理、動態載入與 UI 整合的實戰參考。
 
 ---
 
@@ -225,11 +225,11 @@ public class PluginLoader
 
 ## 6. LabVIEW VI 到 C# 虛擬儀表 (CSVI) 的四位一體映射
 
-在原廠 LabVIEW MVCON 架構中，雖然單一 VI 同時具備 Front Panel 與 Block Diagram，但由於執行與參數編輯彈窗的調用簽名完全不同，導致過去的架構必須切出 `USERPARAMETEREDITOR/` 目錄專門放置彈窗 VI。
+在原廠 LabVIEW ARCOS 架構中，雖然單一 VI 同時具備 Front Panel 與 Block Diagram，但由於執行與參數編輯彈窗的調用簽名完全不同，導致過去的架構必須切出 `USERPARAMETEREDITOR/` 目錄專門放置彈窗 VI。
 
 ### 6.1 CSVI (C# Virtual Instrument) 的四位一體統一
 
-在 **MVCON SHARP** 中，開創了 `.csvi`（C# 虛擬儀表）架構，**一個組件同時具備四個面向**：
+在 **ARCOS SHARP** 中，開創了 `.csvi`（C# 虛擬儀表）架構，**一個組件同時具備四個面向**：
 
 | 面向 | LabVIEW 概念對應 | C# CSVI 實作方法 | 執行情境 |
 | :--- | :--- | :--- | :--- |

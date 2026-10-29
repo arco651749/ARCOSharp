@@ -1,10 +1,10 @@
-using MVCON.Core.Common;
-using MVCON.Core.Drivers;
-using MVCON.Core.Execution;
-using MVCON.Core.Model;
-using ExecutionContext = MVCON.Core.Execution.ExecutionContext;
+using ARCOS.Core.Common;
+using ARCOS.Core.Drivers;
+using ARCOS.Core.Execution;
+using ARCOS.Core.Model;
+using ExecutionContext = ARCOS.Core.Execution.ExecutionContext;
 
-namespace MVCON.Module.DAQ;
+namespace ARCOS.Module.DAQ;
 
 /// <summary>
 /// DAQ 模組直譯處理器 (DAQ@)

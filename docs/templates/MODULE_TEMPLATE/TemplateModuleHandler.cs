@@ -1,11 +1,11 @@
 using System;
 using System.Collections.Generic;
-using MVCON.Core.Common;
-using MVCON.Core.Drivers;
-using MVCON.Core.Execution;
-using ExecutionContext = MVCON.Core.Execution.ExecutionContext;
+using ARCOS.Core.Common;
+using ARCOS.Core.Drivers;
+using ARCOS.Core.Execution;
+using ExecutionContext = ARCOS.Core.Execution.ExecutionContext;
 
-namespace MVCON.Module.Template;
+namespace ARCOS.Module.Template;
 
 /// <summary>
 /// 模組標準指令直譯處理常式範本 (Template Module Handler)

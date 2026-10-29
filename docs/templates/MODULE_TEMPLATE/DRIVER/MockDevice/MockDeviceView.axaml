@@ -1,6 +1,6 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             x:Class="MVCON.Driver.MockDevice.MockDeviceView">
+             x:Class="ARCOS.Driver.MockDevice.MockDeviceView">
     <Border Background="#F8FAFC" Padding="16" CornerRadius="6" BorderBrush="#CBD5E1" BorderThickness="1">
         <StackPanel Spacing="12">
             <TextBlock Text="🛠️ MOCK DEVICE DRIVER CONTROL PANEL" FontWeight="Bold" Foreground="#1E293B" FontSize="14"/>

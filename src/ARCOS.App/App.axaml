@@ -1,0 +1,39 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="ARCOS.App.App"
+             RequestedThemeVariant="Light">
+    <Application.Styles>
+        <FluentTheme />
+        <StyleInclude Source="avares://Avalonia.Controls.DataGrid/Themes/Fluent.xaml"/>
+        
+        <!-- 全域 TextBox 焦點與樣式防護：保證純白底、深色字、高對比光標與藍色選取區域 -->
+        <Style Selector="TextBox">
+            <Setter Property="Background" Value="#FFFFFF"/>
+            <Setter Property="Foreground" Value="#0F172A"/>
+            <Setter Property="CaretBrush" Value="#0F172A"/>
+            <Setter Property="SelectionBrush" Value="#2563EB"/>
+            <Setter Property="SelectionForegroundBrush" Value="#FFFFFF"/>
+        </Style>
+        <Style Selector="TextBox:focus /template/ Border#PART_BorderElement">
+            <Setter Property="Background" Value="#FFFFFF"/>
+            <Setter Property="BorderBrush" Value="#2563EB"/>
+            <Setter Property="BorderThickness" Value="1.5"/>
+        </Style>
+        <Style Selector="TextBox:pointerover /template/ Border#PART_BorderElement">
+            <Setter Property="Background" Value="#FFFFFF"/>
+            <Setter Property="BorderBrush" Value="#3B82F6"/>
+        </Style>
+        <Style Selector="TextBox[IsReadOnly=True]">
+            <Setter Property="Background" Value="#F1F5F9"/>
+            <Setter Property="Foreground" Value="#475569"/>
+        </Style>
+        <Style Selector="TextBox[IsReadOnly=True]:focus /template/ Border#PART_BorderElement">
+            <Setter Property="Background" Value="#F1F5F9"/>
+            <Setter Property="BorderBrush" Value="#CBD5E1"/>
+        </Style>
+        <Style Selector="TextBox[IsReadOnly=True]:pointerover /template/ Border#PART_BorderElement">
+            <Setter Property="Background" Value="#F1F5F9"/>
+            <Setter Property="BorderBrush" Value="#CBD5E1"/>
+        </Style>
+    </Application.Styles>
+</Application>

@@ -1,7 +1,7 @@
 using Avalonia.Controls;
-using MVCON.Core.Drivers;
+using ARCOS.Core.Drivers;
 
-namespace MVCON.Driver.MockDevice;
+namespace ARCOS.Driver.MockDevice;
 
 public partial class MockDeviceView : UserControl
 {

@@ -1,7 +1,7 @@
-# MVCON 模組完整開發規格書與 CSVI 範本代碼指南 (CSVI Module Development Specification & Template Guide)
+# ARCOS 模組完整開發規格書與 CSVI 範本代碼指南 (CSVI Module Development Specification & Template Guide)
 
 > **版本**：2.0 (Grand Unified CSVI Edition)  
-> **適用平台**：MVCON SHARP (C# .NET 8 / Avalonia UI)  
+> **適用平台**：ARCOS SHARP (C# .NET 8 / Avalonia UI)  
 > **核心架構**：CSVI 四位一體統一虛擬儀表 (Headless Execution + Parameter Guidance Wizard + Live Debug Visualizer + SubPanel/Driver HMI)  
 > **目標讀者**：設備軟體工程師、自動化模組開發者、硬體驅動外掛開發者
 
@@ -9,8 +9,8 @@
 
 ## 一、 模組架構概述與核心哲學 (Architectural Philosophy)
 
-### 1.1 MVCON 的核心哲學：純粹的 Host 支架骨架 (Host Scaffold)
-MVCON SHARP 本體被定義為 **「純粹的 UI 支架與流程直譯引擎」**。主程式只負責：
+### 1.1 ARCOS 的核心哲學：純粹的 Host 支架骨架 (Host Scaffold)
+ARCOS SHARP 本體被定義為 **「純粹的 UI 支架與流程直譯引擎」**。主程式只負責：
 - 10 大底部分頁導覽切換
 - 0~12 號平行執行緒虛擬機 (Thread VM)
 - 指令直譯調度器 (`CommandExecutor / cmdexecute`)
@@ -20,7 +20,7 @@ MVCON SHARP 本體被定義為 **「純粹的 UI 支架與流程直譯引擎」*
 所有具體的機台動作、硬體通訊、參數編輯，**100% 透過動態探索的 `.csvi` 虛擬儀表載入**。
 
 ### 1.2 CSVI 四位一體：單一組件包辦全部生命週期
-在 MVCON SHARP 中，每一個指令與驅動都是一個 `.csvi`（C# Virtual Instrument）：
+在 ARCOS SHARP 中，每一個指令與驅動都是一個 `.csvi`（C# Virtual Instrument）：
 - **純執行 (Headless Execution)**：`Execute(...)` 提供微秒級 Native C# 執行速度，0ms UI 開銷。
 - **參數導引視窗 (Parameter Guidance Wizard)**：`ShowGuidanceDialogAsync(...)` 於表格雙擊時彈出，動態感知硬體點位，防呆編輯。
 - **即時運算可視化 (Live Debug Visualizer)**：`NotifyExecution(...)` 即時將計算過程推播至介面。
@@ -58,12 +58,12 @@ MODULES/<ModuleName>/
 using System;
 using System.Threading.Tasks;
 using Avalonia.Controls;
-using MVCON.Core.Drivers;
-using MVCON.Core.Execution;
-using MVCON.Core.Guidance;
-using ExecutionContext = MVCON.Core.Execution.ExecutionContext;
+using ARCOS.Core.Drivers;
+using ARCOS.Core.Execution;
+using ARCOS.Core.Guidance;
+using ExecutionContext = ARCOS.Core.Execution.ExecutionContext;
 
-namespace MVCON.Module.LaserMarking;
+namespace ARCOS.Module.LaserMarking;
 
 public abstract class BaseLaserGuidance : IParameterGuidance
 {
@@ -157,9 +157,9 @@ public class LaserStartMarkGuidance : BaseLaserGuidance
 驅動同樣編譯為 `.csvi` 並置於 `MODULES/<ModuleName>/DRIVER/`：
 
 ```csharp
-using MVCON.Core.Drivers;
+using ARCOS.Core.Drivers;
 
-namespace MVCON.Driver.Laser;
+namespace ARCOS.Driver.Laser;
 
 public class KeyenceLaserDriver : IDriver
 {
@@ -195,7 +195,7 @@ public class KeyenceLaserDriver : IDriver
 
 ## 五、 自動編譯與發布規範 (`pack_runtime.ps1`)
 
-模組與指令發布時，直接將輸出重定向至 `dist/MVCON_Runtime/MODULES/<Module>/`，並以 `.csvi` 命名：
+模組與指令發布時，直接將輸出重定向至 `dist/ARCOS_Runtime/MODULES/<Module>/`，並以 `.csvi` 命名：
 
 ```powershell
 # 發布指令 CSVI

@@ -5,9 +5,9 @@ using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Themes.Fluent;
-using MVCON.Core.Guidance;
+using ARCOS.Core.Guidance;
 
-namespace MVCON.Module.IO.Guidance;
+namespace ARCOS.Module.IO.Guidance;
 
 /// <summary>
 /// 雙模獨立測試器進入點 (GuidanceRunner)：
@@ -111,7 +111,7 @@ public class GuidanceLauncherWindow : Window
 
     public GuidanceLauncherWindow(string[] mockPorts)
     {
-        Title = "⚙️ MVCON IO 參數導引測試器 (Guidance Runner)";
+        Title = "⚙️ ARCOS IO 參數導引測試器 (Guidance Runner)";
         Width = 620;
         Height = 440;
         WindowStartupLocation = WindowStartupLocation.CenterScreen;
@@ -129,7 +129,7 @@ public class GuidanceLauncherWindow : Window
 
         var header = new TextBlock
         {
-            Text = "🎯 MVCON IO 指令參數導引視窗獨立測試器",
+            Text = "🎯 ARCOS IO 指令參數導引視窗獨立測試器",
             FontSize = 17,
             FontWeight = FontWeight.Bold,
             Foreground = new SolidColorBrush(Color.Parse("#89B4FA"))
@@ -172,7 +172,7 @@ public class GuidanceLauncherWindow : Window
             TextWrapping = TextWrapping.Wrap
         };
 
-        var mockEngines = new MVCON.Core.Drivers.BasicEngines();
+        var mockEngines = new ARCOS.Core.Drivers.BasicEngines();
 
         var guidances = new System.Collections.Generic.Dictionary<string, IParameterGuidance>(System.StringComparer.OrdinalIgnoreCase)
         {

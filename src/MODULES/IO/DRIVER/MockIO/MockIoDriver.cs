@@ -1,8 +1,8 @@
 using System.Threading.Channels;
-using MVCON.Core.Common;
-using MVCON.Core.Drivers;
+using ARCOS.Core.Common;
+using ARCOS.Core.Drivers;
 
-namespace MVCON.Driver.MockIO;
+namespace ARCOS.Driver.MockIO;
 
 /// <summary>
 /// 模擬 IO 硬體搬運工 (MockIoDriver)
@@ -69,7 +69,7 @@ public class MockIoDriver : IDriver
 
     public static string GetPortNameAtOffset(string startPort, int offset)
     {
-        if (MVCON.Core.Engines.IoEngine.TryParsePhysicalPort(startPort, out int sp, out int sb))
+        if (ARCOS.Core.Engines.IoEngine.TryParsePhysicalPort(startPort, out int sp, out int sb))
         {
             int total = sp * 8 + sb + offset;
             int port = total / 8;
@@ -82,8 +82,8 @@ public class MockIoDriver : IDriver
     private static bool TryGetPortOffset(string startPort, string targetPort, out int offset)
     {
         offset = -1;
-        if (!MVCON.Core.Engines.IoEngine.TryParsePhysicalPort(startPort, out int sp, out int sb)) return false;
-        if (!MVCON.Core.Engines.IoEngine.TryParsePhysicalPort(targetPort, out int tp, out int tb)) return false;
+        if (!ARCOS.Core.Engines.IoEngine.TryParsePhysicalPort(startPort, out int sp, out int sb)) return false;
+        if (!ARCOS.Core.Engines.IoEngine.TryParsePhysicalPort(targetPort, out int tp, out int tb)) return false;
 
         int startIndex = sp * 8 + sb;
         int targetIndex = tp * 8 + tb;
