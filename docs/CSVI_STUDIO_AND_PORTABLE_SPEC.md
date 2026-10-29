@@ -160,7 +160,38 @@ flowchart LR
 
 
 
-## 三、 CSVI 3.0 單一檔案內部二進位結構規範
+## 三、 CSVI 檔案命名與目錄層級隔離規範 (Naming Conventions & Namespace Isolation)
+
+為維持檔案系統簡潔整齊並杜絕命名冗餘，ARCOS 規範全域統一之 CSVI 命名與防衝突隔離機制：
+
+### 3.1 指令與驅動檔案命名規範
+* **指令組件 (Command CSVI)**：
+  * **標準命名格式**：`MODULES/<ModuleName>/<ActionName>.csvi`
+  * **正確範例**：
+    * `MODULES/IO/SetPort.csvi`
+    * `MODULES/IO/ClrPort.csvi`
+    * `MODULES/IO/WaitPortOn.csvi`
+  * **規範禁令**：**檔名前嚴禁贅加 `IO@` 或模組前綴**（例如 `MODULES/IO/IO@SetPort.csvi` 視為舊版相容冗餘，新版一律統一為 `MODULES/IO/SetPort.csvi`）。
+* **驅動組件 (Driver CSVI)**：
+  * **標準命名格式**：`MODULES/<ModuleName>/DRIVER/<DriverName>.csvi`
+  * **正確範例**：
+    * `MODULES/IO/DRIVER/MockIO.csvi`
+    * `MODULES/MOTION/DRIVER/MockMotion.csvi`
+
+### 3.2 跨模組同名防護與四重隔離保證 (Collision-Free Guarantee)
+若不同模組間存在相同動作名稱（例如 `MODULES/IO/SetPort.csvi` 與 `MODULES/DAQ/SetPort.csvi`），ARCOS 具備架構級四重防護，保證 100% 安全、零命名碰撞：
+1. **第一重：目錄物理隔離（Directory Namespace）**：
+   * 資料夾層次即為命名空間。每個模組的處理器（如 `IoModuleHandler`）固定只檢索自身專屬目錄 `MODULES/IO/`，絕不跨目錄探測。
+2. **第二重：直譯器調度鍵分流（Dispatcher Routing by `Module@Action`）**：
+   * 機台腳本與排程器以 `Module@Action` 為唯一調度 Key（如 `IO@SetPort` vs `DAQ@SetPort`），直譯核心在派發起點就已依模組前綴分流給各自的 Handler。
+3. **第三重：CSVI Manifest 元數據雙向校驗（Metadata Binding）**：
+   * 每個 CSVI 內部封裝的 `CSVI.Manifest.json` 清晰綁定所屬模組（`"Module": "IO"`）與指令鍵（`"CommandKey": "IO@SetPort"`）。若將檔案誤置於其他目錄，加載階段會立即報警並拒絕載入。
+4. **第四重：CLR 命名空間與沙盒隔離（Runtime Type Isolation）**：
+   * C# 原始碼命名空間各自歸屬（如 `ARCOS.Module.IO` vs `ARCOS.Module.DAQ`），並由獨立的 `AssemblyLoadContext` 隔離加載，零 Type Collision。
+
+---
+
+## 四、 CSVI 3.0 單一檔案內部二進位結構規範
 
 
 
@@ -260,7 +291,7 @@ flowchart LR
 
 
 
-## 四、 四大底層技術瓶頸與標準工程解法
+## 五、 四大底層技術瓶頸與標準工程解法
 
 
 
@@ -322,7 +353,7 @@ flowchart LR
 
 
 
-## 五、 `CSVI Studio` (`src/ARCOS.CsviStudio`) 介面與功能規格
+## 六、 `CSVI Studio` (`src/ARCOS.CsviStudio`) 介面與功能規格
 
 
 
@@ -382,7 +413,7 @@ flowchart LR
 
 
 
-## 六、 下一階段實作推進清單 (Implementation Checklist)
+## 七、 下一階段實作推進清單 (Implementation Checklist)
 
 
 
@@ -426,7 +457,7 @@ flowchart LR
 
 
 
-## 七、 原生 Model Context Protocol (MCP) Server 雙模介面規格
+## 八、 原生 Model Context Protocol (MCP) Server 雙模介面規格
 
 
 

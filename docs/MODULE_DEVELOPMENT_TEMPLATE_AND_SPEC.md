@@ -44,6 +44,11 @@ MODULES/<ModuleName>/
     └── <DriverB>.csvi                # 驅動 B
 ```
 
+### 2.1 檔案命名與防衝突規則 (Naming Convention & Collision-Free Rules)
+- **標準命名**：一律採用 <ActionName>.csvi（例如 SetPort.csvi、ClrPort.csvi、WaitPortOn.csvi）。
+- **嚴禁前綴冗餘**：檔名前**嚴禁加模組前綴**（例如 IO@SetPort.csvi 視為舊版相容冗餘，新版一律為 SetPort.csvi）。
+- **跨模組同名安全保證**：若不同模組有相同指令檔名（例如 MODULES/IO/SetPort.csvi 與 MODULES/DAQ/SetPort.csvi），由**目錄物理隔離**、**直譯器 Module@Action 調度鍵分流**、**Manifest 雙向核驗**與 **C# CLR 命名空間隔離** 四大機制保證 100% 獨立，絕對不會發生碰撞。
+
 ### 2.1 目錄即功能 (Directory-Driven Discovery)
 - **指令數量**：由 `MODULES/<ModuleName>/` 目錄下的 `*.csvi` 檔案數量決定。加一個 `.csvi` 就多一個指令，刪除就移除，無需重編主程式。
 - **驅動數量**：由 `MODULES/<ModuleName>/DRIVER/` 目錄下的 `*.csvi` 決定。主程式 `Modules Info` 自動列出並加載對應面板。
