@@ -15,6 +15,7 @@ using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 using Window = Avalonia.Controls.Window;
 using ARCOS.App.Controls;
+using ARCOS.App.Dialogs;
 using ARCOS.App.ViewModels;
 using ARCOS.Core.Drivers;
 using ARCOS.Core.Engines;
@@ -93,6 +94,7 @@ public partial class MainWindow : Window
         BindCaptureTabControls();
         BindIoModulesTab();
         BindEngineInspectionTabs();
+        BindThreadsTab();
 
         // 7. UI 定時刷新計時器 (50ms，驅動即時狀態更新)
         _uiTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(50) };
@@ -126,6 +128,7 @@ public partial class MainWindow : Window
             if (tab != null)
             {
                 tab.IsSelected = true;
+        this.KeyDown += MainWindow_KeyDown;
             }
         };
     }
@@ -1050,6 +1053,135 @@ public partial class MainWindow : Window
         BindPointTab();
         BindVariableTab();
         BindWaveformTab();
+    }
+
+    // =========================================================
+    // 6. Threads 監控面板綁定 (Manager MainThread 常駐 + Workers 1~12 + SubThread 動態池)
+    // =========================================================
+    private void BindThreadsTab()
+    {
+        var mMain = this.FindControl<ThreadMonitorControl>("MonitorThreadMain");
+        mMain?.BindContext(_vm.MainThreads[0], "Thread Main (0)");
+
+        for (int i = 1; i <= 12; i++)
+        {
+            var mWorker = this.FindControl<ThreadMonitorControl>($"MonitorThread{i}");
+            mWorker?.BindContext(_vm.MainThreads[i], $"Thread {i}");
+        }
+
+        _vm.OnProgramLoaded += (_, _) =>
+        {
+            Dispatcher.UIThread.Post(() =>
+            {
+                mMain?.ReloadProgram();
+                for (int i = 1; i <= 12; i++)
+                {
+                    var mw = this.FindControl<ThreadMonitorControl>($"MonitorThread{i}");
+                    mw?.ReloadProgram();
+                }
+            });
+        };
+
+        // SubThread 工具列與清單綁定
+        var btnGetSubs = this.FindControl<Button>("BtnGetSubThreadList");
+        var lstSubs = this.FindControl<ListBox>("LstSubThreads");
+        var txtSubCount = this.FindControl<TextBlock>("TxtSubThreadCount");
+        var mSubDetail = this.FindControl<ThreadMonitorControl>("MonitorSubThreadDetail");
+        var pnlEmpty = this.FindControl<Border>("PnlSubThreadEmptyNotice");
+        var btnDemoSub = this.FindControl<Button>("BtnDemoSubThread");
+
+        void RefreshSubThreadList()
+        {
+            var subs = _vm.SubThreads.Select(kv => new SubThreadItemViewModel(kv.Key, kv.Value)).ToList();
+            if (lstSubs != null) lstSubs.ItemsSource = subs;
+            if (txtSubCount != null)
+            {
+                int activeCount = subs.Count(s => s.Context.IsRunning);
+                txtSubCount.Text = $"SubThreads: {activeCount} Active / {subs.Count} Total";
+            }
+        }
+
+        if (btnGetSubs != null)
+        {
+            btnGetSubs.Click += (_, _) => RefreshSubThreadList();
+        }
+
+        if (lstSubs != null)
+        {
+            lstSubs.SelectionChanged += (_, _) =>
+            {
+                if (lstSubs.SelectedItem is SubThreadItemViewModel selected)
+                {
+                    if (mSubDetail != null)
+                    {
+                        mSubDetail.BindContext(selected.Context, selected.Name);
+                    }
+                    if (pnlEmpty != null) pnlEmpty.IsVisible = false;
+                }
+            };
+        }
+
+        if (btnDemoSub != null)
+        {
+            btnDemoSub.Click += (_, _) =>
+            {
+                int nextId = _vm.SubThreads.Count + 1;
+                string subName = $"DemoSub_{nextId}";
+                var demoProg = new ProgramTable { ProgramNumber = 90 + (nextId % 10), Name = subName };
+                demoProg.Add(CommandItem.Parse("Timer@Delay\t1200", 0));
+                demoProg.Add(CommandItem.Parse("IO@Set\tDO0,1", 1));
+                demoProg.Add(CommandItem.Parse("Timer@Delay\t800", 2));
+                demoProg.Add(CommandItem.Parse("IO@Set\tDO0,0", 3));
+                demoProg.Add(CommandItem.Parse("Thread@Stop\t", 4));
+
+                var ctx = _vm.StartSubThread(subName, demoProg, 1);
+                RefreshSubThreadList();
+                if (lstSubs != null)
+                {
+                    var matched = (lstSubs.ItemsSource as IEnumerable<SubThreadItemViewModel>)
+                        ?.FirstOrDefault(x => x.Name == subName);
+                    if (matched != null)
+                    {
+                        lstSubs.SelectedItem = matched;
+                    }
+                }
+            };
+        }
+    }
+
+    // =========================================================
+    // Test Thread 專屬浮動視窗 (Ctrl+T 喚醒 / 最小化 / 頂層不奪焦)
+    // =========================================================
+    private TestThreadWindow? _testThreadWindow;
+    public TestThreadWindow? TestThreadWindow => _testThreadWindow;
+
+    public void ToggleTestThreadWindow()
+    {
+        if (_testThreadWindow == null)
+        {
+            _testThreadWindow = new TestThreadWindow(_vm, this);
+            _testThreadWindow.ShowWithoutActivation(this);
+        }
+        else
+        {
+            if (_testThreadWindow.WindowState == WindowState.Minimized || !_testThreadWindow.IsVisible)
+            {
+                _testThreadWindow.ShowWithoutActivation(this);
+            }
+            else
+            {
+                _testThreadWindow.WindowState = WindowState.Minimized;
+            }
+        }
+    }
+
+    private void MainWindow_KeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.KeyModifiers.HasFlag(KeyModifiers.Control) && e.Key == Key.T)
+        {
+            ToggleTestThreadWindow();
+            e.Handled = true;
+        }
     }
 
     private void BindImaqTab()

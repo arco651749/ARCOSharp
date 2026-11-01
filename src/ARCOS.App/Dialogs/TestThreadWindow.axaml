@@ -1,0 +1,325 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="ARCOS.App.Dialogs.TestThreadWindow"
+        Title="Test Thread Editor"
+        Width="420" Height="780"
+        MinWidth="360" MinHeight="480"
+        Topmost="True"
+        RequestedThemeVariant="Light"
+        Background="#FFFFFF"
+        WindowStartupLocation="Manual">
+
+    <Window.Resources>
+        <!-- Avalonia 原生標準向量圖標庫 -->
+        <StreamGeometry x:Key="IconUndo">M12.5 8c-2.65 0-5.05.99-6.9 2.6L2 7v9h9l-3.62-3.62c1.39-1.16 3.16-1.88 5.12-1.88 3.54 0 6.55 2.31 7.6 5.5l2.37-.78C21.08 11.03 17.15 8 12.5 8z</StreamGeometry>
+        <StreamGeometry x:Key="IconRedo">M18.4 10.6C16.55 8.99 14.15 8 11.5 8c-4.65 0-8.58 3.03-9.96 7.22L3.9 16c1.05-3.19 4.05-5.5 7.6-5.5 1.95 0 3.73.72 5.12 1.88L13 16h9V7l-3.6 3.6z</StreamGeometry>
+        <StreamGeometry x:Key="IconSearch">M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z</StreamGeometry>
+        <StreamGeometry x:Key="IconRefresh">M17.65 6.35A7.958 7.958 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z</StreamGeometry>
+        <StreamGeometry x:Key="IconChevronUp">M7.41 15.41L12 10.83l4.59 4.58L18 14l-6-6-6 6z</StreamGeometry>
+        <StreamGeometry x:Key="IconChevronDown">M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6z</StreamGeometry>
+        <StreamGeometry x:Key="IconFolderOpen">M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z</StreamGeometry>
+        <StreamGeometry x:Key="IconFloppySave">M17 3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V7l-4-4zm-5 16c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zm3-10H5V5h10v4z</StreamGeometry>
+        <StreamGeometry x:Key="IconRowAdd">M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z</StreamGeometry>
+        <StreamGeometry x:Key="IconRowMinus">M19 13H5v-2h14v2z</StreamGeometry>
+        <StreamGeometry x:Key="IconCross">M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z</StreamGeometry>
+        <StreamGeometry x:Key="IconLock">M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z</StreamGeometry>
+        <StreamGeometry x:Key="IconPlay">M8 5v14l11-7z</StreamGeometry>
+        <StreamGeometry x:Key="IconJump">M5 13h7.17l-3.58 3.59L10 18l6-6-6-6-1.41 1.41L12.17 11H5v2z</StreamGeometry>
+        <StreamGeometry x:Key="IconStep">M11 5v7.17l-3.59-3.58L6 10l6 6 6-6-1.41-1.41L13 12.17V5h-2z</StreamGeometry>
+        <StreamGeometry x:Key="IconPause">M6 19h4V5H6v14zm8-14v14h4V5h-4z</StreamGeometry>
+        <StreamGeometry x:Key="IconReset">M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z</StreamGeometry>
+    </Window.Resources>
+
+    <Grid RowDefinitions="Auto,*,Auto,Auto,Auto" Margin="3">
+        <!-- ========================================================= -->
+        <!-- 1. 頂部路徑與槽位選擇器 + .PRO / .INIT 讀存工具列 -->
+        <!-- ========================================================= -->
+        <Border Grid.Row="0" Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="0,0,0,1" Padding="4,3" Margin="0,0,0,2">
+            <Grid RowDefinitions="Auto,Auto">
+                <Grid Grid.Row="0" ColumnDefinitions="*,Auto,110" Margin="0,0,0,3">
+                    <TextBox x:Name="TxtScriptTitle" Grid.Column="0" Watermark="(Test Program - click READ .PRO)" 
+                             FontSize="11" Height="25" VerticalContentAlignment="Center"
+                             Background="#FFFFFF" Foreground="#0F172A" BorderBrush="#CBD5E1" Margin="0,0,4,0"/>
+                    
+                    <StackPanel Grid.Column="1" Orientation="Vertical" Spacing="1" VerticalAlignment="Center" Margin="0,0,4,0">
+                        <Button x:Name="BtnProgPrev" Width="20" Height="11" Padding="0" 
+                                HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
+                                Background="#FFFFFF" BorderBrush="#CBD5E1" BorderThickness="1">
+                            <Path Data="{StaticResource IconChevronUp}" Fill="#475569" Width="7" Height="7" Stretch="Uniform"/>
+                        </Button>
+                        <Button x:Name="BtnProgNext" Width="20" Height="11" Padding="0" 
+                                HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
+                                Background="#FFFFFF" BorderBrush="#CBD5E1" BorderThickness="1">
+                            <Path Data="{StaticResource IconChevronDown}" Fill="#475569" Width="7" Height="7" Stretch="Uniform"/>
+                        </Button>
+                    </StackPanel>
+
+                    <ComboBox x:Name="ProgSelector" Grid.Column="2" Height="25" HorizontalAlignment="Stretch" 
+                              Background="White" Foreground="#0284C7" FontWeight="Bold" FontSize="11"
+                              BorderBrush="#0284C7" BorderThickness="1"/>
+                </Grid>
+
+                <Grid Grid.Row="1" ColumnDefinitions="*,*,*,*" Margin="0,1,0,1">
+                    <Button x:Name="BtnReadPro" Grid.Column="0" Height="22" Margin="1,0" Padding="2,0"
+                            Background="#0284C7" Foreground="White" FontWeight="Bold" FontSize="9"
+                            HorizontalContentAlignment="Center" VerticalContentAlignment="Center" CornerRadius="3">
+                        <TextBlock Text="READ .PRO" VerticalAlignment="Center"/>
+                    </Button>
+                    <Button x:Name="BtnSavePro" Grid.Column="1" Height="22" Margin="1,0" Padding="2,0"
+                            Background="#0369A1" Foreground="White" FontWeight="Bold" FontSize="9"
+                            HorizontalContentAlignment="Center" VerticalContentAlignment="Center" CornerRadius="3">
+                        <TextBlock Text="SAVE .PRO" VerticalAlignment="Center"/>
+                    </Button>
+                    <Button x:Name="BtnReadInit" Grid.Column="2" Height="22" Margin="1,0" Padding="2,0"
+                            Background="#059669" Foreground="White" FontWeight="Bold" FontSize="9"
+                            HorizontalContentAlignment="Center" VerticalContentAlignment="Center" CornerRadius="3">
+                        <TextBlock Text="READ .INIT" VerticalAlignment="Center"/>
+                    </Button>
+                    <Button x:Name="BtnSaveInit" Grid.Column="3" Height="22" Margin="1,0" Padding="2,0"
+                            Background="#047857" Foreground="White" FontWeight="Bold" FontSize="9"
+                            HorizontalContentAlignment="Center" VerticalContentAlignment="Center" CornerRadius="3">
+                        <TextBlock Text="SAVE .INIT" VerticalAlignment="Center"/>
+                    </Button>
+                </Grid>
+            </Grid>
+        </Border>
+
+        <!-- ========================================================= -->
+        <!-- 2. 中央指令表格 DataGrid -->
+        <!-- ========================================================= -->
+        <Border Grid.Row="1" Background="#FFFFFF" BorderBrush="#CBD5E1" BorderThickness="1" CornerRadius="3">
+            <DataGrid x:Name="GridCommands" 
+                      AutoGenerateColumns="False" 
+                      CanUserSortColumns="False" 
+                      CanUserResizeColumns="True"
+                      GridLinesVisibility="All"
+                      HeadersVisibility="Column"
+                      BorderThickness="0"
+                      Background="#FFFFFF"
+                      RowHeight="20"
+                      FontSize="11"
+                      PointerPressed="OnGridPointerPressed">
+                <DataGrid.Styles>
+                    <Style Selector="DataGridColumnHeader">
+                        <Setter Property="Background" Value="#0055AA"/>
+                        <Setter Property="Foreground" Value="#FFFFFF"/>
+                        <Setter Property="FontWeight" Value="Bold"/>
+                        <Setter Property="FontSize" Value="10.5"/>
+                        <Setter Property="Height" Value="22"/>
+                        <Setter Property="Padding" Value="4,0"/>
+                        <Setter Property="BorderBrush" Value="#003388"/>
+                        <Setter Property="BorderThickness" Value="0,0,1,1"/>
+                    </Style>
+                    <Style Selector="DataGridRow:selected /template/ Rectangle#BackgroundRectangle">
+                        <Setter Property="Fill" Value="#E0F2FE"/>
+                    </Style>
+                </DataGrid.Styles>
+                <DataGrid.Columns>
+                    <!-- 行號 # -->
+                    <DataGridTemplateColumn Header="#" Width="40">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <Panel HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
+                                       Background="{Binding CellBackground}"
+                                       PointerPressed="OnCellPointerPressed">
+                                    <Border IsVisible="{Binding IsCurrentPC}" 
+                                            Background="#FFE4E6" BorderBrush="#FDA4AF" BorderThickness="1" 
+                                            CornerRadius="2" Margin="1,0">
+                                        <TextBlock Text="{Binding LineNumber}" FontWeight="Black" FontSize="10"
+                                                   Foreground="#9F1239" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    </Border>
+                                    <Border IsVisible="{Binding IsRangeSelectedAndNotPC}" 
+                                            Background="#BAE6FD" BorderBrush="#0284C7" BorderThickness="1" 
+                                            CornerRadius="2" Margin="1,0">
+                                        <TextBlock Text="{Binding LineNumber}" FontWeight="Bold" FontSize="10"
+                                                   Foreground="#0284C7" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    </Border>
+                                    <Border IsVisible="{Binding IsDefaultState}" Background="#F1F5F9" Margin="1,0">
+                                        <TextBlock Text="{Binding LineNumber}" FontWeight="SemiBold" FontSize="10"
+                                                   Foreground="#0284C7" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    </Border>
+                                </Panel>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+
+                    <!-- Command 指令名稱欄位 (點擊開啟 ComSelectWindow) -->
+                    <DataGridTemplateColumn Header="Command" Width="150">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <Border Background="{Binding CellBackground}" Padding="4,0" Cursor="Hand"
+                                        PointerPressed="OnCommandCellPointerPressed">
+                                    <TextBlock Text="{Binding Command}" 
+                                               Foreground="#003399" FontWeight="SemiBold" FontSize="11"
+                                               VerticalAlignment="Center"/>
+                                </Border>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+
+                    <!-- Parameters 參數欄位 (雙擊開啟 ParameterGuidance) -->
+                    <DataGridTemplateColumn Header="Parameters" Width="*">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <Border Background="{Binding CellBackground}" Padding="4,0" Cursor="Hand"
+                                        DoubleTapped="OnParameterCellDoubleTapped"
+                                        PointerPressed="OnParameterCellPointerPressed">
+                                    <TextBlock Text="{Binding Parameter}" 
+                                               Foreground="#222222" FontSize="11"
+                                               VerticalAlignment="Center"/>
+                                </Border>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+                </DataGrid.Columns>
+            </DataGrid>
+        </Border>
+
+        <!-- ========================================================= -->
+        <!-- 3. 搜尋過濾條 (可展開/隱藏) -->
+        <!-- ========================================================= -->
+        <Border x:Name="SearchPanel" Grid.Row="2" Background="#FFFBEB" BorderBrush="#FCD34D" BorderThickness="1" CornerRadius="3"
+                Padding="6,3" Margin="0,2,0,2" IsVisible="False">
+            <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto">
+                <TextBlock Grid.Column="0" Text="Find:" VerticalAlignment="Center" FontSize="11" FontWeight="Bold" Foreground="#78350F" Margin="0,0,4,0"/>
+                <TextBox x:Name="TxtSearchKeyword" Grid.Column="1" Height="22" FontSize="11" VerticalContentAlignment="Center" Background="White" Margin="0,0,4,0"/>
+                <TextBlock x:Name="TxtSearchStatus" Grid.Column="2" VerticalAlignment="Center" FontSize="10.5" FontWeight="SemiBold" Foreground="#0284C7" Margin="2,0,6,0"/>
+                <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="2" Margin="0,0,4,0">
+                    <Button x:Name="BtnFindPrev" Width="20" Height="20" Padding="0" Background="#FFFFFF" BorderBrush="#CBD5E1" BorderThickness="1" CornerRadius="2">
+                        <Path Data="{StaticResource IconChevronUp}" Fill="#475569" Width="8" Height="8" Stretch="Uniform"/>
+                    </Button>
+                    <Button x:Name="BtnFindNext" Width="20" Height="20" Padding="0" Background="#FFFFFF" BorderBrush="#CBD5E1" BorderThickness="1" CornerRadius="2">
+                        <Path Data="{StaticResource IconChevronDown}" Fill="#475569" Width="8" Height="8" Stretch="Uniform"/>
+                    </Button>
+                </StackPanel>
+                <Button x:Name="BtnCloseSearch" Grid.Column="4" Width="18" Height="18" Padding="0" Background="Transparent" BorderThickness="0">
+                    <Path Data="{StaticResource IconCross}" Fill="#64748B" Width="8" Height="8" Stretch="Uniform"/>
+                </Button>
+            </Grid>
+        </Border>
+
+        <!-- ========================================================= -->
+        <!-- 4. 底部控制總台 (對齊原廠 MVCON Test Thread 介面) -->
+        <!-- ========================================================= -->
+        <Border Grid.Row="3" Background="#F8FAFC" BorderBrush="#CBD5E1" BorderThickness="1" CornerRadius="4" Padding="4,4" Margin="0,2">
+            <Grid RowDefinitions="Auto,Auto,Auto" Margin="0">
+                <!-- 第一列：[1] Variable Section 下拉清單 + Git + Undo + Redo + Search + Refresh + Load -->
+                <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="0,0,0,3">
+                    <!-- [1] 變數 Section 作用域切換器 (使用者紅圈 1) -->
+                    <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                        <ComboBox x:Name="CmbVariableSection" Height="24" Width="135" FontSize="11" FontWeight="Bold"
+                                  Background="White" Foreground="#B91C1C" BorderBrush="#CBD5E1" BorderThickness="1"
+                                  ToolTip.Tip="選擇測試執行緒所屬的變數分區 (Variable Section)"/>
+                    </StackPanel>
+
+                    <!-- 右側快捷鍵群組 (Git, Undo, Redo, Search, Refresh, Load) -->
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="2" VerticalAlignment="Center">
+                        <Button x:Name="BtnGit" Height="23" Padding="5,0" Background="#F0F9FF" BorderBrush="#BAE6FD" BorderThickness="1" CornerRadius="2"
+                                HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
+                                ToolTip.Tip="比對目前槽位與 Git 之差異">
+                            <TextBlock Text="Git" FontSize="10" FontWeight="Bold" Foreground="#0284C7"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Button>
+                        <Button x:Name="BtnUndo" Width="24" Height="23" Padding="0" Background="#FFFFFF" BorderBrush="#CBD5E1" BorderThickness="1" CornerRadius="2"
+                                HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
+                                ToolTip.Tip="復原 (Undo)">
+                            <Path Data="{StaticResource IconUndo}" Fill="#475569" Width="10" Height="10" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Button>
+                        <Button x:Name="BtnRedo" Width="24" Height="23" Padding="0" Background="#FFFFFF" BorderBrush="#CBD5E1" BorderThickness="1" CornerRadius="2"
+                                HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
+                                ToolTip.Tip="重做 (Redo)">
+                            <Path Data="{StaticResource IconRedo}" Fill="#475569" Width="10" Height="10" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Button>
+                        <Button x:Name="BtnSearch" Width="24" Height="23" Padding="0" Background="#FFFFFF" BorderBrush="#CBD5E1" BorderThickness="1" CornerRadius="2"
+                                HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
+                                ToolTip.Tip="關鍵字搜尋 (Ctrl+F)">
+                            <Path Data="{StaticResource IconSearch}" Fill="#475569" Width="10" Height="10" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Button>
+                        <Button x:Name="BtnRefresh" Width="24" Height="23" Padding="0" Background="#FFFFFF" BorderBrush="#CBD5E1" BorderThickness="1" CornerRadius="2"
+                                HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
+                                ToolTip.Tip="重新整理">
+                            <Path Data="{StaticResource IconRefresh}" Fill="#475569" Width="10" Height="10" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Button>
+                        <Button x:Name="BtnLoad" Height="23" Padding="6,0" Background="#F0F9FF" BorderBrush="#BAE6FD" BorderThickness="1" CornerRadius="2"
+                                HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
+                                ToolTip.Tip="讀取程式區">
+                            <TextBlock Text="Load" FontSize="10" FontWeight="Bold" Foreground="#0284C7"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Button>
+                    </StackPanel>
+                </Grid>
+
+                <!-- 第二列：ActiveMode + 編輯按鈕群 (SaveLine, Minus, Add, Delete, Save) -->
+                <Grid Grid.Row="1" ColumnDefinitions="Auto,*" Margin="0,0,0,3">
+                    <CheckBox x:Name="ChkActiveMode" Grid.Column="0" Content="ActiveMode" IsChecked="True" 
+                              FontWeight="SemiBold" FontSize="10.5" Foreground="#0F172A" VerticalAlignment="Center" Margin="0,0,6,0"/>
+
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="2" HorizontalAlignment="Right" VerticalAlignment="Center">
+                        <Button x:Name="BtnSaveLine" Width="24" Height="24" Padding="0" Background="#FFFFFF" BorderBrush="#CBD5E1" BorderThickness="1" CornerRadius="2" 
+                                HorizontalContentAlignment="Center" VerticalContentAlignment="Center" ToolTip.Tip="儲存行">
+                            <Path Data="{StaticResource IconFloppySave}" Fill="#475569" Width="10" Height="10" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Button>
+                        <Button x:Name="BtnMinusLine" Width="24" Height="24" Padding="0" Background="#FEF2F2" BorderBrush="#FECACA" BorderThickness="1" CornerRadius="2" 
+                                HorizontalContentAlignment="Center" VerticalContentAlignment="Center" ToolTip.Tip="刪除所選行">
+                            <Rectangle Width="10" Height="2" Fill="#EF4444" RadiusX="0.5" RadiusY="0.5" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Button>
+                        <Button x:Name="BtnAdd" Width="24" Height="24" Padding="0" Background="#F0FDF4" BorderBrush="#BBF7D0" BorderThickness="1" CornerRadius="2" 
+                                HorizontalContentAlignment="Center" VerticalContentAlignment="Center" ToolTip.Tip="新增行">
+                            <Path Data="{StaticResource IconRowAdd}" Fill="#10B981" Width="10" Height="10" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Button>
+                        <Button x:Name="BtnDelete" Width="24" Height="24" Padding="0" Background="#FEF2F2" BorderBrush="#FECACA" BorderThickness="1" CornerRadius="2" 
+                                HorizontalContentAlignment="Center" VerticalContentAlignment="Center" ToolTip.Tip="刪除行">
+                            <Path Data="{StaticResource IconCross}" Fill="#EF4444" Width="10" Height="10" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Button>
+                        <Button x:Name="BtnSave" Height="24" Padding="6,0" Background="#F0F9FF" BorderBrush="#BAE6FD" BorderThickness="1" CornerRadius="2"
+                                HorizontalContentAlignment="Center" VerticalContentAlignment="Center" ToolTip.Tip="儲存程式檔">
+                            <TextBlock Text="Save" FontSize="10" FontWeight="Bold" Foreground="#0284C7"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Button>
+                    </StackPanel>
+                </Grid>
+
+                <!-- 第三列：Run + Auto + Jump + Step + Pause + Reset -->
+                <Grid Grid.Row="2" ColumnDefinitions="*,*,*,*,*,*" Margin="0">
+                    <Button x:Name="BtnRun" Grid.Column="0" Margin="1,0" Height="25" Background="#0284C7" Foreground="White" CornerRadius="2"
+                            HorizontalContentAlignment="Center" VerticalContentAlignment="Center">
+                        <TextBlock Text="▶ Run" FontWeight="Bold" FontSize="10.5" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Button>
+                    <Button x:Name="BtnAuto" Grid.Column="1" Margin="1,0" Height="25" Background="#FFFFFF" BorderBrush="#CBD5E1" BorderThickness="1" CornerRadius="2"
+                            HorizontalContentAlignment="Center" VerticalContentAlignment="Center">
+                        <TextBlock Text="Auto" FontWeight="SemiBold" FontSize="10" Foreground="#0284C7" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Button>
+                    <Button x:Name="BtnJump" Grid.Column="2" Margin="1,0" Height="25" Background="#FFFFFF" BorderBrush="#CBD5E1" BorderThickness="1" CornerRadius="2"
+                            HorizontalContentAlignment="Center" VerticalContentAlignment="Center">
+                        <TextBlock Text="Jump" FontWeight="SemiBold" FontSize="10" Foreground="#334155" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Button>
+                    <Button x:Name="BtnStep" Grid.Column="3" Margin="1,0" Height="25" Background="#FFFFFF" BorderBrush="#CBD5E1" BorderThickness="1" CornerRadius="2"
+                            HorizontalContentAlignment="Center" VerticalContentAlignment="Center">
+                        <TextBlock Text="Step" FontWeight="Bold" FontSize="10" Foreground="#10B981" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Button>
+                    <Button x:Name="BtnPause" Grid.Column="4" Margin="1,0" Height="25" Background="#FFFFFF" BorderBrush="#CBD5E1" BorderThickness="1" CornerRadius="2"
+                            HorizontalContentAlignment="Center" VerticalContentAlignment="Center">
+                        <TextBlock Text="Pause" FontWeight="SemiBold" FontSize="10" Foreground="#0284C7" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Button>
+                    <Button x:Name="BtnReset" Grid.Column="5" Margin="1,0" Height="25" Background="#FFFFFF" BorderBrush="#CBD5E1" BorderThickness="1" CornerRadius="2"
+                            HorizontalContentAlignment="Center" VerticalContentAlignment="Center">
+                        <TextBlock Text="Reset" FontWeight="SemiBold" FontSize="10" Foreground="#10B981" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Button>
+                </Grid>
+            </Grid>
+        </Border>
+
+        <!-- ========================================================= -->
+        <!-- 5. [2] 底部透明度拉桿 (使用者紅圈 2，可透視下方主畫面) -->
+        <!-- ========================================================= -->
+        <Border Grid.Row="4" Background="#E0F2FE" BorderBrush="#BAE6FD" BorderThickness="1" CornerRadius="3" Padding="4,1" Margin="0,1">
+            <Grid ColumnDefinitions="Auto,*,Auto">
+                <TextBlock Grid.Column="0" Text="Opacity" FontSize="9.5" FontWeight="Bold" Foreground="#0369A1" VerticalAlignment="Center" Margin="2,0,6,0"/>
+                <Slider x:Name="SliderOpacity" Grid.Column="1" Minimum="0.25" Maximum="1.0" Value="1.0" 
+                        Height="20" VerticalAlignment="Center"
+                        ToolTip.Tip="調整透明度：向左拖曳可透視下方主畫面與相機/運動畫布 (25% ~ 100%)"/>
+                <TextBlock x:Name="TxtOpacityValue" Grid.Column="2" Text="100%" FontSize="9.5" FontWeight="Bold" Foreground="#0369A1" VerticalAlignment="Center" Margin="6,0,2,0"/>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>

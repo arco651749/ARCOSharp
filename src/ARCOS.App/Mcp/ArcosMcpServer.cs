@@ -22,7 +22,10 @@ using Avalonia.Threading;
 using Avalonia.VisualTree;
 using OpenCvSharp;
 using Window = Avalonia.Controls.Window;
+using ARCOS.Core.Common;
 using ARCOS.Core.Drivers;
+using ARCOS.Core.Serialization;
+using ARCOS.App.Services;
 
 namespace ARCOS.App.Mcp;
 
@@ -376,6 +379,8 @@ public static class ArcosMcpServer
             "arcos_sequencer_action" => await ToolSequencerActionAsync(_mainWindow, args),
             "arcos_io_action" => await Dispatcher.UIThread.InvokeAsync(() => ToolIoAction(_mainWindow, args)),
             "arcos_run_command" => await Dispatcher.UIThread.InvokeAsync(() => ToolRunCommand(_mainWindow, args)),
+            "arcos_test_thread" => await Dispatcher.UIThread.InvokeAsync(() => ToolTestThread(_mainWindow, args)),
+            "arcos_clipboard_action" => await Dispatcher.UIThread.InvokeAsync(() => ToolClipboardAction(_mainWindow, args)),
             "arcos_capture_ui" or "arcos_screenshot" => await Dispatcher.UIThread.InvokeAsync(() => ToolCaptureUi(_mainWindow, args)),
             _ => throw new InvalidOperationException($"Unknown tool: {toolName}")
         };
@@ -915,6 +920,23 @@ public static class ArcosMcpServer
                     seq.TriggerJump(rowIndex);
                     return JsonSerializer.Serialize(new { success = true, action = "jump", currentPC = mainWin.VM.MainThreads[seq.CurrentProgramNumber].ProgIndex });
 
+                case "undo":
+                    seq.PerformUndo();
+                    return JsonSerializer.Serialize(new { success = true, action = "undo", currentProg = seq.CurrentProgramNumber, undoCount = seq.GetUndoCount(), redoCount = seq.GetRedoCount(), rowCount = seq.Rows.Count });
+
+                case "redo":
+                    seq.PerformRedo();
+                    return JsonSerializer.Serialize(new { success = true, action = "redo", currentProg = seq.CurrentProgramNumber, undoCount = seq.GetUndoCount(), redoCount = seq.GetRedoCount(), rowCount = seq.Rows.Count });
+
+                case "search":
+                    seq.PerformSearch(parameter ?? command, forward: true);
+                    var txtSearchStatus = seq.FindControl<TextBlock>("TxtSearchStatus");
+                    var gridCmds = seq.FindControl<DataGrid>("GridCommands");
+                    return JsonSerializer.Serialize(new { success = true, action = "search", keyword = parameter ?? command, status = txtSearchStatus?.Text ?? "", selectedIndex = gridCmds?.SelectedIndex ?? -1 });
+
+                case "get_history":
+                    return JsonSerializer.Serialize(new { success = true, currentProg = seq.CurrentProgramNumber, undoCount = seq.GetUndoCount(), redoCount = seq.GetRedoCount(), rowCount = seq.Rows.Count });
+
                 default:
                     return JsonSerializer.Serialize(new { success = false, error = $"Unknown sequencer action: {action}" });
             }
@@ -985,6 +1007,118 @@ public static class ArcosMcpServer
         });
     }
 
+    private static string ToolTestThread(MainWindow mainWin, JsonNode? args)
+    {
+        string action = args?["action"]?.GetValue<string>() ?? "toggle";
+        if (action.Equals("toggle", StringComparison.OrdinalIgnoreCase))
+        {
+            mainWin.ToggleTestThreadWindow();
+        }
+        else if (action.Equals("set_opacity", StringComparison.OrdinalIgnoreCase))
+        {
+            double op = args?["opacity"]?.GetValue<double>() ?? 1.0;
+            if (mainWin.TestThreadWindow != null)
+            {
+                mainWin.TestThreadWindow.Opacity = op;
+                var slider = mainWin.TestThreadWindow.FindControl<Slider>("SliderOpacity");
+                if (slider != null) slider.Value = op;
+            }
+        }
+        else if (action.Equals("set_section", StringComparison.OrdinalIgnoreCase))
+        {
+            string sec = args?["section"]?.GetValue<string>() ?? "Test";
+            if (mainWin.TestThreadWindow != null)
+            {
+                var cmb = mainWin.TestThreadWindow.FindControl<ComboBox>("CmbVariableSection");
+                if (cmb != null) cmb.SelectedItem = sec;
+            }
+        }
+        else if (action.Equals("load_pro", StringComparison.OrdinalIgnoreCase))
+        {
+            string proPath = args?["path"]?.GetValue<string>() ?? Path.Combine(ArcosPaths.RootDirectory, "Master.pro");
+            if (File.Exists(proPath) && mainWin.VM != null)
+            {
+                var progs = ScriptSerializer.LoadProFile(proPath);
+                foreach (var p in progs)
+                {
+                    mainWin.VM.LoadProgram(p.ProgramNumber, p);
+                }
+                mainWin.VM.NotifyProgramLoaded(proPath, true);
+                if (mainWin.TestThreadWindow != null)
+                {
+                    mainWin.TestThreadWindow.LoadProgramSlot(0);
+                }
+            }
+        }
+        else if (action.Equals("step", StringComparison.OrdinalIgnoreCase))
+        {
+            if (mainWin.TestThreadWindow != null)
+            {
+                var btnStep = mainWin.TestThreadWindow.FindControl<Button>("BtnStep");
+                btnStep?.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            }
+        }
+
+        var win = mainWin.TestThreadWindow;
+        return JsonSerializer.Serialize(new
+        {
+            success = true,
+            isCreated = win != null,
+            isVisible = win?.IsVisible ?? false,
+            windowState = win?.WindowState.ToString(),
+            opacity = win?.Opacity ?? 1.0,
+            topmost = win?.Topmost ?? false
+        });
+    }
+
+    private static string ToolClipboardAction(MainWindow mainWin, JsonNode? args)
+    {
+        string op = args?["action"]?.GetValue<string>() ?? "select";
+        string target = args?["target"]?.GetValue<string>() ?? "UserTab";
+        int start = args?["start"]?.GetValue<int>() ?? 0;
+        int end = args?["end"]?.GetValue<int>() ?? 0;
+        int index = args?["index"]?.GetValue<int>() ?? 0;
+
+        var userSeq = mainWin.Sequencer;
+        var testWin = mainWin.TestThreadWindow;
+
+        bool isUser = target.Equals("UserTab", StringComparison.OrdinalIgnoreCase);
+
+        if (op.Equals("select", StringComparison.OrdinalIgnoreCase))
+        {
+            if (isUser) userSeq?.SelectRange(start, end);
+            else testWin?.SelectRange(start, end);
+        }
+        else if (op.Equals("copy_insert", StringComparison.OrdinalIgnoreCase))
+        {
+            if (isUser) userSeq?.PasteFromClipboard(index);
+            else testWin?.PasteFromClipboard(index);
+        }
+        else if (op.Equals("move", StringComparison.OrdinalIgnoreCase))
+        {
+            if (isUser) userSeq?.MoveSelectedRange(index);
+            else testWin?.MoveSelectedRange(index);
+        }
+        else if (op.Equals("delete", StringComparison.OrdinalIgnoreCase))
+        {
+            if (isUser) userSeq?.DeleteSelectedRange();
+            else testWin?.DeleteSelectedRange();
+        }
+
+        var userRows = userSeq?.Rows.Select(r => new { r.LineNumber, r.Command, r.Parameter, r.IsRangeSelected }).ToList();
+        var testRows = testWin?.Rows.Select(r => new { r.LineNumber, r.Command, r.Parameter, r.IsRangeSelected }).ToList();
+
+        return JsonSerializer.Serialize(new
+        {
+            success = true,
+            action = op,
+            target = target,
+            clipboardCount = SequencerClipboardManager.Instance.Buffer.Count,
+            userRows,
+            testRows
+        });
+    }
+
     private static string ToolCaptureUi(MainWindow mainWin, JsonNode? args)
     {
         string outputPath = args?["outputPath"]?.GetValue<string>() ?? args?["filePath"]?.GetValue<string>() ?? throw new ArgumentException("outputPath or filePath is required");
@@ -998,6 +1132,20 @@ public static class ArcosMcpServer
         }
 
         var activeDlg = GetActiveDialog(mainWin);
+
+        if ((target.Equals("TestThread", StringComparison.OrdinalIgnoreCase) || target.Equals("TestWindow", StringComparison.OrdinalIgnoreCase)) && mainWin.TestThreadWindow != null)
+        {
+            using var testMat = RenderWindowToBgrMat(mainWin.TestThreadWindow, 420, 780, drawWindowFrame: true);
+            Cv2.ImWrite(fullOutPath, testMat);
+            return JsonSerializer.Serialize(new
+            {
+                success = true,
+                target = "TestThread",
+                dialogTitle = mainWin.TestThreadWindow.Title,
+                outputPath = fullOutPath,
+                fileSize = new FileInfo(fullOutPath).Length
+            });
+        }
 
         if (target.Equals("Dialog", StringComparison.OrdinalIgnoreCase) && activeDlg != null)
         {

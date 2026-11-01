@@ -1,0 +1,139 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="ARCOS.App.Controls.ThreadMonitorControl"
+             Background="#FFFFFF">
+
+    <Grid RowDefinitions="Auto,*" Margin="0">
+        <!-- ========================================================= -->
+        <!-- 1. Full View Header (MVCON Style for Thread Main & SubPanel) -->
+        <!-- ========================================================= -->
+        <Border x:Name="PnlFullHeader" Grid.Row="0" Background="#F8FAFC" BorderBrush="#CBD5E1" 
+                BorderThickness="0,0,0,1" Padding="6,5" IsVisible="False">
+            <Grid ColumnDefinitions="Auto,*" Margin="0">
+                <!-- 左側：4 項數值監控區 (Program, Prog Index, State Index, State + LED) -->
+                <Grid Grid.Column="0" RowDefinitions="Auto,Auto,Auto,Auto" ColumnDefinitions="60,64" Margin="0,0,8,0">
+                    <!-- Row 0: Program -->
+                    <TextBlock Grid.Row="0" Grid.Column="0" Text="Program" FontSize="10" FontWeight="SemiBold" 
+                               Foreground="#475569" VerticalAlignment="Center" Margin="0,1,4,1"/>
+                    <Border Grid.Row="0" Grid.Column="1" Background="White" BorderBrush="#CBD5E1" BorderThickness="1" 
+                            CornerRadius="2" Padding="4,0" Height="19" VerticalAlignment="Center">
+                        <TextBlock x:Name="TxtProgramNo" Text="0" FontSize="10.5" FontWeight="Bold" 
+                                   Foreground="#0F172A" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                    </Border>
+
+                    <!-- Row 1: Prog Index -->
+                    <TextBlock Grid.Row="1" Grid.Column="0" Text="Prog Index" FontSize="10" FontWeight="SemiBold" 
+                               Foreground="#475569" VerticalAlignment="Center" Margin="0,1,4,1"/>
+                    <Border Grid.Row="1" Grid.Column="1" Background="White" BorderBrush="#CBD5E1" BorderThickness="1" 
+                            CornerRadius="2" Padding="4,0" Height="19" VerticalAlignment="Center">
+                        <TextBlock x:Name="TxtProgIndex" Text="0" FontSize="10.5" FontWeight="Bold" 
+                                   Foreground="#0284C7" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                    </Border>
+
+                    <!-- Row 2: State Index -->
+                    <TextBlock Grid.Row="2" Grid.Column="0" Text="State Index" FontSize="10" FontWeight="SemiBold" 
+                               Foreground="#475569" VerticalAlignment="Center" Margin="0,1,4,1"/>
+                    <Border Grid.Row="2" Grid.Column="1" Background="White" BorderBrush="#CBD5E1" BorderThickness="1" 
+                            CornerRadius="2" Padding="4,0" Height="19" VerticalAlignment="Center">
+                        <TextBlock x:Name="TxtStateIndex" Text="0" FontSize="10.5" FontWeight="Bold" 
+                                   Foreground="#0F172A" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                    </Border>
+
+                    <!-- Row 3: State + LED -->
+                    <TextBlock Grid.Row="3" Grid.Column="0" Text="State" FontSize="10" FontWeight="SemiBold" 
+                               Foreground="#475569" VerticalAlignment="Center" Margin="0,1,4,1"/>
+                    <Grid Grid.Row="3" Grid.Column="1" ColumnDefinitions="*,Auto">
+                        <Border Grid.Column="0" Background="White" BorderBrush="#CBD5E1" BorderThickness="1" 
+                                CornerRadius="2" Padding="2,0" Height="19" VerticalAlignment="Center">
+                            <TextBlock x:Name="TxtState" Text="Idle" FontSize="9.5" FontWeight="Bold" 
+                                       Foreground="#475569" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <Ellipse x:Name="LedFullStatus" Grid.Column="1" Width="10" Height="10" Fill="#94A3B8" 
+                                 Margin="3,0,0,0" VerticalAlignment="Center"/>
+                    </Grid>
+                </Grid>
+
+                <!-- 右側：名稱標題與即時執行訊息橫條 -->
+                <Grid Grid.Column="1" RowDefinitions="Auto,Auto" VerticalAlignment="Center">
+                    <TextBox x:Name="TxtScriptTitle" Grid.Row="0" IsReadOnly="True" Height="22" FontSize="10" 
+                             Background="White" Foreground="#0F172A" BorderBrush="#CBD5E1" Margin="0,0,0,4" 
+                             VerticalContentAlignment="Center" Watermark="Script / Title"/>
+                    <TextBox x:Name="TxtStatusMessage" Grid.Row="1" IsReadOnly="True" Height="22" FontSize="10" 
+                             Background="White" Foreground="#475569" BorderBrush="#CBD5E1" 
+                             VerticalContentAlignment="Center" Watermark="Current Instruction"/>
+                </Grid>
+            </Grid>
+        </Border>
+
+        <!-- ========================================================= -->
+        <!-- 2. Compact View Header (for Worker Threads 1~12) -->
+        <!-- ========================================================= -->
+        <Border x:Name="PnlCompactHeader" Grid.Row="0" Background="#F1F5F9" BorderBrush="#E2E8F0" 
+                BorderThickness="0,0,0,1" Padding="6,2" Height="26" IsVisible="True">
+            <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto">
+                <TextBlock x:Name="TxtCompactTitle" Grid.Column="0" Text="Thread" FontWeight="Bold" FontSize="11" 
+                           Foreground="#0284C7" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                <TextBlock x:Name="TxtCompactProg" Grid.Column="1" Text="Prog 0" FontSize="10" 
+                           Foreground="#64748B" VerticalAlignment="Center"/>
+                <TextBlock x:Name="TxtCompactPC" Grid.Column="2" Text="PC: 0" FontSize="10" FontWeight="Bold" 
+                           Foreground="#0284C7" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                <TextBlock x:Name="TxtCompactState" Grid.Column="3" Text="IDLE" FontSize="9.5" FontWeight="Bold" 
+                           Foreground="#475569" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                <Ellipse x:Name="LedCompactStatus" Grid.Column="4" Width="9" Height="9" Fill="#94A3B8" VerticalAlignment="Center"/>
+            </Grid>
+        </Border>
+
+        <!-- ========================================================= -->
+        <!-- 3. 指令監控 DataGrid (含 PC 即時反白指示與自動捲動) -->
+        <!-- ========================================================= -->
+        <DataGrid x:Name="GridCommands" Grid.Row="1" 
+                  CanUserSortColumns="False" CanUserResizeColumns="True"
+                  GridLinesVisibility="All" HeadersVisibility="Column"
+                  BorderThickness="0" Background="#FFFFFF"
+                  RowHeight="20" FontSize="10.5">
+            <DataGrid.Styles>
+                <Style Selector="DataGridColumnHeader">
+                    <Setter Property="Background" Value="#0055AA"/>
+                    <Setter Property="Foreground" Value="#FFFFFF"/>
+                    <Setter Property="FontWeight" Value="Bold"/>
+                    <Setter Property="FontSize" Value="10"/>
+                    <Setter Property="Height" Value="22"/>
+                    <Setter Property="Padding" Value="4,0"/>
+                </Style>
+                <Style Selector="DataGridCell">
+                    <Setter Property="Padding" Value="2,0"/>
+                </Style>
+                <Style Selector="DataGridRow:selected /template/ Rectangle#BackgroundRectangle">
+                    <Setter Property="Fill" Value="#E0F2FE"/>
+                </Style>
+            </DataGrid.Styles>
+            <DataGrid.Columns>
+                <!-- 行號欄位 # (藍底白字序號，PC 當前運行行粉桃色高亮) -->
+                <DataGridTemplateColumn Header="#" Width="38">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <Panel HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
+                                <Border IsVisible="{Binding IsCurrentPC}" 
+                                        Background="#FFE4E6" BorderBrush="#FDA4AF" BorderThickness="1" 
+                                        CornerRadius="2" Margin="1,0">
+                                    <TextBlock Text="{Binding LineNumber}" FontWeight="Black" FontSize="10" 
+                                               Foreground="#9F1239" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Border>
+                                <Border IsVisible="{Binding !IsCurrentPC}" Background="#F1F5F9" Margin="1,0">
+                                    <TextBlock Text="{Binding LineNumber}" FontSize="10" FontWeight="SemiBold" 
+                                               Foreground="#0284C7" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Border>
+                            </Panel>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+
+                <!-- CMD 指令欄位 -->
+                <DataGridTextColumn Header="CMD" Binding="{Binding Command}" Width="105" FontWeight="SemiBold" Foreground="#003399"/>
+
+                <!-- Parameters 參數欄位 -->
+                <DataGridTextColumn Header="Parameters" Binding="{Binding Parameter}" Width="*" Foreground="#1E293B"/>
+            </DataGrid.Columns>
+        </DataGrid>
+    </Grid>
+</UserControl>

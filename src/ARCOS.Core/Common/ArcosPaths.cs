@@ -27,6 +27,20 @@ public static class ArcosPaths
     public static string PictureDirectory => Path.Combine(RootDirectory, "PICTURE");
     public static string WaveformDirectory => Path.Combine(RootDirectory, "WAVEFORM");
     public static string PointAndPathDirectory => Path.Combine(RootDirectory, "POINT&PATH");
+    public static string ToolsDirectory => Path.Combine(RootDirectory, "tools");
+
+    /// <summary>
+    /// Meld 視覺化比對編輯器路徑 (優先使用 tools/MeldPortable/Meld.exe，找不到則 fallback 至系統 PATH 上的 meld)
+    /// </summary>
+    public static string MeldExecutable
+    {
+        get
+        {
+            string portable = Path.Combine(ToolsDirectory, "MeldPortable", "Meld.exe");
+            if (File.Exists(portable)) return portable;
+            return "meld";
+        }
+    }
 
     /// <summary>
     /// 初始化並確保所有標準工作目錄已建立

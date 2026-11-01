@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 
@@ -7,6 +9,7 @@ public sealed class SequencerRowViewModel : INotifyPropertyChanged
 {
     private int _lineNumber;
     private bool _isCurrentPC;
+    private bool _isRangeSelected;
     private string _command = "";
     private string _parameter = "";
     private string _statePreview = "";
@@ -22,8 +25,33 @@ public sealed class SequencerRowViewModel : INotifyPropertyChanged
     public bool IsCurrentPC
     {
         get => _isCurrentPC;
-        set => SetField(ref _isCurrentPC, value);
+        set
+        {
+            if (SetField(ref _isCurrentPC, value))
+            {
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsRangeSelectedAndNotPC)));
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsDefaultState)));
+            }
+        }
     }
+
+    public bool IsRangeSelected
+    {
+        get => _isRangeSelected;
+        set
+        {
+            if (SetField(ref _isRangeSelected, value))
+            {
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsRangeSelectedAndNotPC)));
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsDefaultState)));
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(CellBackground)));
+            }
+        }
+    }
+
+    public bool IsRangeSelectedAndNotPC => _isRangeSelected && !_isCurrentPC;
+    public bool IsDefaultState => !_isCurrentPC && !_isRangeSelected;
+    public string CellBackground => _isRangeSelected ? "#E0F2FE" : "Transparent";
 
     public string Command
     {
@@ -57,12 +85,14 @@ public sealed class SequencerRowViewModel : INotifyPropertyChanged
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
-    private void SetField<T>(ref T field, T value, [CallerMemberName] string? propertyName = null)
+    private bool SetField<T>(ref T field, T value, [CallerMemberName] string? propertyName = null)
     {
         if (!EqualityComparer<T>.Default.Equals(field, value))
         {
             field = value;
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+            return true;
         }
+        return false;
     }
 }

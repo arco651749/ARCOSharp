@@ -1,0 +1,108 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="ARCOS.App.Dialogs.GitDiffWindow"
+        Title="ARCOS Git 版本比對與程式區段編輯 (Git Diff &amp; Section Meld)"
+        Width="920" Height="600"
+        WindowStartupLocation="CenterOwner"
+        RequestedThemeVariant="Light"
+        Background="#F8FAFC">
+
+    <Grid RowDefinitions="Auto,*,Auto" Margin="14">
+        <!-- 頂部資訊列 (檔案路徑、區段選單、狀態) -->
+        <Border Grid.Row="0" Background="#FFFFFF" BorderBrush="#CBD5E1" BorderThickness="1" 
+                Padding="12,8" Margin="0,0,0,10" CornerRadius="6" BoxShadow="0 1 2 0 #08000000">
+            <Grid ColumnDefinitions="Auto,*,Auto">
+                <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                    <Border Background="#F0FDF4" BorderBrush="#BBF7D0" BorderThickness="1" CornerRadius="4" Padding="6,2">
+                        <StackPanel Orientation="Horizontal" Spacing="4">
+                            <Path Data="{StaticResource IconFileCode}" Fill="#166534" Width="11" Height="11" Stretch="Uniform"/>
+                            <TextBlock Text="GIT PRO DIFF" FontSize="10" FontWeight="Bold" Foreground="#166534"/>
+                        </StackPanel>
+                    </Border>
+                    <TextBlock Text="專案檔版本差異比對與區段編輯" FontWeight="Bold" FontSize="13" Foreground="#0F172A" VerticalAlignment="Center"/>
+                </StackPanel>
+
+                <!-- 程式區段下拉選單 (Section Selector) -->
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" HorizontalAlignment="Center" VerticalAlignment="Center">
+                    <TextBlock Text="比對程式區段:" FontSize="11" FontWeight="SemiBold" Foreground="#475569" VerticalAlignment="Center"/>
+                    <ComboBox x:Name="CmbProgramSection" Width="280" Height="28" FontSize="11" Background="#F8FAFC" BorderBrush="#CBD5E1" CornerRadius="4"/>
+                </StackPanel>
+
+                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right" VerticalAlignment="Center">
+                    <TextBlock x:Name="TxtTargetFile" Text="Target: [ Master.pro ]" FontWeight="Bold" FontSize="11" Foreground="#0284C7" VerticalAlignment="Center"/>
+                    <Border x:Name="BadgeStatus" Background="#EFF6FF" BorderBrush="#BFDBFE" BorderThickness="1" CornerRadius="3" Padding="6,2">
+                        <TextBlock x:Name="TxtStatus" Text="Clean / Synced" FontSize="10.5" FontWeight="Bold" Foreground="#1D4ED8"/>
+                    </Border>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- 中央 Diff 文本視口 (高對比工控代碼視圖) -->
+        <Border Grid.Row="1" Background="#0F172A" BorderBrush="#334155" BorderThickness="1" CornerRadius="6" Margin="0,0,0,10" ClipToBounds="True">
+            <Grid RowDefinitions="Auto,*">
+                <!-- 視口資訊列 -->
+                <Border Grid.Row="0" Background="#1E293B" Padding="10,6" BorderBrush="#334155" BorderThickness="0,0,0,1">
+                    <DockPanel LastChildFill="True">
+                        <TextBlock x:Name="TxtDiffViewHeader" Text="Git Working Tree vs. Commit HEAD (Unified Diff)" FontSize="10" FontWeight="SemiBold" Foreground="#94A3B8"/>
+                        <TextBlock x:Name="TxtDiffSummary" Text="No pending diff" FontSize="10" FontWeight="Bold" Foreground="#38BDF8" HorizontalAlignment="Right"/>
+                    </DockPanel>
+                </Border>
+
+                <!-- 差異內容顯示區 -->
+                <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" Padding="12">
+                    <SelectableTextBlock x:Name="TxtDiffContent" FontFamily="Consolas, Cascadia Code, Courier New" FontSize="11.5"
+                                         Foreground="#E2E8F0" TextWrapping="NoWrap" LineHeight="18"/>
+                </ScrollViewer>
+            </Grid>
+        </Border>
+
+        <!-- 底部操作列 (呼叫 Meld 前處理編輯、載入對照槽、局部載入、全專案載入、關閉) -->
+        <Grid Grid.Row="2" ColumnDefinitions="Auto,*,Auto,Auto">
+            <!-- 呼叫 Meld 前處理比對與編輯 -->
+            <Button x:Name="BtnLaunchMeld" Grid.Column="0" Height="30" Padding="12,0" 
+                    Background="#1E293B" BorderBrush="#0F172A" BorderThickness="1" Foreground="#38BDF8"
+                    FontWeight="Bold" FontSize="11.5" CornerRadius="4" Cursor="Hand" ToolTip.Tip="自動前處理提取選定程式區段轉為乾淨腳本文字，呼叫 Meld 進行雙向視覺化編輯；編輯存檔關閉後自動重新編號行號並安全局部寫回">
+                <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                    <Path Data="{StaticResource IconSliders}" Fill="#38BDF8" Width="12" Height="12" Stretch="Uniform"/>
+                    <TextBlock x:Name="TxtLaunchMeldLabel" Text="呼叫 Meld 編輯此區段" VerticalAlignment="Center"/>
+                </StackPanel>
+            </Button>
+
+            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8">
+                <!-- 載入至對照槽位 (Slot 90) -->
+                <Button x:Name="BtnLoadToCompareSlot" Height="30" Padding="12,0" 
+                        Background="#F1F5F9" BorderBrush="#CBD5E1" BorderThickness="1" Foreground="#475569"
+                        FontWeight="SemiBold" FontSize="11.5" CornerRadius="4" Cursor="Hand" ToolTip.Tip="將此區段載入至 Slot 90 對照槽位，可在 Sequencer 下拉選單中切換對照並單步試跑">
+                    <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                        <Path Data="{StaticResource IconArrowRight}" Fill="#475569" Width="11" Height="11" Stretch="Uniform"/>
+                        <TextBlock Text="載入至對照槽 (Slot 90)" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Button>
+
+                <!-- 僅更新載入目前選中的程式區段 -->
+                <Button x:Name="BtnReloadSection" Height="30" Padding="12,0" 
+                        Background="#0284C7" Foreground="White" FontWeight="Bold" FontSize="11.5"
+                        CornerRadius="4" Cursor="Hand" ToolTip.Tip="僅將選定之程式區段重新載入至虛擬機對應槽位，不影響其他執行緒">
+                    <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                        <Path Data="{StaticResource IconRefresh}" Fill="White" Width="11" Height="11" Stretch="Uniform"/>
+                        <TextBlock x:Name="TxtReloadSectionLabel" Text="僅載入此區段" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Button>
+
+                <!-- 全專案重新載入 -->
+                <Button x:Name="BtnReloadToArcos" Height="30" Padding="12,0" 
+                        Background="#059669" Foreground="White" FontWeight="Bold" FontSize="11.5"
+                        CornerRadius="4" Cursor="Hand" ToolTip.Tip="將全部 0~99 程式區段完整重新載入回 ARCOSharp 虛擬機">
+                    <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                        <Path Data="{StaticResource IconCheckCircle}" Fill="White" Width="11" Height="11" Stretch="Uniform"/>
+                        <TextBlock Text="全專案重新載入" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Button>
+            </StackPanel>
+
+            <Button x:Name="BtnClose" Grid.Column="3" Content="關閉" Height="30" Width="68" Margin="8,0,0,0"
+                    Background="#FFFFFF" BorderBrush="#CBD5E1" BorderThickness="1" Foreground="#64748B"
+                    FontWeight="SemiBold" FontSize="11.5" CornerRadius="4" Cursor="Hand"/>
+        </Grid>
+    </Grid>
+</Window>

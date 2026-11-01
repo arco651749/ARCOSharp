@@ -49,3 +49,9 @@ sequencer_workflow_preview.html
 zoom_view.html
 
 *.ini
+
+# Test artifacts and portable binaries
+tools/MeldPortable/
+scratch/
+*.bmp
+PICTURE/

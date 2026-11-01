@@ -14,6 +14,7 @@ using Avalonia.Threading;
 using ExecutionContext = ARCOS.Core.Execution.ExecutionContext;
 using ARCOS.App.Dialogs;
 using ARCOS.App.Guidance;
+using ARCOS.App.Services;
 using ARCOS.App.ViewModels;
 using ARCOS.Core.Execution;
 using ARCOS.Core.Model;
@@ -31,6 +32,15 @@ public partial class SequencerEditorControl : UserControl
     private readonly DispatcherTimer _pcDrainerTimer;
     private int _latestNoticedPC = -1;
     private int _currentRenderedPC = -1;
+
+    // =========================================================
+    // 獨立程式區內部暫存歷程堆疊 (Per-Program-Section Undo/Redo)
+    // 依使用者規範：每個 Program Slot (0..99) 獨立記憶修改過程
+    // 切換程式區後切回，歷史紀錄完美保持
+    // =========================================================
+    private readonly Dictionary<int, Stack<List<(string Command, string Parameter)>>> _undoStacks = new();
+    private readonly Dictionary<int, Stack<List<(string Command, string Parameter)>>> _redoStacks = new();
+    private const int MaxHistoryDepth = 100;
 
     public ObservableCollection<SequencerRowViewModel> Rows => _rows;
     public int CurrentProgramNumber => _currentProgNo;
@@ -58,6 +68,8 @@ public partial class SequencerEditorControl : UserControl
 
         BindToolbarButtons();
         BindSearchControls();
+        this.KeyDown += OnSequencerKeyDown;
+        SequencerClipboardManager.Instance.SelectionChanged += OnGlobalSelectionChanged;
 
         _autoTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(40) };
         _autoTimer.Tick += AutoTimer_Tick;
@@ -100,6 +112,7 @@ public partial class SequencerEditorControl : UserControl
         EnsureDefaultSampleSequence();
         LoadCurrentProgramToUI();
         UpdateMachineStatus("IDLE");
+        UpdateUndoRedoButtonState();
     }
 
     private void EnsureDefaultSampleSequence()
@@ -193,6 +206,7 @@ public partial class SequencerEditorControl : UserControl
         if (topLevel == null) return;
 
         var row = (sender as Control)?.DataContext as SequencerRowViewModel;
+        if (HandleShortcutPointerAction(row, e)) return;
         if (row == null) return;
 
         string? selectedCmd = await ComSelectWindow.SelectCommandAsync(topLevel, _vm?.Executor.Registry);
@@ -201,6 +215,7 @@ public partial class SequencerEditorControl : UserControl
         string? confirmedParam = await ParameterGuidanceManager.Instance.RequestGuidanceAsync(selectedCmd, row.Parameter, _vm?.Engines, topLevel);
         if (confirmedParam != null)
         {
+            PushUndoSnapshot();
             row.Command = selectedCmd;
             row.Parameter = confirmedParam;
             SyncUIToProgram();
@@ -214,6 +229,9 @@ public partial class SequencerEditorControl : UserControl
 
     private async void OnParameterCellPointerPressed(object? sender, PointerPressedEventArgs e)
     {
+        var row = (sender as Control)?.DataContext as SequencerRowViewModel;
+        if (HandleShortcutPointerAction(row, e)) return;
+
         if (e.ClickCount >= 2)
         {
             await OpenParameterGuidance(sender);
@@ -233,9 +251,276 @@ public partial class SequencerEditorControl : UserControl
         string? updatedParam = await ParameterGuidanceManager.Instance.RequestGuidanceAsync(targetCmd, row.Parameter, _vm?.Engines, topLevel);
         if (updatedParam != null)
         {
+            PushUndoSnapshot();
             row.Parameter = updatedParam;
             SyncUIToProgram();
         }
+    }
+
+    // =========================================================
+    // 快捷鍵指令選取與剪貼管理 (Shift選取 / Ctrl插入 / Ctrl+Alt搬移 / Alt刪除)
+    // =========================================================
+    private int? _anchorStartLine = null;
+
+    private void OnGlobalSelectionChanged(object? activeEditor)
+    {
+        if (activeEditor != this)
+        {
+            _anchorStartLine = null;
+            foreach (var r in _rows)
+            {
+                if (r.IsRangeSelected)
+                    r.IsRangeSelected = false;
+            }
+        }
+    }
+
+    private void OnCellPointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        var row = (sender as Control)?.DataContext as SequencerRowViewModel;
+        HandleShortcutPointerAction(row, e);
+    }
+
+    private void OnGridPointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (e.KeyModifiers == KeyModifiers.Control && e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
+        {
+            var sourceControl = e.Source as Control;
+            if (sourceControl?.DataContext is not SequencerRowViewModel)
+            {
+                e.Handled = true;
+                ExecuteCopyInsert(null);
+            }
+        }
+    }
+
+    private bool HandleShortcutPointerAction(SequencerRowViewModel? row, PointerPressedEventArgs e)
+    {
+        var props = e.GetCurrentPoint(this).Properties;
+        if (!props.IsLeftButtonPressed) return false;
+
+        var km = e.KeyModifiers;
+
+        // 1. Shift + 滑鼠左鍵 (兩次點擊選取範圍，寫入全域選擇區)
+        if (km == KeyModifiers.Shift)
+        {
+            e.Handled = true;
+            if (row == null) return true;
+
+            if (_anchorStartLine == null)
+            {
+                _anchorStartLine = row.LineNumber;
+                foreach (var r in _rows)
+                {
+                    r.IsRangeSelected = (r.LineNumber == _anchorStartLine.Value);
+                }
+            }
+            else
+            {
+                int start = Math.Min(_anchorStartLine.Value, row.LineNumber);
+                int end = Math.Max(_anchorStartLine.Value, row.LineNumber);
+
+                foreach (var r in _rows)
+                {
+                    r.IsRangeSelected = (r.LineNumber >= start && r.LineNumber <= end);
+                }
+
+                var selectedItems = _rows
+                    .Where(r => r.IsRangeSelected)
+                    .Select(r => (r.Command, r.Parameter))
+                    .ToList();
+
+                SequencerClipboardManager.Instance.SetSelection(this, start, end, selectedItems);
+                _anchorStartLine = null;
+            }
+            return true;
+        }
+
+        // 2. Ctrl + Alt + 滑鼠左鍵 (本地搬移)
+        if ((km & (KeyModifiers.Control | KeyModifiers.Alt)) == (KeyModifiers.Control | KeyModifiers.Alt) && !km.HasFlag(KeyModifiers.Shift))
+        {
+            e.Handled = true;
+            ExecuteLocalMove(row);
+            return true;
+        }
+
+        // 3. Ctrl + 滑鼠左鍵 (複製插入，支援跨視窗)
+        if (km == KeyModifiers.Control)
+        {
+            e.Handled = true;
+            ExecuteCopyInsert(row);
+            return true;
+        }
+
+        // 4. Alt + 滑鼠左鍵 (本地刪除選取區)
+        if (km == KeyModifiers.Alt)
+        {
+            e.Handled = true;
+            ExecuteLocalDelete(row);
+            return true;
+        }
+
+        return false;
+    }
+
+    private void ExecuteCopyInsert(SequencerRowViewModel? targetRow)
+    {
+        if (!SequencerClipboardManager.Instance.HasItems) return;
+
+        PushUndoSnapshot();
+
+        int targetIndex = targetRow != null ? targetRow.LineNumber : _rows.Count;
+        if (targetIndex < 0) targetIndex = 0;
+        if (targetIndex > _rows.Count) targetIndex = _rows.Count;
+
+        var items = SequencerClipboardManager.Instance.Buffer;
+        for (int i = 0; i < items.Count; i++)
+        {
+            int ins = targetIndex + i;
+            _rows.Insert(ins, new SequencerRowViewModel
+            {
+                Command = items[i].Command,
+                Parameter = items[i].Parameter,
+                LineNumber = ins
+            });
+        }
+
+        for (int i = 0; i < _rows.Count; i++)
+        {
+            _rows[i].LineNumber = i;
+        }
+
+        SyncUIToProgram();
+        UpdateUndoRedoButtonState();
+    }
+
+    private void ExecuteLocalMove(SequencerRowViewModel? targetRow)
+    {
+        if (SequencerClipboardManager.Instance.SourceEditor != this || !SequencerClipboardManager.Instance.HasSelection)
+            return;
+
+        int minLine = SequencerClipboardManager.Instance.StartLine!.Value;
+        int maxLine = SequencerClipboardManager.Instance.EndLine!.Value;
+
+        if (minLine < 0 || maxLine >= _rows.Count) return;
+
+        int targetIndex = targetRow != null ? targetRow.LineNumber : _rows.Count;
+        if (targetIndex >= minLine && targetIndex <= maxLine)
+            return;
+
+        PushUndoSnapshot();
+
+        var movingRows = new List<SequencerRowViewModel>();
+        for (int i = minLine; i <= maxLine; i++)
+        {
+            movingRows.Add(new SequencerRowViewModel
+            {
+                Command = _rows[i].Command,
+                Parameter = _rows[i].Parameter
+            });
+        }
+
+        for (int i = maxLine; i >= minLine; i--)
+        {
+            _rows.RemoveAt(i);
+        }
+
+        if (targetIndex > maxLine)
+        {
+            targetIndex -= (maxLine - minLine + 1);
+        }
+        if (targetIndex < 0) targetIndex = 0;
+        if (targetIndex > _rows.Count) targetIndex = _rows.Count;
+
+        for (int i = 0; i < movingRows.Count; i++)
+        {
+            _rows.Insert(targetIndex + i, movingRows[i]);
+        }
+
+        for (int i = 0; i < _rows.Count; i++)
+        {
+            _rows[i].LineNumber = i;
+            _rows[i].IsRangeSelected = false;
+        }
+
+        SequencerClipboardManager.Instance.ClearSelection();
+        SyncUIToProgram();
+        UpdateUndoRedoButtonState();
+    }
+
+    private void ExecuteLocalDelete(SequencerRowViewModel? clickedRow)
+    {
+        if (SequencerClipboardManager.Instance.SourceEditor == this && SequencerClipboardManager.Instance.HasSelection)
+        {
+            int minLine = SequencerClipboardManager.Instance.StartLine!.Value;
+            int maxLine = SequencerClipboardManager.Instance.EndLine!.Value;
+
+            if (minLine >= 0 && minLine < _rows.Count)
+            {
+                PushUndoSnapshot();
+                int end = Math.Min(maxLine, _rows.Count - 1);
+                for (int i = end; i >= minLine; i--)
+                {
+                    _rows.RemoveAt(i);
+                }
+
+                for (int i = 0; i < _rows.Count; i++)
+                {
+                    _rows[i].LineNumber = i;
+                    _rows[i].IsRangeSelected = false;
+                }
+
+                SequencerClipboardManager.Instance.ClearSelection();
+                SyncUIToProgram();
+                UpdateUndoRedoButtonState();
+                return;
+            }
+        }
+
+        if (clickedRow != null && _rows.Contains(clickedRow))
+        {
+            PushUndoSnapshot();
+            _rows.Remove(clickedRow);
+            for (int i = 0; i < _rows.Count; i++)
+            {
+                _rows[i].LineNumber = i;
+                _rows[i].IsRangeSelected = false;
+            }
+            SyncUIToProgram();
+            UpdateUndoRedoButtonState();
+        }
+    }
+
+    public void SelectRange(int startLine, int endLine)
+    {
+        int start = Math.Min(startLine, endLine);
+        int end = Math.Max(startLine, endLine);
+        foreach (var r in _rows)
+        {
+            r.IsRangeSelected = (r.LineNumber >= start && r.LineNumber <= end);
+        }
+        var selectedItems = _rows
+            .Where(r => r.IsRangeSelected)
+            .Select(r => (r.Command, r.Parameter))
+            .ToList();
+        SequencerClipboardManager.Instance.SetSelection(this, start, end, selectedItems);
+    }
+
+    public void PasteFromClipboard(int targetIndex)
+    {
+        var targetRow = (targetIndex >= 0 && targetIndex < _rows.Count) ? _rows[targetIndex] : null;
+        ExecuteCopyInsert(targetRow);
+    }
+
+    public void MoveSelectedRange(int targetIndex)
+    {
+        var targetRow = (targetIndex >= 0 && targetIndex < _rows.Count) ? _rows[targetIndex] : null;
+        ExecuteLocalMove(targetRow);
+    }
+
+    public void DeleteSelectedRange()
+    {
+        ExecuteLocalDelete(null);
     }
 
     // =========================================================
@@ -282,6 +567,7 @@ public partial class SequencerEditorControl : UserControl
 
     public void TriggerAddRow(int? atIndex = null, string command = "System@Delay", string parameter = "0.1")
     {
+        PushUndoSnapshot();
         var grid = this.FindControl<DataGrid>("GridCommands");
         int insertIndex = atIndex ?? ((grid?.SelectedIndex ?? -1) + 1);
         if (insertIndex < 0 || insertIndex > _rows.Count) insertIndex = _rows.Count;
@@ -349,7 +635,11 @@ public partial class SequencerEditorControl : UserControl
         if (btnSave != null) btnSave.Click += BtnSave_Click;
 
         var btnSaveLine = this.FindControl<Button>("BtnSaveLine");
-        if (btnSaveLine != null) btnSaveLine.Click += (_, _) => SyncUIToProgram();
+        if (btnSaveLine != null) btnSaveLine.Click += (_, _) =>
+        {
+            PushUndoSnapshot();
+            SyncUIToProgram();
+        };
 
         var btnLoad = this.FindControl<Button>("BtnLoad");
         if (btnLoad != null) btnLoad.Click += BtnLoad_Click;
@@ -366,12 +656,12 @@ public partial class SequencerEditorControl : UserControl
         var btnSaveInit = this.FindControl<Button>("BtnSaveInit");
         if (btnSaveInit != null) btnSaveInit.Click += BtnSaveInit_Click;
 
-        // 導航與權限
-        var btnRewind = this.FindControl<Button>("BtnRewind");
-        if (btnRewind != null) btnRewind.Click += (_, _) => NavigateToRow(0);
+        // 編輯歷程 (Undo / Redo) 與權限
+        var btnUndo = this.FindControl<Button>("BtnUndo");
+        if (btnUndo != null) btnUndo.Click += (_, _) => PerformUndo();
 
-        var btnForward = this.FindControl<Button>("BtnForward");
-        if (btnForward != null) btnForward.Click += (_, _) => NavigateToRow(_rows.Count - 1);
+        var btnRedo = this.FindControl<Button>("BtnRedo");
+        if (btnRedo != null) btnRedo.Click += (_, _) => PerformRedo();
 
         var btnRefresh = this.FindControl<Button>("BtnRefresh");
         if (btnRefresh != null) btnRefresh.Click += (_, _) => LoadCurrentProgramToUI();
@@ -396,13 +686,29 @@ public partial class SequencerEditorControl : UserControl
         var searchPanel = this.FindControl<Border>("SearchPanel");
         var btnCloseSearch = this.FindControl<Button>("BtnCloseSearch");
         var txtSearch = this.FindControl<TextBox>("TxtSearchKeyword");
+        var btnFindNext = this.FindControl<Button>("BtnFindNext");
+        var btnFindPrev = this.FindControl<Button>("BtnFindPrev");
 
         if (btnSearch != null && searchPanel != null)
         {
             btnSearch.Click += (_, _) =>
             {
-                searchPanel.IsVisible = !searchPanel.IsVisible;
-                if (searchPanel.IsVisible) txtSearch?.Focus();
+                if (!searchPanel.IsVisible)
+                {
+                    searchPanel.IsVisible = true;
+                    txtSearch?.Focus();
+                }
+                else
+                {
+                    if (!string.IsNullOrWhiteSpace(txtSearch?.Text))
+                    {
+                        PerformSearch(txtSearch.Text, forward: true);
+                    }
+                    else
+                    {
+                        searchPanel.IsVisible = false;
+                    }
+                }
             };
         }
 
@@ -411,35 +717,81 @@ public partial class SequencerEditorControl : UserControl
             btnCloseSearch.Click += (_, _) => searchPanel.IsVisible = false;
         }
 
+        if (btnFindNext != null && txtSearch != null)
+        {
+            btnFindNext.Click += (_, _) => PerformSearch(txtSearch.Text, forward: true);
+        }
+
+        if (btnFindPrev != null && txtSearch != null)
+        {
+            btnFindPrev.Click += (_, _) => PerformSearch(txtSearch.Text, forward: false);
+        }
+
         if (txtSearch != null)
         {
             txtSearch.KeyUp += (s, e) =>
             {
                 if (e.Key == Key.Enter)
                 {
-                    PerformSearch(txtSearch.Text);
+                    bool forward = !e.KeyModifiers.HasFlag(KeyModifiers.Shift);
+                    PerformSearch(txtSearch.Text, forward);
+                }
+                else if (e.Key == Key.Escape)
+                {
+                    if (searchPanel != null) searchPanel.IsVisible = false;
                 }
             };
         }
     }
 
-    private void PerformSearch(string? keyword)
+    public void PerformSearch(string? keyword, bool forward = true)
     {
-        if (string.IsNullOrWhiteSpace(keyword)) return;
-        var grid = this.FindControl<DataGrid>("GridCommands");
-        int startIdx = (grid?.SelectedIndex ?? -1) + 1;
-        if (startIdx >= _rows.Count) startIdx = 0;
-
-        for (int i = 0; i < _rows.Count; i++)
+        var txtStatus = this.FindControl<TextBlock>("TxtSearchStatus");
+        if (string.IsNullOrWhiteSpace(keyword))
         {
-            int idx = (startIdx + i) % _rows.Count;
+            if (txtStatus != null) txtStatus.Text = "";
+            return;
+        }
+
+        if (_rows.Count == 0)
+        {
+            if (txtStatus != null)
+            {
+                txtStatus.Text = "目前無指令行";
+                txtStatus.Foreground = new SolidColorBrush(Color.Parse("#94A3B8"));
+            }
+            return;
+        }
+
+        var grid = this.FindControl<DataGrid>("GridCommands");
+        int current = grid?.SelectedIndex ?? 0;
+        int step = forward ? 1 : -1;
+
+        for (int count = 1; count <= _rows.Count; count++)
+        {
+            int idx = (current + count * step) % _rows.Count;
+            if (idx < 0) idx += _rows.Count;
+
             var row = _rows[idx];
-            if (row.Command.Contains(keyword, StringComparison.OrdinalIgnoreCase) ||
-                row.Parameter.Contains(keyword, StringComparison.OrdinalIgnoreCase))
+            bool matchCmd = !string.IsNullOrEmpty(row.Command) && row.Command.Contains(keyword, StringComparison.OrdinalIgnoreCase);
+            bool matchParam = !string.IsNullOrEmpty(row.Parameter) && row.Parameter.Contains(keyword, StringComparison.OrdinalIgnoreCase);
+
+            if (matchCmd || matchParam)
             {
                 NavigateToRow(idx);
+                if (txtStatus != null)
+                {
+                    txtStatus.Text = $"找到於第 {idx + 1} 行";
+                    txtStatus.Foreground = new SolidColorBrush(Color.Parse("#0284C7"));
+                }
                 return;
             }
+        }
+
+        if (txtStatus != null)
+        {
+            txtStatus.Text = "查無關鍵字";
+            txtStatus.Foreground = new SolidColorBrush(Color.Parse("#EF4444"));
         }
     }
 
@@ -480,6 +832,7 @@ public partial class SequencerEditorControl : UserControl
             SyncUIToProgram();
             _currentProgNo = progSel.SelectedIndex;
             LoadCurrentProgramToUI();
+            UpdateUndoRedoButtonState();
 
             var txtTitle = this.FindControl<TextBox>("TxtScriptTitle");
             if (txtTitle != null)
@@ -660,6 +1013,7 @@ public partial class SequencerEditorControl : UserControl
 
     private void BtnAdd_Click(object? sender, RoutedEventArgs e)
     {
+        PushUndoSnapshot();
         var grid = this.FindControl<DataGrid>("GridCommands");
         int insertIndex = (grid?.SelectedIndex ?? -1) + 1;
         if (insertIndex < 0 || insertIndex > _rows.Count) insertIndex = _rows.Count;
@@ -678,9 +1032,11 @@ public partial class SequencerEditorControl : UserControl
 
     private void BtnDelete_Click(object? sender, RoutedEventArgs e)
     {
+        if (_rows.Count == 0) return;
         var grid = this.FindControl<DataGrid>("GridCommands");
         if (grid?.SelectedItem is SequencerRowViewModel row)
         {
+            PushUndoSnapshot();
             int cur = grid.SelectedIndex;
             _rows.Remove(row);
             RenumberRows();
@@ -755,10 +1111,13 @@ public partial class SequencerEditorControl : UserControl
         {
             string path = files[0].Path.LocalPath;
             var progs = ScriptSerializer.LoadProFile(path);
+            _undoStacks.Clear();
+            _redoStacks.Clear();
             foreach (var p in progs)
             {
                 _vm.LoadProgram(p.ProgramNumber, p);
             }
+            UpdateUndoRedoButtonState();
             var txtTitle = this.FindControl<TextBox>("TxtScriptTitle");
             if (txtTitle != null) txtTitle.Text = System.IO.Path.GetFileName(path);
             LoadCurrentProgramToUI();
@@ -870,4 +1229,199 @@ public partial class SequencerEditorControl : UserControl
     {
         BtnReadPro_Click(sender, e);
     }
+
+    // =========================================================
+    // 獨立程式區 Undo / Redo 管理核心 (以程式區隔離記錄)
+    // =========================================================
+
+    private void OnSequencerKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.KeyModifiers.HasFlag(KeyModifiers.Control))
+        {
+            if (e.Key == Key.Z)
+            {
+                if (e.KeyModifiers.HasFlag(KeyModifiers.Shift)) PerformRedo();
+                else PerformUndo();
+                e.Handled = true;
+            }
+            else if (e.Key == Key.Y)
+            {
+                PerformRedo();
+                e.Handled = true;
+            }
+            else if (e.Key == Key.F)
+            {
+                var searchPanel = this.FindControl<Border>("SearchPanel");
+                var txtSearch = this.FindControl<TextBox>("TxtSearchKeyword");
+                if (searchPanel != null)
+                {
+                    searchPanel.IsVisible = true;
+                    txtSearch?.Focus();
+                }
+                e.Handled = true;
+            }
+        }
+    }
+
+    private List<(string Command, string Parameter)> CaptureCurrentRows()
+    {
+        var list = new List<(string Command, string Parameter)>(_rows.Count);
+        for (int i = 0; i < _rows.Count; i++)
+        {
+            list.Add((_rows[i].Command ?? string.Empty, _rows[i].Parameter ?? string.Empty));
+        }
+        return list;
+    }
+
+    private static bool AreSnapshotsEqual(List<(string Command, string Parameter)> a, List<(string Command, string Parameter)> b)
+    {
+        if (a.Count != b.Count) return false;
+        for (int i = 0; i < a.Count; i++)
+        {
+            if (a[i].Command != b[i].Command || a[i].Parameter != b[i].Parameter)
+                return false;
+        }
+        return true;
+    }
+
+    public void PushUndoSnapshot()
+    {
+        if (!_undoStacks.TryGetValue(_currentProgNo, out var undoStack))
+        {
+            undoStack = new Stack<List<(string Command, string Parameter)>>();
+            _undoStacks[_currentProgNo] = undoStack;
+        }
+
+        var current = CaptureCurrentRows();
+        // 避免連續推入完全相同的快照
+        if (undoStack.Count > 0 && AreSnapshotsEqual(undoStack.Peek(), current))
+        {
+            return;
+        }
+
+        undoStack.Push(current);
+
+        // 限制歷程深度
+        if (undoStack.Count > MaxHistoryDepth)
+        {
+            var arr = undoStack.ToArray();
+            undoStack.Clear();
+            for (int i = MaxHistoryDepth - 1; i >= 0; i--)
+            {
+                undoStack.Push(arr[i]);
+            }
+        }
+
+        // 新增修改時，清空當前程式區的 Redo 堆疊
+        if (_redoStacks.TryGetValue(_currentProgNo, out var redoStack))
+        {
+            redoStack.Clear();
+        }
+
+        UpdateUndoRedoButtonState();
+    }
+
+    public void PerformUndo()
+    {
+        if (!_undoStacks.TryGetValue(_currentProgNo, out var undoStack) || undoStack.Count == 0)
+            return;
+
+        if (!_redoStacks.TryGetValue(_currentProgNo, out var redoStack))
+        {
+            redoStack = new Stack<List<(string Command, string Parameter)>>();
+            _redoStacks[_currentProgNo] = redoStack;
+        }
+
+        // 將目前狀態推入 Redo 堆疊
+        var currentState = CaptureCurrentRows();
+        redoStack.Push(currentState);
+
+        // 取出上一步狀態並應用
+        var previousState = undoStack.Pop();
+        ApplySnapshot(previousState);
+        UpdateUndoRedoButtonState();
+    }
+
+    public void PerformRedo()
+    {
+        if (!_redoStacks.TryGetValue(_currentProgNo, out var redoStack) || redoStack.Count == 0)
+            return;
+
+        if (!_undoStacks.TryGetValue(_currentProgNo, out var undoStack))
+        {
+            undoStack = new Stack<List<(string Command, string Parameter)>>();
+            _undoStacks[_currentProgNo] = undoStack;
+        }
+
+        // 將目前狀態推入 Undo 堆疊
+        var currentState = CaptureCurrentRows();
+        undoStack.Push(currentState);
+
+        // 取出重做狀態並應用
+        var nextState = redoStack.Pop();
+        ApplySnapshot(nextState);
+        UpdateUndoRedoButtonState();
+    }
+
+    private void ApplySnapshot(List<(string Command, string Parameter)> snapshot)
+    {
+        var grid = this.FindControl<DataGrid>("GridCommands");
+        int prevSelected = grid?.SelectedIndex ?? 0;
+
+        _rows.Clear();
+        for (int i = 0; i < snapshot.Count; i++)
+        {
+            _rows.Add(new SequencerRowViewModel
+            {
+                LineNumber = i,
+                Command = snapshot[i].Command,
+                Parameter = snapshot[i].Parameter,
+                IsCurrentPC = false
+            });
+        }
+
+        SyncUIToProgram();
+
+        if (_rows.Count > 0)
+        {
+            int selectIdx = Math.Clamp(prevSelected, 0, _rows.Count - 1);
+            NavigateToRow(selectIdx);
+        }
+    }
+
+    public void UpdateUndoRedoButtonState()
+    {
+        var btnUndo = this.FindControl<Button>("BtnUndo");
+        var btnRedo = this.FindControl<Button>("BtnRedo");
+
+        bool canUndo = _undoStacks.TryGetValue(_currentProgNo, out var u) && u.Count > 0;
+        bool canRedo = _redoStacks.TryGetValue(_currentProgNo, out var r) && r.Count > 0;
+
+        if (btnUndo != null)
+        {
+            btnUndo.IsEnabled = canUndo;
+            btnUndo.Opacity = canUndo ? 1.0 : 0.4;
+            ToolTip.SetTip(btnUndo, canUndo ? $"復原 (Undo) - 尚有 {u!.Count} 步" : "復原 (Undo)");
+        }
+
+        if (btnRedo != null)
+        {
+            btnRedo.IsEnabled = canRedo;
+            btnRedo.Opacity = canRedo ? 1.0 : 0.4;
+            ToolTip.SetTip(btnRedo, canRedo ? $"重做 (Redo) - 尚有 {r!.Count} 步" : "重做 (Redo)");
+        }
+    }
+
+    public int GetUndoCount(int? progNo = null)
+    {
+        int p = progNo ?? _currentProgNo;
+        return _undoStacks.TryGetValue(p, out var s) ? s.Count : 0;
+    }
+
+    public int GetRedoCount(int? progNo = null)
+    {
+        int p = progNo ?? _currentProgNo;
+        return _redoStacks.TryGetValue(p, out var s) ? s.Count : 0;
+    }
+
 }
