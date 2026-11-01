@@ -87,6 +87,16 @@ public partial class SequencerEditorControl : UserControl
                 }
             };
         }
+        _vm.OnProgramLoaded += (path, isPro) =>
+        {
+            Dispatcher.UIThread.Post(() =>
+            {
+                var txtTitle = this.FindControl<TextBox>("TxtScriptTitle");
+                if (txtTitle != null) txtTitle.Text = System.IO.Path.GetFileName(path);
+                LoadCurrentProgramToUI();
+            });
+        };
+
         EnsureDefaultSampleSequence();
         LoadCurrentProgramToUI();
         UpdateMachineStatus("IDLE");
@@ -94,28 +104,8 @@ public partial class SequencerEditorControl : UserControl
 
     private void EnsureDefaultSampleSequence()
     {
-        if (_vm == null) return;
-        var prog0 = _vm.GetProgram(0);
-        if (prog0.Count == 0)
-        {
-            prog0.Add(new CommandItem(0, "System@#Comment----->>\t生產自動檢測主流程 (標準 ARCOS 腳本)", "System@#Comment----->>", "System", "#Comment----->>", "生產自動檢測主流程 (標準 ARCOS 腳本)", true, false));
-            prog0.Add(new CommandItem(1, "System@Log Message\tSystem Initialized, Start Inspection Routine", "System@Log Message", "System", "Log Message", "System Initialized, Start Inspection Routine", false, false));
-            prog0.Add(new CommandItem(2, "System@Record\tCycleTimer,InspectionStart", "System@Record", "System", "Record", "CycleTimer,InspectionStart", false, false));
-            prog0.Add(new CommandItem(3, "IO@SetPort\tP0.0,0.2", "IO@SetPort", "IO", "SetPort", "P0.0,0.2", false, false));
-            prog0.Add(new CommandItem(4, "Variable@Set\tCycleCount,0", "Variable@Set", "Variable", "Set", "CycleCount,0", false, false));
-            prog0.Add(new CommandItem(5, "Point&Path@Calculate\tP_Inspect=(150.0, 50.0, 20.0)", "Point&Path@Calculate", "Point&Path", "Calculate", "P_Inspect=(150.0, 50.0, 20.0)", false, false));
-            prog0.Add(new CommandItem(6, "Thread@Label\tInspectionLoop", "Thread@Label", "Thread", "Label", "InspectionLoop", false, false));
-            prog0.Add(new CommandItem(7, "Motion@GoPoint\tMotor1,80,P_Inspect", "Motion@GoPoint", "Motion", "GoPoint", "Motor1,80,P_Inspect", false, false));
-            prog0.Add(new CommandItem(8, "Motion@WaitMotor\tMotor1,TimeOut=5", "Motion@WaitMotor", "Motion", "WaitMotor", "Motor1,TimeOut=5", false, false));
-            prog0.Add(new CommandItem(9, "Capture@Snap\tCam1", "Capture@Snap", "Capture", "Snap", "Cam1", false, false));
-            prog0.Add(new CommandItem(10, "Capture@PatternMatchOne\tCam1,ROI_Align,Template.png,0.85", "Capture@PatternMatchOne", "Capture", "PatternMatchOne", "Cam1,ROI_Align,Template.png,0.85", false, false));
-            prog0.Add(new CommandItem(11, "IO@ClrPort\tP0.0", "IO@ClrPort", "IO", "ClrPort", "P0.0", false, false));
-            prog0.Add(new CommandItem(12, "Variable@Inc\tCycleCount", "Variable@Inc", "Variable", "Inc", "CycleCount", false, false));
-            prog0.Add(new CommandItem(13, "System@Delay\t0.1", "System@Delay", "System", "Delay", "0.1", false, false));
-            prog0.Add(new CommandItem(14, "Thread@Jump\tInspectionLoop,$CycleCount<3", "Thread@Jump", "Thread", "Jump", "InspectionLoop,$CycleCount<3", false, false));
-            prog0.Add(new CommandItem(15, "System@LogRecordCycleTime\tCycleTimer,s", "System@LogRecordCycleTime", "System", "LogRecordCycleTime", "CycleTimer,s", false, false));
-            prog0.Add(new CommandItem(16, "System@Log Message\t[PASS] Inspection Routine Completed Successfully", "System@Log Message", "System", "Log Message", "[PASS] Inspection Routine Completed Successfully", false, false));
-        }
+        // 依使用者規範：啟動時不預載任何腳本，維持初始乾淨狀態
+        // 使用者透過 UI 的 READ .PRO / READ .INIT 按鍵，或經由 SYSTEM@PROGRAMLOAD 指令載入
     }
 
     private void UpdateMachineStatus(string status)
@@ -363,6 +353,18 @@ public partial class SequencerEditorControl : UserControl
 
         var btnLoad = this.FindControl<Button>("BtnLoad");
         if (btnLoad != null) btnLoad.Click += BtnLoad_Click;
+
+        var btnReadPro = this.FindControl<Button>("BtnReadPro");
+        if (btnReadPro != null) btnReadPro.Click += BtnReadPro_Click;
+
+        var btnSavePro = this.FindControl<Button>("BtnSavePro");
+        if (btnSavePro != null) btnSavePro.Click += BtnSavePro_Click;
+
+        var btnReadInit = this.FindControl<Button>("BtnReadInit");
+        if (btnReadInit != null) btnReadInit.Click += BtnReadInit_Click;
+
+        var btnSaveInit = this.FindControl<Button>("BtnSaveInit");
+        if (btnSaveInit != null) btnSaveInit.Click += BtnSaveInit_Click;
 
         // 導航與權限
         var btnRewind = this.FindControl<Button>("BtnRewind");
@@ -732,29 +734,140 @@ public partial class SequencerEditorControl : UserControl
         }
     }
 
-    private async void BtnLoad_Click(object? sender, RoutedEventArgs e)
+    private async void BtnReadPro_Click(object? sender, RoutedEventArgs e)
     {
         var topLevel = TopLevel.GetTopLevel(this);
         if (topLevel == null || _vm == null) return;
 
+        var rootFolder = await topLevel.StorageProvider.TryGetFolderFromPathAsync(new Uri(System.IO.Path.GetFullPath(ARCOS.Core.Common.ArcosPaths.RootDirectory)));
         var files = await topLevel.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
         {
-            Title = "Open Program Table",
-            AllowMultiple = false
+            Title = "讀取 .pro 專案檔 (Read .pro Project)",
+            SuggestedStartLocation = rootFolder,
+            AllowMultiple = false,
+            FileTypeFilter = new[]
+            {
+                new FilePickerFileType("ARCOSharp Project (*.pro)") { Patterns = new[] { "*.pro" } }
+            }
         });
 
         if (files.Count > 0)
         {
-            await using var stream = await files[0].OpenReadAsync();
-            using var reader = new StreamReader(stream);
-            string content = await reader.ReadToEndAsync();
-
-            var loadedProgs = ScriptSerializer.DeserializePro(content);
-            foreach (var kvp in loadedProgs)
+            string path = files[0].Path.LocalPath;
+            var progs = ScriptSerializer.LoadProFile(path);
+            foreach (var p in progs)
             {
-                _vm.LoadProgram(kvp.Key, kvp.Value);
+                _vm.LoadProgram(p.ProgramNumber, p);
             }
+            var txtTitle = this.FindControl<TextBox>("TxtScriptTitle");
+            if (txtTitle != null) txtTitle.Text = System.IO.Path.GetFileName(path);
             LoadCurrentProgramToUI();
+            _vm.MainThreads[0].Log($"[PRO] Loaded project '{path}' with {progs.Count} programs");
         }
+    }
+
+    private async void BtnSavePro_Click(object? sender, RoutedEventArgs e)
+    {
+        var topLevel = TopLevel.GetTopLevel(this);
+        if (topLevel == null || _vm == null) return;
+
+        SyncUIToProgram();
+        var rootFolder = await topLevel.StorageProvider.TryGetFolderFromPathAsync(new Uri(System.IO.Path.GetFullPath(ARCOS.Core.Common.ArcosPaths.RootDirectory)));
+        var txtTitle = this.FindControl<TextBox>("TxtScriptTitle");
+        string suggested = (!string.IsNullOrWhiteSpace(txtTitle?.Text) && txtTitle.Text.EndsWith(".pro", StringComparison.OrdinalIgnoreCase))
+            ? txtTitle.Text
+            : "Master.pro";
+
+        var file = await topLevel.StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+        {
+            Title = "儲存 .pro 專案檔 (Save .pro Project)",
+            SuggestedStartLocation = rootFolder,
+            DefaultExtension = "pro",
+            SuggestedFileName = suggested,
+            FileTypeChoices = new[]
+            {
+                new FilePickerFileType("ARCOSharp Project (*.pro)") { Patterns = new[] { "*.pro" } }
+            }
+        });
+
+        if (file != null)
+        {
+            string path = file.Path.LocalPath;
+            var progsToSave = new List<ProgramTable>();
+            for (int i = 0; i < 100; i++)
+            {
+                var prog = _vm.GetProgram(i);
+                if (prog.Count > 0) progsToSave.Add(prog);
+            }
+            ScriptSerializer.SaveProFile(path, progsToSave);
+            if (txtTitle != null) txtTitle.Text = System.IO.Path.GetFileName(path);
+            _vm.MainThreads[0].Log($"[PRO] Saved {progsToSave.Count} programs to '{path}'");
+        }
+    }
+
+    private async void BtnReadInit_Click(object? sender, RoutedEventArgs e)
+    {
+        var topLevel = TopLevel.GetTopLevel(this);
+        if (topLevel == null || _vm == null) return;
+
+        var scriptFolder = await topLevel.StorageProvider.TryGetFolderFromPathAsync(new Uri(System.IO.Path.GetFullPath(ARCOS.Core.Common.ArcosPaths.ScriptDirectory)));
+        var files = await topLevel.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+        {
+            Title = "讀取 .init 腳本 (Read .init Script)",
+            SuggestedStartLocation = scriptFolder,
+            AllowMultiple = false,
+            FileTypeFilter = new[]
+            {
+                new FilePickerFileType("ARCOSharp Script (*.init)") { Patterns = new[] { "*.init" } }
+            }
+        });
+
+        if (files.Count > 0)
+        {
+            string path = files[0].Path.LocalPath;
+            var prog = ScriptSerializer.LoadInitFile(path, _currentProgNo, System.IO.Path.GetFileNameWithoutExtension(path));
+            _vm.LoadProgram(_currentProgNo, prog);
+            var txtTitle = this.FindControl<TextBox>("TxtScriptTitle");
+            if (txtTitle != null) txtTitle.Text = System.IO.Path.GetFileName(path);
+            LoadCurrentProgramToUI();
+            _vm.MainThreads[0].Log($"[INIT] Loaded script '{path}' into Program slot {_currentProgNo}");
+        }
+    }
+
+    private async void BtnSaveInit_Click(object? sender, RoutedEventArgs e)
+    {
+        var topLevel = TopLevel.GetTopLevel(this);
+        if (topLevel == null || _vm == null) return;
+
+        SyncUIToProgram();
+        var scriptFolder = await topLevel.StorageProvider.TryGetFolderFromPathAsync(new Uri(System.IO.Path.GetFullPath(ARCOS.Core.Common.ArcosPaths.ScriptDirectory)));
+        var prog = _vm.GetProgram(_currentProgNo);
+        string suggested = (!string.IsNullOrWhiteSpace(prog.Name)) ? $"{prog.Name}.init" : $"Program_{_currentProgNo}.init";
+
+        var file = await topLevel.StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+        {
+            Title = "儲存 .init 腳本 (Save .init Script)",
+            SuggestedStartLocation = scriptFolder,
+            DefaultExtension = "init",
+            SuggestedFileName = suggested,
+            FileTypeChoices = new[]
+            {
+                new FilePickerFileType("ARCOSharp Script (*.init)") { Patterns = new[] { "*.init" } }
+            }
+        });
+
+        if (file != null)
+        {
+            string path = file.Path.LocalPath;
+            ScriptSerializer.SaveInitFile(path, prog);
+            var txtTitle = this.FindControl<TextBox>("TxtScriptTitle");
+            if (txtTitle != null) txtTitle.Text = System.IO.Path.GetFileName(path);
+            _vm.MainThreads[0].Log($"[INIT] Saved Program {_currentProgNo} to '{path}'");
+        }
+    }
+
+    private async void BtnLoad_Click(object? sender, RoutedEventArgs e)
+    {
+        BtnReadPro_Click(sender, e);
     }
 }

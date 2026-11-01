@@ -137,12 +137,19 @@ public class CaptureModuleHandler : IModuleHandler
             return CommandResult.Done();
         }
 
-        // 5. ImageSave / LoadFile
+        // 5. ImageSave / LoadFile (存入 PICTURE/<CameraName>/)
         if (action.Equals("ImageSave", StringComparison.OrdinalIgnoreCase))
         {
             if (posArgs.Count >= 2)
             {
-                ctx.Engines.Image.SaveImage(firstArg, posArgs[1]);
+                string targetPath = posArgs[1];
+                if (!Path.IsPathRooted(targetPath))
+                {
+                    string camDir = ARCOS.Core.Common.ArcosPaths.GetCameraPictureDirectory(firstArg);
+                    targetPath = Path.Combine(camDir, targetPath);
+                }
+                ctx.Engines.Image.SaveImage(firstArg, targetPath);
+                ctx.Log($"[Capture] Image '{firstArg}' saved to '{targetPath}'");
             }
             return CommandResult.Done();
         }
@@ -151,7 +158,19 @@ public class CaptureModuleHandler : IModuleHandler
         {
             if (posArgs.Count >= 2)
             {
-                ctx.Engines.Image.LoadImage(firstArg, posArgs[1]);
+                string srcPath = posArgs[1];
+                if (!Path.IsPathRooted(srcPath) && !File.Exists(srcPath))
+                {
+                    string camCandidate = Path.Combine(ARCOS.Core.Common.ArcosPaths.GetCameraPictureDirectory(firstArg), srcPath);
+                    if (File.Exists(camCandidate)) srcPath = camCandidate;
+                    else
+                    {
+                        string picCandidate = Path.Combine(ARCOS.Core.Common.ArcosPaths.PictureDirectory, srcPath);
+                        if (File.Exists(picCandidate)) srcPath = picCandidate;
+                    }
+                }
+                ctx.Engines.Image.LoadImage(firstArg, srcPath);
+                ctx.Log($"[Capture] Loaded image '{srcPath}' into '{firstArg}'");
             }
             return CommandResult.Done();
         }

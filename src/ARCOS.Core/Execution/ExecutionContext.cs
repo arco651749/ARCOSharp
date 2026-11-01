@@ -71,6 +71,8 @@ public sealed class ExecutionContext
         Drivers = drivers;
     }
 
+    private static readonly object _logFileLock = new();
+
     public void Log(string message, bool isError = false)
     {
         string timestamp = DateTime.Now.ToString("HH:mm:ss.fff");
@@ -83,5 +85,15 @@ public sealed class ExecutionContext
         {
             Engines.Io.SetPort("System#Error?", true);
         }
+
+        try
+        {
+            lock (_logFileLock)
+            {
+                string logPath = ARCOS.Core.Common.ArcosPaths.GetTodayLogFilePath();
+                File.AppendAllText(logPath, entry + Environment.NewLine);
+            }
+        }
+        catch { }
     }
 }

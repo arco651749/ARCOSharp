@@ -418,6 +418,123 @@ public class PointEngine
         return _points.Keys.ToList();
     }
 
+    public IReadOnlyDictionary<string, MachinePoint> GetAllPoints()
+    {
+        var dict = new Dictionary<string, MachinePoint>(StringComparer.OrdinalIgnoreCase);
+        foreach (var kvp in _points)
+        {
+            dict[kvp.Key] = kvp.Value.CurrentPoint.Clone();
+        }
+        return dict;
+    }
+
+    /// <summary>
+    /// 將所有已註冊點位儲存至 POINT&PATH/ 目錄下的檔案
+    /// </summary>
+    public void SaveToFile(string? filePath = null)
+    {
+        string targetPath = filePath ?? Path.Combine(ARCOS.Core.Common.ArcosPaths.PointAndPathDirectory, "Points.ini");
+        if (!Path.IsPathRooted(targetPath))
+        {
+            targetPath = Path.Combine(ARCOS.Core.Common.ArcosPaths.PointAndPathDirectory, targetPath);
+        }
+
+        string dir = Path.GetDirectoryName(targetPath) ?? "";
+        if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
+        {
+            Directory.CreateDirectory(dir);
+        }
+
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine("[Points]");
+        foreach (var kvp in _points)
+        {
+            var entry = kvp.Value;
+            if (entry.Points.Count == 1)
+            {
+                var pt = entry.Points[0];
+                sb.AppendLine($"{kvp.Key}={pt.X},{pt.Y},{pt.Z},{pt.U},{pt.V},{pt.W}");
+            }
+            else if (entry.Points.Count > 1)
+            {
+                string pts = string.Join(";", entry.Points.Select(pt => $"({pt.X},{pt.Y},{pt.Z},{pt.U},{pt.V},{pt.W})"));
+                sb.AppendLine($"{kvp.Key}={pts}");
+            }
+        }
+
+        File.WriteAllText(targetPath, sb.ToString(), System.Text.Encoding.UTF8);
+    }
+
+    /// <summary>
+    /// 從檔案載入點位至 PointEngine
+    /// </summary>
+    public void LoadFromFile(string? filePath = null)
+    {
+        string targetPath = filePath ?? Path.Combine(ARCOS.Core.Common.ArcosPaths.PointAndPathDirectory, "Points.ini");
+        if (!Path.IsPathRooted(targetPath) && !File.Exists(targetPath))
+        {
+            targetPath = Path.Combine(ARCOS.Core.Common.ArcosPaths.PointAndPathDirectory, targetPath);
+        }
+
+        if (!File.Exists(targetPath)) return;
+
+        var lines = File.ReadAllLines(targetPath, System.Text.Encoding.UTF8);
+
+        foreach (var rawLine in lines)
+        {
+            string line = rawLine.Trim();
+            if (string.IsNullOrEmpty(line) || line.StartsWith(';') || line.StartsWith('[')) continue;
+
+            int eq = line.IndexOf('=');
+            if (eq <= 0) continue;
+
+            string key = line.Substring(0, eq).Trim();
+            string val = line.Substring(eq + 1).Trim();
+
+            if (val.Contains('('))
+            {
+                // 多點陣列格式：(x,y,z,u,v,w);(x,y,z,u,v,w)
+                var pts = new List<MachinePoint>();
+                var tokens = val.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                foreach (var tok in tokens)
+                {
+                    string trimmed = tok.Trim('(', ')');
+                    var parts = trimmed.Split(',', StringSplitOptions.TrimEntries);
+                    if (parts.Length >= 6 &&
+                        double.TryParse(parts[0], out double x) &&
+                        double.TryParse(parts[1], out double y) &&
+                        double.TryParse(parts[2], out double z) &&
+                        double.TryParse(parts[3], out double u) &&
+                        double.TryParse(parts[4], out double v) &&
+                        double.TryParse(parts[5], out double w))
+                    {
+                        pts.Add(new MachinePoint(x, y, z, u, v, w));
+                    }
+                }
+                if (pts.Count > 0)
+                {
+                    SetPoint(key, pts[0]);
+                    for (int i = 1; i < pts.Count; i++) AppendPoint(key, pts[i]);
+                }
+            }
+            else
+            {
+                // 單點格式：x,y,z,u,v,w
+                var parts = val.Split(',', StringSplitOptions.TrimEntries);
+                if (parts.Length >= 6 &&
+                    double.TryParse(parts[0], out double x) &&
+                    double.TryParse(parts[1], out double y) &&
+                    double.TryParse(parts[2], out double z) &&
+                    double.TryParse(parts[3], out double u) &&
+                    double.TryParse(parts[4], out double v) &&
+                    double.TryParse(parts[5], out double w))
+                {
+                    SetPoint(key, new MachinePoint(x, y, z, u, v, w));
+                }
+            }
+        }
+    }
+
     private void UpdateIoLastFlag(string name, bool isLast)
     {
         _ioEngine?.SetPort($"{name}#Last?", isLast);

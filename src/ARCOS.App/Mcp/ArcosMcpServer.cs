@@ -375,7 +375,8 @@ public static class ArcosMcpServer
             "arcos_input" => await Dispatcher.UIThread.InvokeAsync(() => ToolInput(_mainWindow, args)),
             "arcos_sequencer_action" => await ToolSequencerActionAsync(_mainWindow, args),
             "arcos_io_action" => await Dispatcher.UIThread.InvokeAsync(() => ToolIoAction(_mainWindow, args)),
-            "arcos_capture_ui" => await Dispatcher.UIThread.InvokeAsync(() => ToolCaptureUi(_mainWindow, args)),
+            "arcos_run_command" => await Dispatcher.UIThread.InvokeAsync(() => ToolRunCommand(_mainWindow, args)),
+            "arcos_capture_ui" or "arcos_screenshot" => await Dispatcher.UIThread.InvokeAsync(() => ToolCaptureUi(_mainWindow, args)),
             _ => throw new InvalidOperationException($"Unknown tool: {toolName}")
         };
 
@@ -967,9 +968,26 @@ public static class ArcosMcpServer
         }
     }
 
+    private static string ToolRunCommand(MainWindow mainWin, JsonNode? args)
+    {
+        string cmd = args?["command"]?.GetValue<string>() ?? "";
+        if (string.IsNullOrWhiteSpace(cmd))
+            return JsonSerializer.Serialize(new { success = false, error = "command is required" });
+
+        var ctx = mainWin.VM.MainThreads[0];
+        var result = mainWin.VM.Executor.ExecuteCommandLine(ctx, cmd);
+        return JsonSerializer.Serialize(new
+        {
+            success = result.Status != ARCOS.Core.Execution.CommandStatus.Error,
+            status = result.Status.ToString(),
+            errorMessage = result.ErrorMessage,
+            command = cmd
+        });
+    }
+
     private static string ToolCaptureUi(MainWindow mainWin, JsonNode? args)
     {
-        string outputPath = args?["outputPath"]?.GetValue<string>() ?? throw new ArgumentException("outputPath is required");
+        string outputPath = args?["outputPath"]?.GetValue<string>() ?? args?["filePath"]?.GetValue<string>() ?? throw new ArgumentException("outputPath or filePath is required");
         string target = args?["target"]?.GetValue<string>() ?? "Auto";
 
         string fullOutPath = Path.GetFullPath(outputPath);

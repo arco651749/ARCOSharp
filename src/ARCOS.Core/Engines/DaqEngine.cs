@@ -202,4 +202,83 @@ public class DaqEngine
     {
         return _waveforms.Keys.ToList();
     }
+
+    /// <summary>
+    /// 將指定波形資料儲存為 CSV 檔案至 WAVEFORM/ 目錄
+    /// </summary>
+    public void SaveWaveform(string name, string? filePath = null, int channel = 0)
+    {
+        var entry = GetWaveform(name);
+        var chData = entry.GetOrCreateChannel(channel);
+
+        string targetPath = filePath ?? Path.Combine(ARCOS.Core.Common.ArcosPaths.WaveformDirectory, $"{name}_Ch{channel}.csv");
+        if (!Path.IsPathRooted(targetPath))
+        {
+            targetPath = Path.Combine(ARCOS.Core.Common.ArcosPaths.WaveformDirectory, targetPath);
+        }
+
+        string dir = Path.GetDirectoryName(targetPath) ?? "";
+        if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
+        {
+            Directory.CreateDirectory(dir);
+        }
+
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine($"# Waveform: {name}, Channel: {channel}, T0: {chData.T0:yyyy-MM-dd HH:mm:ss.fff}, Dt: {chData.Dt}");
+        sb.AppendLine("Index,Time_s,Value");
+        for (int i = 0; i < chData.Y.Length; i++)
+        {
+            sb.AppendLine($"{i},{(i * chData.Dt):F6},{chData.Y[i]}");
+        }
+
+        File.WriteAllText(targetPath, sb.ToString(), System.Text.Encoding.UTF8);
+    }
+
+    /// <summary>
+    /// 從 CSV 檔案載入波形資料至 DaqEngine
+    /// </summary>
+    public void LoadWaveform(string name, string? filePath = null, int channel = 0)
+    {
+        string targetPath = filePath ?? Path.Combine(ARCOS.Core.Common.ArcosPaths.WaveformDirectory, $"{name}_Ch{channel}.csv");
+        if (!Path.IsPathRooted(targetPath) && !File.Exists(targetPath))
+        {
+            targetPath = Path.Combine(ARCOS.Core.Common.ArcosPaths.WaveformDirectory, targetPath);
+        }
+
+        if (!File.Exists(targetPath)) return;
+
+        var lines = File.ReadAllLines(targetPath, System.Text.Encoding.UTF8);
+        var values = new List<double>();
+        double dt = 0.001;
+        DateTime t0 = DateTime.Now;
+
+        foreach (var rawLine in lines)
+        {
+            string line = rawLine.Trim();
+            if (string.IsNullOrEmpty(line)) continue;
+            if (line.StartsWith('#'))
+            {
+                int dtIdx = line.IndexOf("Dt:", StringComparison.OrdinalIgnoreCase);
+                if (dtIdx > 0)
+                {
+                    string dtStr = line.Substring(dtIdx + 3).Trim();
+                    if (double.TryParse(dtStr, out double parsedDt)) dt = parsedDt;
+                }
+                continue;
+            }
+            if (line.StartsWith("Index", StringComparison.OrdinalIgnoreCase)) continue;
+
+            var parts = line.Split(',', StringSplitOptions.TrimEntries);
+            if (parts.Length >= 3 && double.TryParse(parts[2], out double val))
+            {
+                values.Add(val);
+            }
+            else if (parts.Length == 1 && double.TryParse(parts[0], out double singleVal))
+            {
+                values.Add(singleVal);
+            }
+        }
+
+        SetWaveform(name, t0, dt, values.ToArray(), channel);
+    }
 }

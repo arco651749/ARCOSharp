@@ -24,6 +24,19 @@ public sealed class ArcosThreadVM
     public IReadOnlyList<ExecutionContext> MainThreads => _mainThreads;
     public IReadOnlyDictionary<string, ExecutionContext> SubThreads => _subThreads;
 
+    public event Action<string, bool>? OnProgramLoaded;
+    public event Action<string>? OnUserPanelOpenRequested;
+
+    public void NotifyProgramLoaded(string filePath, bool isPro)
+    {
+        OnProgramLoaded?.Invoke(filePath, isPro);
+    }
+
+    public void NotifyUserPanelOpen(string csviPath)
+    {
+        OnUserPanelOpenRequested?.Invoke(csviPath);
+    }
+
     public ArcosThreadVM(BasicEngines engines, DriverManager drivers, CommandExecutor? executor = null)
     {
         _engines = engines ?? throw new ArgumentNullException(nameof(engines));

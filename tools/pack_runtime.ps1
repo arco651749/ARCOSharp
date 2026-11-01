@@ -29,10 +29,13 @@ foreach ($m in $modules) {
     New-Item -ItemType Directory -Path "$OutputDir\MODULES\$m\USERPARAMETEREDITOR" -Force | Out-Null
 }
 New-Item -ItemType Directory -Path "$OutputDir\EXTRACMD\USERPARAMETEREDITOR" -Force | Out-Null
-New-Item -ItemType Directory -Path "$OutputDir\Pictures\CAM0" -Force | Out-Null
-New-Item -ItemType Directory -Path "$OutputDir\Pictures\CAM1" -Force | Out-Null
-New-Item -ItemType Directory -Path "$OutputDir\Pictures\CamTop" -Force | Out-Null
-New-Item -ItemType Directory -Path "$OutputDir\Waveforms" -Force | Out-Null
+New-Item -ItemType Directory -Path "$OutputDir\SCRIPT" -Force | Out-Null
+New-Item -ItemType Directory -Path "$OutputDir\LOGS" -Force | Out-Null
+New-Item -ItemType Directory -Path "$OutputDir\PICTURE\CAM0" -Force | Out-Null
+New-Item -ItemType Directory -Path "$OutputDir\PICTURE\CAM1" -Force | Out-Null
+New-Item -ItemType Directory -Path "$OutputDir\PICTURE\CamTop" -Force | Out-Null
+New-Item -ItemType Directory -Path "$OutputDir\WAVEFORM" -Force | Out-Null
+New-Item -ItemType Directory -Path "$OutputDir\POINT&PATH" -Force | Out-Null
 New-Item -ItemType Directory -Path "$OutputDir\Python" -Force | Out-Null
 
 # 2. Publish ARCOS.App Host
@@ -230,4 +233,13 @@ foreach ($d in $driverProjects) {
 $ioCsvis = (Get-ChildItem -Path "$OutputDir\MODULES\IO" -Filter "*.csvi" | Select-Object -ExpandProperty Name) -join ", "
 Write-Host "  -> MODULES\IO CSVI Instruments : [ $ioCsvis ]" -ForegroundColor Cyan
 
-Write-Host "`n[SUCCESS] ARCOS Runtime Bundle successfully packaged at: $OutputDir" -ForegroundColor Green
+Write-Host "`n[SUCCESS] ARCOS Runtime Bundle successfully packaged at: $OutputDir" -ForegroundColor Green
+
+# 7. Zip Runtime Bundle for Beta Distribution
+$zipFile = "$PSScriptRoot\..\dist\ARCOS_v3.0_Beta.zip"
+Write-Host "`n[Packaging] Compressing Runtime into $zipFile..." -ForegroundColor Yellow
+if (Test-Path $zipFile) {
+    Remove-Item -Path $zipFile -Force
+}
+Compress-Archive -Path "$OutputDir\*" -DestinationPath $zipFile -Force
+Write-Host "[SUCCESS] ARCOS v3.0 Beta Zip Distribution created successfully: $zipFile" -ForegroundColor Green

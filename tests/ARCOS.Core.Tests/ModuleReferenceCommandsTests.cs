@@ -392,4 +392,70 @@ LaserMarking@StartMark::Text=SN12345;
 
         Assert.Equal("MarkingCompleted", engines.Variable.Get("LaserStatus", ctx.CurrentSection));
     }
+
+    [Fact]
+    public void SystemAndEngines_DirectoryConventionsAndFileOperations()
+    {
+        // 1. 確保目錄初始化
+        ARCOS.Core.Common.ArcosPaths.EnsureDirectoriesExist();
+        Assert.True(Directory.Exists(ARCOS.Core.Common.ArcosPaths.ScriptDirectory));
+        Assert.True(Directory.Exists(ARCOS.Core.Common.ArcosPaths.LogsDirectory));
+        Assert.True(Directory.Exists(ARCOS.Core.Common.ArcosPaths.PictureDirectory));
+        Assert.True(Directory.Exists(ARCOS.Core.Common.ArcosPaths.WaveformDirectory));
+        Assert.True(Directory.Exists(ARCOS.Core.Common.ArcosPaths.PointAndPathDirectory));
+
+        // 2. PointEngine Save & Load in POINT&PATH
+        var ptEngine = new PointEngine();
+        ptEngine.SetPoint("P_TestUnit", new MachinePoint(12.3, 45.6, 78.9, 10.0, 20.0, 30.0));
+        string ptFile = Path.Combine(ARCOS.Core.Common.ArcosPaths.PointAndPathDirectory, "TestPoints.ini");
+        ptEngine.SaveToFile(ptFile);
+        Assert.True(File.Exists(ptFile));
+
+        var ptEngine2 = new PointEngine();
+        ptEngine2.LoadFromFile(ptFile);
+        var loadedPt = ptEngine2.GetPoint("P_TestUnit");
+        Assert.Equal(12.3, loadedPt.X, 3);
+        Assert.Equal(45.6, loadedPt.Y, 3);
+        Assert.Equal(78.9, loadedPt.Z, 3);
+
+        // 3. DaqEngine Save & Load in WAVEFORM
+        var daqEngine = new DaqEngine();
+        double[] testY = new double[] { 0.1, 0.5, 1.2, 2.5, 1.0, 0.0 };
+        daqEngine.SetWaveform("Wf_TestUnit", DateTime.Now, 0.002, testY, channel: 0);
+        string wfFile = Path.Combine(ARCOS.Core.Common.ArcosPaths.WaveformDirectory, "TestWf.csv");
+        daqEngine.SaveWaveform("Wf_TestUnit", wfFile, channel: 0);
+        Assert.True(File.Exists(wfFile));
+
+        var daqEngine2 = new DaqEngine();
+        daqEngine2.LoadWaveform("Wf_Loaded", wfFile, channel: 0);
+        var loadedWf = daqEngine2.GetWaveform("Wf_Loaded");
+        var ch0 = loadedWf.GetOrCreateChannel(0);
+        Assert.Equal(testY.Length, ch0.Y.Length);
+        Assert.Equal(0.002, ch0.Dt, 4);
+
+        // 4. Capture@ImageSave in PICTURE/<CamName>/
+        var (ctx, executor, engines) = CreateHarness("Capture@ImageSave::CAM_INSPECT,Frame01.bmp;");
+        using var dummyMat = new OpenCvSharp.Mat(100, 100, OpenCvSharp.MatType.CV_8UC3, new OpenCvSharp.Scalar(100, 150, 200));
+        engines.Image.SetSingleImage("CAM_INSPECT", dummyMat);
+        RunToEnd(ctx, executor);
+
+        string expectedImgPath = Path.Combine(ARCOS.Core.Common.ArcosPaths.GetCameraPictureDirectory("CAM_INSPECT"), "Frame01.bmp");
+        Assert.True(File.Exists(expectedImgPath));
+
+        // 5. ExecutionContext.Log writes to LOGS/yyyyMMdd.log
+        ctx.Log("Unit test verification log message");
+        string logPath = ARCOS.Core.Common.ArcosPaths.GetTodayLogFilePath();
+        Assert.True(File.Exists(logPath));
+        string logContent = File.ReadAllText(logPath);
+        Assert.Contains("Unit test verification log message", logContent);
+
+        // 6. System@UserPanelOpen triggers VM callback
+        var (ctxPanel, execPanel, enginesPanel) = CreateHarness("System@UserPanelOpen::CustomRecipePanel.csvi;");
+        string requestedPanel = "";
+        ctxPanel.VM = new ArcosThreadVM(enginesPanel, new DriverManager(enginesPanel));
+        ctxPanel.VM.OnUserPanelOpenRequested += (panel) => requestedPanel = panel;
+        RunToEnd(ctxPanel, execPanel);
+        Assert.Equal("CustomRecipePanel.csvi", requestedPanel);
+    }
+
 }

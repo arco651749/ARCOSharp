@@ -179,4 +179,40 @@ public sealed class CommandExecutor
         ctx.IsRunning = false;
         return errorResult;
     }
+
+    /// <summary>
+    /// 直接執行單行腳本指令（供即時指令輸入、MCP 遠端呼叫或診斷使用）
+    /// </summary>
+    public CommandResult ExecuteCommandLine(ExecutionContext ctx, string commandLine)
+    {
+        ArgumentNullException.ThrowIfNull(ctx);
+        if (string.IsNullOrWhiteSpace(commandLine))
+        {
+            return CommandResult.Done();
+        }
+
+        var item = CommandItem.Parse(commandLine);
+        if (item.IsEmpty || item.IsComment)
+        {
+            return CommandResult.Done();
+        }
+
+        string filteredParam = ctx.Engines.Variable.FilterParameters(item.RawParameter, ctx.CurrentSection);
+
+        var handler = Registry.GetHandler(item.Module);
+        if (handler == null)
+        {
+            string err = $"Module '{item.Module}' not found in registry ({item.Command})";
+            return CommandResult.Fail(err);
+        }
+
+        try
+        {
+            return handler.Execute(item.Action, filteredParam, ctx);
+        }
+        catch (Exception ex)
+        {
+            return CommandResult.Fail($"Exception in '{item.Command}': {ex.Message}");
+        }
+    }
 }

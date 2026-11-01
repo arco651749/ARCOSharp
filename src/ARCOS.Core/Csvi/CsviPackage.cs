@@ -13,6 +13,7 @@ public class CsviPackage
     public Dictionary<string, string> EmbeddedSourceFiles { get; set; } = new();
     public Dictionary<string, string> EmbeddedRuntimeXaml { get; set; } = new();
     public byte[] AssemblyRawBytes { get; set; } = Array.Empty<byte>();
+    public Assembly? LoadedAssembly { get; set; }
     public bool HasSourceBundleResource { get; set; }
 
     public static CsviPackage LoadFromBytes(byte[] csviBytes, string? password = null, bool unpackSources = true)
@@ -21,9 +22,10 @@ public class CsviPackage
         {
             AssemblyRawBytes = csviBytes
         };
+        var asm = Assembly.Load(csviBytes);
+        package.LoadedAssembly = asm;
 
         // 載入 Assembly 檢查 ManifestResource
-        var asm = Assembly.Load(csviBytes);
 
         // 1. 讀取 Manifest
         using (var manifestStream = asm.GetManifestResourceStream("CSVI.Manifest.json"))
@@ -68,6 +70,8 @@ public class CsviPackage
 
         return package;
     }
+
+    public static CsviPackage Load(string filePath) => LoadFromFile(filePath);
 
     public static CsviPackage LoadFromFile(string filePath, string? password = null, bool unpackSources = true)
     {

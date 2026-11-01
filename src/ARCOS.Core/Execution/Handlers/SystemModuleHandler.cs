@@ -204,17 +204,52 @@ public class SystemModuleHandler : IModuleHandler
 
         if (action.Equals("ProgramLoad", StringComparison.OrdinalIgnoreCase))
         {
-            string proPath = filteredParam.Trim();
+            string inputPath = filteredParam.Trim();
+            string proPath = inputPath;
+            bool isInit = proPath.EndsWith(".init", StringComparison.OrdinalIgnoreCase);
+
+            if (!Path.IsPathRooted(proPath))
+            {
+                proPath = isInit 
+                    ? ARCOS.Core.Common.ArcosPaths.ResolveInitPath(inputPath)
+                    : ARCOS.Core.Common.ArcosPaths.ResolveProPath(inputPath);
+            }
+
             if (File.Exists(proPath))
             {
-                ctx.Log($"Loading program file '{proPath}'");
+                if (isInit)
+                {
+                    var prog = Serialization.ScriptSerializer.LoadInitFile(proPath, ctx.Program.ProgramNumber, Path.GetFileNameWithoutExtension(proPath));
+                    ctx.VM?.LoadProgram(ctx.Program.ProgramNumber, prog);
+                    ctx.VM?.NotifyProgramLoaded(proPath, false);
+                    ctx.Log($"Loaded .init program '{proPath}' into slot {ctx.Program.ProgramNumber}");
+                }
+                else
+                {
+                    var progs = Serialization.ScriptSerializer.LoadProFile(proPath);
+                    if (ctx.VM != null)
+                    {
+                        foreach (var p in progs)
+                        {
+                            ctx.VM.LoadProgram(p.ProgramNumber, p);
+                        }
+                    }
+                    ctx.VM?.NotifyProgramLoaded(proPath, true);
+                    ctx.Log($"Loaded .pro project '{proPath}' with {progs.Count} programs");
+                }
+            }
+            else
+            {
+                ctx.Log($"[WARN] Program file '{inputPath}' not found (resolved to '{proPath}')", isError: true);
             }
             return CommandResult.Done();
         }
 
         if (action.Equals("UserPanelOpen", StringComparison.OrdinalIgnoreCase))
         {
-            ctx.Log($"[UserPanelOpen] {filteredParam.Trim()}");
+            string panelPath = filteredParam.Trim();
+            ctx.VM?.NotifyUserPanelOpen(panelPath);
+            ctx.Log($"[UserPanelOpen] Requested panel '{panelPath}'");
             return CommandResult.Done();
         }
 

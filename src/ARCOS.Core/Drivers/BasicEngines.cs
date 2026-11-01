@@ -12,6 +12,7 @@ public class BasicEngines
     public VariableEngine Variable { get; }
     public PointEngine Point { get; }
     public ImageEngine Image { get; }
+    public ImageEngine Imaq => Image;
     public DaqEngine Daq { get; }
     public TimerEngine Timer { get; }
 
