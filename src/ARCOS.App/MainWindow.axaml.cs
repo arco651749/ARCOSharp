@@ -35,6 +35,12 @@ public partial class MainWindow : Window
     private object? _defaultSubPanelContent;
     private object? _cachedIoFrontPanel;
 
+    public BasicEngines Engines => _engines;
+    public DriverManager DriverManager => _driverManager;
+    public ArcosThreadVM VM => _vm;
+    public ObservableCollection<IoChannelViewModel> IoChannels => _ioChannels;
+    public SequencerEditorControl? Sequencer => this.FindControl<SequencerEditorControl>("SequencerEditor");
+
     public MainWindow()
     {
         InitializeComponent();
@@ -106,6 +112,9 @@ public partial class MainWindow : Window
         // 初始系統就緒記錄
         _vm.MainThreads[0].Log("[INFO] ARCOS System Ready. Program Table Loaded.");
 
+        // 啟動內嵌 MCP 與本地自動化控制介面
+        Mcp.ArcosMcpServer.AttachMainWindow(this);
+
         // 預設切換至首頁 USER TAB 產線核心操作畫面
         this.Loaded += (_, _) =>
         {
@@ -167,6 +176,7 @@ public partial class MainWindow : Window
         try
         {
             _driverManager.AddDevice("DAQ", "PressSensor", "MockDAQ", "Rate=1000,Channels=1", _engines);
+            _driverManager.AddDevice("DAQ", "Daq0", "MockDAQ", "Rate=1000,Count=500,Wave=Press", _engines);
         }
         catch (Exception ex)
         {
@@ -327,7 +337,7 @@ public partial class MainWindow : Window
                     container.Content = _defaultSubPanelContent;
                     break;
                 case 1: // IO Dashboard (IO.csvi Front Panel)
-                    _cachedIoFrontPanel ??= ARCOS.App.Guidance.ParameterGuidanceManager.Instance.GetFrontPanel("IO@SetPort")
+                    _cachedIoFrontPanel = ARCOS.App.Guidance.ParameterGuidanceManager.Instance.GetFrontPanel("IO@SetPort")
                                           ?? ARCOS.App.Guidance.ParameterGuidanceManager.Instance.GetFrontPanel("IO");
                     if (_cachedIoFrontPanel != null)
                     {
@@ -346,6 +356,69 @@ public partial class MainWindow : Window
                     {
                         container.Content = driverView;
                     }
+                    break;
+                case 3: // System Master Dashboard (System.csvi Front Panel)
+                    var sysPanel = ARCOS.App.Guidance.ParameterGuidanceManager.Instance.GetFrontPanel("System");
+                    if (sysPanel != null)
+                    {
+                        container.Content = sysPanel;
+                        if (sysPanel is Avalonia.Controls.Control ctrl && ctrl.DataContext != null)
+                        {
+                            var method = ctrl.DataContext.GetType().GetMethod("RefreshFromEngines");
+                            method?.Invoke(ctrl.DataContext, new object[] { _engines });
+                        }
+                    }
+                    break;
+                case 4: // Thread Monitor (Thread.csvi Front Panel)
+                    var threadPanel = ARCOS.App.Guidance.ParameterGuidanceManager.Instance.GetFrontPanel("Thread");
+                    if (threadPanel != null) container.Content = threadPanel;
+                    break;
+                case 5: // Capture Viewfinder (Capture.csvi Front Panel)
+                    var capPanel = ARCOS.App.Guidance.ParameterGuidanceManager.Instance.GetFrontPanel("Capture");
+                    if (capPanel != null) container.Content = capPanel;
+                    break;
+                case 6: // MockCamera Driver (MockCamera.csvi Front Panel)
+                    var camDriver = _driverManager.GetDevice("Capture", "CamTop");
+                    var camView = camDriver?.CreateDriverView();
+                    if (camView != null) container.Content = camView;
+                    break;
+                case 7: // DAQ Oscilloscope (DAQ.csvi Front Panel)
+                    var daqPanel = ARCOS.App.Guidance.ParameterGuidanceManager.Instance.GetFrontPanel("DAQ");
+                    if (daqPanel != null) container.Content = daqPanel;
+                    break;
+                case 8: // MockDAQ Driver (MockDAQ.csvi Front Panel)
+                    var daqDriver = _driverManager.GetDevice("DAQ", "PressSensor") ?? _driverManager.GetDevice("DAQ", "Daq0");
+                    var daqView = daqDriver?.CreateDriverView();
+                    if (daqView != null) container.Content = daqView;
+                    break;
+                case 9: // Variable Watcher (Variable.csvi Front Panel)
+                    var varPanel = ARCOS.App.Guidance.ParameterGuidanceManager.Instance.GetFrontPanel("Variable");
+                    if (varPanel != null)
+                    {
+                        container.Content = varPanel;
+                        if (varPanel is Avalonia.Controls.Control ctrl && ctrl.DataContext != null)
+                        {
+                            var method = ctrl.DataContext.GetType().GetMethod("RefreshFromEngines");
+                            method?.Invoke(ctrl.DataContext, new object[] { _engines });
+                        }
+                    }
+                    break;
+                case 10: // Motion Controller (Motion.csvi Front Panel)
+                    var motionPanel = ARCOS.App.Guidance.ParameterGuidanceManager.Instance.GetFrontPanel("Motion");
+                    if (motionPanel != null)
+                    {
+                        container.Content = motionPanel;
+                        if (motionPanel is Avalonia.Controls.Control ctrl && ctrl.DataContext != null)
+                        {
+                            var method = ctrl.DataContext.GetType().GetMethod("RefreshFromEngines");
+                            method?.Invoke(ctrl.DataContext, new object[] { _engines });
+                        }
+                    }
+                    break;
+                case 11: // MockMotion Driver (MockMotion.csvi Front Panel)
+                    var motDriver = _driverManager.GetDevice("Motion", "Station1") ?? _driverManager.GetDevice("Motion", "Motor1") ?? _driverManager.GetDevice("Motion", "Arm1");
+                    var motView = motDriver?.CreateDriverView();
+                    if (motView != null) container.Content = motView;
                     break;
             }
         };
@@ -373,6 +446,96 @@ public partial class MainWindow : Window
             {
                 if (cmbSubPanel != null) cmbSubPanel.SelectedIndex = 2;
                 else switchSubPanel(2);
+            };
+        }
+
+        var btnMountSystem = this.FindControl<Button>("BtnMountSystemPanel");
+        if (btnMountSystem != null)
+        {
+            btnMountSystem.Click += (_, _) =>
+            {
+                if (cmbSubPanel != null) cmbSubPanel.SelectedIndex = 3;
+                else switchSubPanel(3);
+            };
+        }
+
+        var btnMountThread = this.FindControl<Button>("BtnMountThreadPanel");
+        if (btnMountThread != null)
+        {
+            btnMountThread.Click += (_, _) =>
+            {
+                if (cmbSubPanel != null) cmbSubPanel.SelectedIndex = 4;
+                else switchSubPanel(4);
+            };
+        }
+
+        var btnMountCapture = this.FindControl<Button>("BtnMountCapturePanel");
+        if (btnMountCapture != null)
+        {
+            btnMountCapture.Click += (_, _) =>
+            {
+                if (cmbSubPanel != null) cmbSubPanel.SelectedIndex = 5;
+                else switchSubPanel(5);
+            };
+        }
+
+        var btnMountCam = this.FindControl<Button>("BtnMountCamDriver");
+        if (btnMountCam != null)
+        {
+            btnMountCam.Click += (_, _) =>
+            {
+                if (cmbSubPanel != null) cmbSubPanel.SelectedIndex = 6;
+                else switchSubPanel(6);
+            };
+        }
+
+        var btnMountDaq = this.FindControl<Button>("BtnMountDaqPanel");
+        if (btnMountDaq != null)
+        {
+            btnMountDaq.Click += (_, _) =>
+            {
+                if (cmbSubPanel != null) cmbSubPanel.SelectedIndex = 7;
+                else switchSubPanel(7);
+            };
+        }
+
+        var btnMountDaqDriver = this.FindControl<Button>("BtnMountDaqDriver");
+        if (btnMountDaqDriver != null)
+        {
+            btnMountDaqDriver.Click += (_, _) =>
+            {
+                if (cmbSubPanel != null) cmbSubPanel.SelectedIndex = 8;
+                else switchSubPanel(8);
+            };
+        }
+
+        var btnMountVar = this.FindControl<Button>("BtnMountVariablePanel");
+        if (btnMountVar != null)
+        {
+            btnMountVar.Click += (_, _) =>
+            {
+                if (cmbSubPanel != null) cmbSubPanel.SelectedIndex = 9;
+                else switchSubPanel(9);
+            };
+        }
+
+        var btnMountMotion = this.FindControl<Button>("BtnMountMotionPanel");
+        if (btnMountMotion != null)
+        {
+            btnMountMotion.Click += (_, _) =>
+            {
+                if (cmbSubPanel != null) cmbSubPanel.SelectedIndex = 10;
+                else switchSubPanel(10);
+            };
+        }
+
+        var btnMountMotionDriver = this.FindControl<Button>("BtnMountMotionDriver");
+        if (btnMountMotionDriver != null)
+        {
+            btnMountMotionDriver.Click += (_, _) =>
+            {
+                if (cmbSubPanel != null) cmbSubPanel.SelectedIndex = 11;
+                else switchSubPanel(11);
             };
         }
 

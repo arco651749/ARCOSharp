@@ -99,17 +99,35 @@
                                         <Grid ColumnDefinitions="Auto,*,Auto">
                                             <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                                                 <TextBlock Text="🎛️ SUBPANEL VIEW:" FontWeight="Bold" FontSize="11" Foreground="#475569" VerticalAlignment="Center"/>
-                                                <ComboBox x:Name="CmbSubPanelSelect" Width="230" Height="28" FontSize="11" VerticalContentAlignment="Center">
+                                                <ComboBox x:Name="CmbSubPanelSelect" Width="260" Height="28" FontSize="11" VerticalContentAlignment="Center">
                                                     <ComboBoxItem Content="Station HMI (Default)" IsSelected="True"/>
                                                     <ComboBoxItem Content="IO Dashboard (IO.csvi Front Panel)"/>
                                                     <ComboBoxItem Content="MockIO Driver (MockIO.csvi Front Panel)"/>
+                                                    <ComboBoxItem Content="System Dashboard (System.csvi Front Panel)"/>
+                                                    <ComboBoxItem Content="Thread Monitor (Thread.csvi Front Panel)"/>
+                                                    <ComboBoxItem Content="Capture Viewfinder (Capture.csvi Front Panel)"/>
+                                                    <ComboBoxItem Content="MockCamera Driver (MockCamera.csvi Front Panel)"/>
+                                                    <ComboBoxItem Content="DAQ Oscilloscope (DAQ.csvi Front Panel)"/>
+                                                    <ComboBoxItem Content="MockDAQ Driver (MockDAQ.csvi Front Panel)"/>
+                                                    <ComboBoxItem Content="Variable Watcher (Variable.csvi Front Panel)"/>
+                                                    <ComboBoxItem Content="Motion Controller (Motion.csvi Front Panel)"/>
+                                                    <ComboBoxItem Content="MockMotion Driver (MockMotion.csvi Front Panel)"/>
                                                 </ComboBox>
                                             </StackPanel>
 
-                                            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6">
-                                                <Button x:Name="BtnMountIoPanel" Content="Mount IO CSVI" Height="28" Padding="10,0" FontSize="11" FontWeight="SemiBold" Background="#0284C7" Foreground="White" CornerRadius="3"/>
-                                                <Button x:Name="BtnMountDriverPanel" Content="Mount Driver CSVI" Height="28" Padding="10,0" FontSize="11" FontWeight="SemiBold" Background="#0F766E" Foreground="White" CornerRadius="3"/>
-                                                <Button x:Name="BtnResetSubPanel" Content="Reset Default" Height="28" Padding="10,0" FontSize="11" Background="#E2E8F0" Foreground="#334155" CornerRadius="3"/>
+                                            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4">
+                                                <Button x:Name="BtnMountIoPanel" Content="IO" Height="28" Padding="6,0" FontSize="11" FontWeight="SemiBold" Background="#0284C7" Foreground="White" CornerRadius="3"/>
+                                                <Button x:Name="BtnMountDriverPanel" Content="Driver" Height="28" Padding="6,0" FontSize="11" FontWeight="SemiBold" Background="#0F766E" Foreground="White" CornerRadius="3"/>
+                                                <Button x:Name="BtnMountSystemPanel" Content="System" Height="28" Padding="6,0" FontSize="11" FontWeight="SemiBold" Background="#7C3AED" Foreground="White" CornerRadius="3"/>
+                                                <Button x:Name="BtnMountThreadPanel" Content="Thread" Height="28" Padding="6,0" FontSize="11" FontWeight="SemiBold" Background="#D97706" Foreground="White" CornerRadius="3"/>
+                                                <Button x:Name="BtnMountCapturePanel" Content="Capture" Height="28" Padding="6,0" FontSize="11" FontWeight="SemiBold" Background="#2563EB" Foreground="White" CornerRadius="3"/>
+                                                <Button x:Name="BtnMountCamDriver" Content="Cam" Height="28" Padding="6,0" FontSize="11" FontWeight="SemiBold" Background="#0284C7" Foreground="White" CornerRadius="3"/>
+                                                <Button x:Name="BtnMountDaqPanel" Content="DAQ" Height="28" Padding="6,0" FontSize="11" FontWeight="SemiBold" Background="#059669" Foreground="White" CornerRadius="3"/>
+                                                <Button x:Name="BtnMountDaqDriver" Content="DaqDrv" Height="28" Padding="6,0" FontSize="11" FontWeight="SemiBold" Background="#0F766E" Foreground="White" CornerRadius="3"/>
+                                                <Button x:Name="BtnMountVariablePanel" Content="Var" Height="28" Padding="6,0" FontSize="11" FontWeight="SemiBold" Background="#9333EA" Foreground="White" CornerRadius="3"/>
+                                                <Button x:Name="BtnMountMotionPanel" Content="Mot" Height="28" Padding="6,0" FontSize="11" FontWeight="SemiBold" Background="#0284C7" Foreground="White" CornerRadius="3"/>
+                                                <Button x:Name="BtnMountMotionDriver" Content="MMot" Height="28" Padding="6,0" FontSize="11" FontWeight="SemiBold" Background="#0369A1" Foreground="White" CornerRadius="3"/>
+                                                <Button x:Name="BtnResetSubPanel" Content="Reset" Height="28" Padding="6,0" FontSize="11" Background="#E2E8F0" Foreground="#334155" CornerRadius="3"/>
                                             </StackPanel>
                                         </Grid>
                                     </Border>

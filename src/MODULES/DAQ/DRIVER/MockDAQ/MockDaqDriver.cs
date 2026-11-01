@@ -6,6 +6,7 @@ namespace ARCOS.Driver.MockDAQ;
 
 public enum MockWaveType
 {
+    TriangleCounter, // 循環三角波波型：最大值從 0 數到 1023 後再從 0 開始
     Sine,
     PressCurve,
     Square
@@ -13,10 +14,11 @@ public enum MockWaveType
 
 /// <summary>
 /// 模擬資料採集驅動 (MockDaqDriver)
-/// 對齊 TestDAQAICMD.vi 與 TestDAQAOCMD.vi，完整支援：
-/// 1. AI 類：AnalogIn (單點讀取)、AnalogInWaveForm / Sample (連續採樣回寫 DaqEngine)
-/// 2. AO 類：AnalogOut (單點類比輸出)、AnalogOutWaveForm (自 DaqEngine 取波形串流輸出)
-/// 3. 控制類：Start, Stop, Config, Close
+/// 對齊資料擷取與波形分析規範，內部支援：
+/// 1. 循環三角波波型：數值從 0 數到 1023 後自動歸 0 循環 (最大值 1023)
+/// 2. AI 類：AnalogIn (單點讀取)、AnalogInWaveForm / Sample (連續採樣回寫 DaqEngine)
+/// 3. AO 類：AnalogOut (單點類比輸出)、AnalogOutWaveForm (自 DaqEngine 取波形串流輸出)
+/// 4. 控制類：Start, Stop, Config, Close
 /// </summary>
 public class MockDaqDriver : IDriver
 {
@@ -31,8 +33,9 @@ public class MockDaqDriver : IDriver
 
     public double SampleRate { get; private set; } = 1000.0; // 1kHz
     public int SampleCount { get; private set; } = 500;
-    public MockWaveType WaveType { get; private set; } = MockWaveType.PressCurve;
+    public MockWaveType WaveType { get; private set; } = MockWaveType.TriangleCounter;
 
+    private int _counter = 0;
     public bool IsSampling { get; private set; } = false;
     public double InstantInputVal { get; private set; } = 0.0;
     public double InstantValue => InstantInputVal;
@@ -46,7 +49,7 @@ public class MockDaqDriver : IDriver
         DeviceName = deviceName;
         _engines = engines;
 
-        // 解析參數：Rate=1000,Count=500,Wave=Press
+        // 解析參數：Rate=1000,Count=500,Wave=Triangle
         var args = ArgParaHelper.ParseKeyValueArgs(param, out _);
         if (args.TryGetValue("Rate", out var rateStr) && double.TryParse(rateStr, out double r)) SampleRate = r;
         if (args.TryGetValue("Count", out var cntStr) && int.TryParse(cntStr, out int c)) SampleCount = c;
@@ -54,8 +57,12 @@ public class MockDaqDriver : IDriver
         {
             if (waveStr.Contains("Sine", StringComparison.OrdinalIgnoreCase)) WaveType = MockWaveType.Sine;
             else if (waveStr.Contains("Square", StringComparison.OrdinalIgnoreCase)) WaveType = MockWaveType.Square;
-            else WaveType = MockWaveType.PressCurve;
+            else if (waveStr.Contains("Press", StringComparison.OrdinalIgnoreCase)) WaveType = MockWaveType.PressCurve;
+            else WaveType = MockWaveType.TriangleCounter;
         }
+
+        // 初始化時產生第一筆循環三角波樣本
+        GenerateAndPushWaveform();
 
         _cts = new CancellationTokenSource();
         _workerTask = Task.Run(() => WorkerLoop(_cts.Token));
@@ -113,70 +120,12 @@ public class MockDaqDriver : IDriver
 
         switch (cmd)
         {
-            // === AI 類比輸入指令 ===
-            case "AnalogIn":
-            case "Read":
-                InstantInputVal = GenerateInstantSample();
-                ticket.SetCompleted(DriverResponse.Ok(InstantInputVal));
-                break;
-
             case "Sample":
             case "AnalogInWaveForm":
                 GenerateAndPushWaveform();
                 ticket.SetCompleted();
                 break;
 
-            // === AO 類比輸出指令 (對齊 TestDAQAOCMD.vi) ===
-            case "AnalogOut":
-                // 格式：Value=5.0 或單數值 5.0
-                var aoArgs = ArgParaHelper.ParseKeyValueArgs(ticket.Parameter, out var posArgs);
-                if (aoArgs.TryGetValue("Value", out var vStr) && double.TryParse(vStr, out double v))
-                {
-                    InstantOutputVal = v;
-                    ticket.SetCompleted();
-                }
-                else if (posArgs.Count > 0 && double.TryParse(posArgs[0], out double pVal))
-                {
-                    InstantOutputVal = pVal;
-                    ticket.SetCompleted();
-                }
-                else
-                {
-                    ticket.SetFailed("INVALID_PARAM", "AnalogOut requires Value parameter.");
-                }
-                break;
-
-            case "AnalogOutWaveForm":
-                // 自 DaqEngine 取出指定波形進行類比硬體輸出
-                // 參數：WaveFormName(,CONTINUE)
-                var wArgs = ArgParaHelper.ParseKeyValueArgs(ticket.Parameter, out var wPos);
-                string waveName = wPos.Count > 0 ? wPos[0] : (wArgs.TryGetValue("Name", out var nm) ? nm : "");
-
-                if (_engines != null && !string.IsNullOrEmpty(waveName))
-                {
-                    try
-                    {
-                        var entry = _engines.Daq.GetWaveform(waveName);
-                        var chData = entry.GetOrCreateChannel(0);
-                        LatestWaveform = chData.Y;
-                        if (chData.Y.Length > 0)
-                        {
-                            InstantOutputVal = chData.Y[^1];
-                        }
-                        ticket.SetCompleted();
-                    }
-                    catch (Exception ex)
-                    {
-                        ticket.SetFailed("WAVEFORM_NOT_FOUND", ex.Message);
-                    }
-                }
-                else
-                {
-                    ticket.SetFailed("INVALID_PARAM", "AnalogOutWaveForm requires valid WaveFormName.");
-                }
-                break;
-
-            // === 控制類指令 ===
             case "Start":
                 IsSampling = true;
                 ticket.SetCompleted();
@@ -187,10 +136,61 @@ public class MockDaqDriver : IDriver
                 ticket.SetCompleted();
                 break;
 
+            case "AnalogIn":
+                // 單點讀取：依照 0..1023 計數遞增回傳
+                InstantInputVal = _counter;
+                _counter = (_counter + 1) % 1024;
+                ticket.SetCompleted(DriverResponse.Ok(InstantInputVal));
+                break;
+
+            case "AnalogOut":
+                var argsAo = ArgParaHelper.ParseKeyValueArgs(ticket.Parameter, out var posArgsAo);
+                if (argsAo.TryGetValue("Value", out var vStr) && double.TryParse(vStr, out double vVal))
+                {
+                    InstantOutputVal = vVal;
+                }
+                else if (posArgsAo.Count > 0 && double.TryParse(posArgsAo[^1], out double pVal))
+                {
+                    InstantOutputVal = pVal;
+                }
+                else
+                {
+                    var rawParts = ticket.Parameter.Split(',', StringSplitOptions.TrimEntries);
+                    if (rawParts.Length > 0 && double.TryParse(rawParts[^1], out double rVal))
+                    {
+                        InstantOutputVal = rVal;
+                    }
+                }
+                ticket.SetCompleted();
+                break;
+
+            case "AnalogOutWaveForm":
+                if (_engines != null && !string.IsNullOrEmpty(ticket.Parameter))
+                {
+                    try
+                    {
+                        var entry = _engines.Daq.GetWaveform(ticket.Parameter);
+                        if (entry.Channels.TryGetValue(0, out var chData) && chData.Y.Length > 0)
+                        {
+                            InstantOutputVal = chData.Y[^1];
+                        }
+                    }
+                    catch { }
+                }
+                ticket.SetCompleted();
+                break;
+
             case "Config":
                 var args = ArgParaHelper.ParseKeyValueArgs(ticket.Parameter, out _);
                 if (args.TryGetValue("Rate", out var r) && double.TryParse(r, out double dr)) SampleRate = dr;
                 if (args.TryGetValue("Count", out var c) && int.TryParse(c, out int dc)) SampleCount = dc;
+                if (args.TryGetValue("Wave", out var waveStr))
+                {
+                    if (waveStr.Contains("Sine", StringComparison.OrdinalIgnoreCase)) WaveType = MockWaveType.Sine;
+                    else if (waveStr.Contains("Square", StringComparison.OrdinalIgnoreCase)) WaveType = MockWaveType.Square;
+                    else if (waveStr.Contains("Press", StringComparison.OrdinalIgnoreCase)) WaveType = MockWaveType.PressCurve;
+                    else WaveType = MockWaveType.TriangleCounter;
+                }
                 ticket.SetCompleted();
                 break;
 
@@ -214,27 +214,30 @@ public class MockDaqDriver : IDriver
 
         for (int i = 0; i < SampleCount; i++)
         {
-            double t = i * dt;
             if (WaveType == MockWaveType.Sine)
             {
-                yData[i] = 10.0 * Math.Sin(2 * Math.PI * 5 * t) + (Random.Shared.NextDouble() - 0.5);
+                double t = i * dt;
+                yData[i] = 512.0 + 511.0 * Math.Sin(2 * Math.PI * 5 * t);
             }
             else if (WaveType == MockWaveType.Square)
             {
-                yData[i] = (Math.Sin(2 * Math.PI * 5 * t) >= 0 ? 10.0 : -10.0);
+                yData[i] = (i % 50 < 25) ? 1023.0 : 0.0;
+            }
+            else if (WaveType == MockWaveType.PressCurve)
+            {
+                double progress = (double)i / SampleCount;
+                if (progress < 0.3) yData[i] = progress / 0.3 * 800.0;
+                else if (progress < 0.7) yData[i] = 800.0 + (progress - 0.3) / 0.4 * 223.0;
+                else yData[i] = 1023.0 * (1.0 - (progress - 0.7) / 0.3);
             }
             else
             {
-                // 典型壓力機壓裝曲線 (上升 -> 峰值保壓 -> 下降)
-                double progress = (double)i / SampleCount;
-                if (progress < 0.3) yData[i] = progress / 0.3 * 80.0;
-                else if (progress < 0.7) yData[i] = 80.0 + (progress - 0.3) / 0.4 * 20.0;
-                else yData[i] = 100.0 * (1.0 - (progress - 0.7) / 0.3);
-
-                yData[i] += (Random.Shared.NextDouble() - 0.5) * 2.0;
+                // 循環三角波波型：最大值從 0 數到 1023 後再從 0 開始
+                yData[i] = (_counter + i) % 1024;
             }
         }
 
+        _counter = (_counter + SampleCount) % 1024;
         LatestWaveform = yData;
         InstantInputVal = yData[^1];
 
@@ -245,11 +248,6 @@ public class MockDaqDriver : IDriver
         }
 
         DaqStateUpdated?.Invoke();
-    }
-
-    private double GenerateInstantSample()
-    {
-        return 50.0 + (Random.Shared.NextDouble() - 0.5) * 5.0;
     }
 
     public void Shutdown()

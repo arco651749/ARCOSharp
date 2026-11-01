@@ -29,22 +29,25 @@ public class CsviCompilerService
     private static ImmutableArray<MetadataReference> InitializeDefaultReferences()
     {
         var refs = new List<MetadataReference>();
+        var loadedPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        // 收集當前 AppDomain 核心組件
+        // 1. 收集當前 AppDomain 核心組件 (包含 Channels, Avalonia.Markup.Xaml, Loader 等)
         var assemblies = new HashSet<Assembly>
         {
-            typeof(object).Assembly,                         // System.Private.CoreLib
-            typeof(Console).Assembly,                        // System.Console
-            typeof(Enumerable).Assembly,                     // System.Linq
-            typeof(List<>).Assembly,                         // System.Collections
-            typeof(Task).Assembly,                           // System.Threading.Tasks
-            typeof(ARCOS.Core.Execution.IModuleHandler).Assembly, // ARCOS.Core
-            typeof(Avalonia.AvaloniaObject).Assembly,        // Avalonia.Base
-            typeof(Avalonia.Controls.Control).Assembly,      // Avalonia.Controls
-            typeof(Avalonia.Interactivity.RoutedEventArgs).Assembly // Avalonia.Interactivity
+            typeof(object).Assembly,                                         // System.Private.CoreLib
+            typeof(Console).Assembly,                                        // System.Console
+            typeof(Enumerable).Assembly,                                     // System.Linq
+            typeof(List<>).Assembly,                                         // System.Collections
+            typeof(Task).Assembly,                                           // System.Threading.Tasks
+            typeof(System.Threading.Channels.Channel).Assembly,              // System.Threading.Channels
+            typeof(ARCOS.Core.Execution.IModuleHandler).Assembly,            // ARCOS.Core
+            typeof(Avalonia.AvaloniaObject).Assembly,                        // Avalonia.Base
+            typeof(Avalonia.Controls.Control).Assembly,                      // Avalonia.Controls
+            typeof(Avalonia.Interactivity.RoutedEventArgs).Assembly,         // Avalonia.Interactivity
+            typeof(Avalonia.Markup.Xaml.AvaloniaXamlLoader).Assembly,        // Avalonia.Markup.Xaml
+            typeof(Avalonia.Markup.Xaml.AvaloniaRuntimeXamlLoader).Assembly  // Avalonia.Markup.Xaml.Loader
         };
 
-        // 加入已載入組件的路徑
         foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
         {
             if (!asm.IsDynamic && !string.IsNullOrEmpty(asm.Location) && File.Exists(asm.Location))
@@ -53,19 +56,29 @@ public class CsviCompilerService
             }
         }
 
+        // 2. 加入 Trusted Platform Assemblies (.NET 8 SDK / Shared Framework 核心系統庫)
+        if (AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES") is string tpa)
+        {
+            foreach (var p in tpa.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
+            {
+                if (File.Exists(p) && loadedPaths.Add(p))
+                {
+                    try { refs.Add(MetadataReference.CreateFromFile(p)); } catch { }
+                }
+            }
+        }
+
+        // 3. 加入所有目標組件與執行檔同目錄下的 Avalonia / ARCOS DLL
         foreach (var asm in assemblies)
         {
             try
             {
-                if (!string.IsNullOrEmpty(asm.Location) && File.Exists(asm.Location))
+                if (!string.IsNullOrEmpty(asm.Location) && File.Exists(asm.Location) && loadedPaths.Add(asm.Location))
                 {
                     refs.Add(MetadataReference.CreateFromFile(asm.Location));
                 }
             }
-            catch
-            {
-                // 忽略非檔案型組件
-            }
+            catch { }
         }
 
         return refs.ToImmutableArray();
@@ -112,7 +125,12 @@ public class CsviCompilerService
             OutputKind.DynamicallyLinkedLibrary,
             optimizationLevel: OptimizationLevel.Release,
             platform: Platform.AnyCpu,
-            nullableContextOptions: NullableContextOptions.Enable
+            nullableContextOptions: NullableContextOptions.Enable,
+            specificDiagnosticOptions: new Dictionary<string, ReportDiagnostic>
+            {
+                ["CS1701"] = ReportDiagnostic.Suppress,
+                ["CS1702"] = ReportDiagnostic.Suppress
+            }
         );
 
         var compilation = CSharpCompilation.Create(

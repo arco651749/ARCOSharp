@@ -1,10 +1,15 @@
-﻿param (
+param (
     [string]$OutputDir = "$PSScriptRoot\..\dist\ARCOS_Runtime"
 )
 
 $ErrorActionPreference = "Stop"
-$env:DOTNET_ROOT = "$env:LOCALAPPDATA\dotnet"
-$env:Path = "$env:LOCALAPPDATA\dotnet;$env:Path"
+if (Test-Path "$env:LOCALAPPDATA\dotnet\dotnet.exe") {
+    $env:DOTNET_ROOT = "$env:LOCALAPPDATA\dotnet"
+    $env:Path = "$env:LOCALAPPDATA\dotnet;$env:Path"
+} elseif (Test-Path "D:\Users\arco0\.dotnet\dotnet.exe") {
+    $env:DOTNET_ROOT = "D:\Users\arco0\.dotnet"
+    $env:Path = "D:\Users\arco0\.dotnet;$env:Path"
+}
 
 Write-Host "==========================================================" -ForegroundColor Cyan
 Write-Host " [ARCOS] Packaging ARCOS Runtime Deployment Bundle" -ForegroundColor Cyan
@@ -93,12 +98,16 @@ foreach ($d in $driverProjects) {
         Remove-Item -Path $nativeDir -Recurse -Force
     }
 
-    # 若為 MockIO 驅動，額外產生標準 MockIO.csvi 驅動檔
+    # 若為 MockIO 驅動，優先保留並部署 CSVI 3.0 封裝檔 (絕不拿無 XAML 的舊版 DLL 覆蓋 src 內的 CSVI 3.0)
     if ($driverName -eq "MockIO.Driver") {
-        Copy-Item "$outPath\MockIO.Driver.dll" "$outPath\MockIO.csvi" -Force
-        Copy-Item "$outPath\MockIO.Driver.dll" "$OutputDir\MODULES\IO\DRIVER\MockIO.csvi" -Force
-        Copy-Item "$outPath\MockIO.Driver.dll" "$PSScriptRoot\..\src\MODULES\IO\DRIVER\MockIO\MockIO.csvi" -Force
-        Copy-Item "$outPath\MockIO.Driver.dll" "$PSScriptRoot\..\src\MODULES\IO\DRIVER\MockIO.csvi" -Force
+        $srcMockCsvi = "$PSScriptRoot\..\src\MODULES\IO\DRIVER\MockIO.csvi"
+        if (Test-Path -LiteralPath $srcMockCsvi) {
+            Copy-Item -LiteralPath $srcMockCsvi -Destination "$outPath\MockIO.csvi" -Force
+            Copy-Item -LiteralPath $srcMockCsvi -Destination "$OutputDir\MODULES\IO\DRIVER\MockIO.csvi" -Force
+        } else {
+            Copy-Item "$outPath\MockIO.Driver.dll" "$outPath\MockIO.csvi" -Force
+            Copy-Item "$outPath\MockIO.Driver.dll" "$OutputDir\MODULES\IO\DRIVER\MockIO.csvi" -Force
+        }
     }
 
     # 確保 runtimeconfig.json 包含 additionalProbingPaths 指向根目錄 (4層深度)
@@ -135,14 +144,68 @@ $ioCommands = @(
     "Shift"
 )
 
-# 生成多合一 IO.csvi
-Copy-Item "$tempBuild\IO.Guidance.dll" "$OutputDir\MODULES\IO\IO.csvi" -Force
-Copy-Item "$tempBuild\IO.Guidance.dll" "$PSScriptRoot\..\src\MODULES\IO\IO.csvi" -Force
+# 部署多合一 IO.csvi (優先使用 src\MODULES\IO\IO.csvi，絕不逆向覆寫 src 目錄)
+$srcIoRootCsvi = "$PSScriptRoot\..\src\MODULES\IO\IO.csvi"
+if (Test-Path -LiteralPath $srcIoRootCsvi) {
+    Copy-Item -LiteralPath $srcIoRootCsvi -Destination "$OutputDir\MODULES\IO\IO.csvi" -Force
+} else {
+    Copy-Item "$tempBuild\IO.Guidance.dll" "$OutputDir\MODULES\IO\IO.csvi" -Force
+}
 
 foreach ($cmd in $ioCommands) {
-    Copy-Item "$tempBuild\IO.Guidance.dll" "$OutputDir\MODULES\IO\$cmd.csvi" -Force
-    Copy-Item "$tempBuild\IO.Guidance.dll" "$OutputDir\MODULES\IO\io@$cmd.csvi" -Force
-    Copy-Item "$tempBuild\IO.Guidance.dll" "$PSScriptRoot\..\src\MODULES\IO\$cmd.csvi" -Force
+    $srcCmdCsvi = "$PSScriptRoot\..\src\MODULES\IO\$cmd.csvi"
+    if (Test-Path -LiteralPath $srcCmdCsvi) {
+        Copy-Item -LiteralPath $srcCmdCsvi -Destination "$OutputDir\MODULES\IO\$cmd.csvi" -Force
+        Copy-Item -LiteralPath $srcCmdCsvi -Destination "$OutputDir\MODULES\IO\io@$cmd.csvi" -Force
+    } else {
+        Copy-Item "$tempBuild\IO.Guidance.dll" "$OutputDir\MODULES\IO\$cmd.csvi" -Force
+        Copy-Item "$tempBuild\IO.Guidance.dll" "$OutputDir\MODULES\IO\io@$cmd.csvi" -Force
+    }
+}
+
+# 部署 SYSTEM 模組 CSVI 虛擬儀表 (四位一體)
+$systemCsvis = Get-ChildItem -Path "$PSScriptRoot\..\src\MODULES\SYSTEM" -Filter "*.csvi" -File
+foreach ($csvi in $systemCsvis) {
+    Copy-Item -LiteralPath $csvi.FullName -Destination "$OutputDir\MODULES\SYSTEM\$($csvi.Name)" -Force
+}
+
+# 部署 THREAD 模組 CSVI 虛擬儀表 (四位一體)
+$threadCsvis = Get-ChildItem -Path "$PSScriptRoot\..\src\MODULES\THREAD" -Filter "*.csvi" -File
+foreach ($csvi in $threadCsvis) {
+    Copy-Item -LiteralPath $csvi.FullName -Destination "$OutputDir\MODULES\THREAD\$($csvi.Name)" -Force
+}
+
+# 部署 CAPTURE 模組 CSVI 虛擬儀表與驅動 (四位一體)
+$captureCsvis = Get-ChildItem -Path "$PSScriptRoot\..\src\MODULES\CAPTURE" -Filter "*.csvi" -Recurse -File
+foreach ($csvi in $captureCsvis) {
+    $rel = $csvi.FullName.Substring((Resolve-Path "$PSScriptRoot\..\src\MODULES\CAPTURE").Path.Length + 1)
+    $dest = Join-Path "$OutputDir\MODULES\CAPTURE" $rel
+    New-Item -ItemType Directory -Path (Split-Path $dest) -Force | Out-Null
+    Copy-Item -LiteralPath $csvi.FullName -Destination $dest -Force
+}
+
+# 部署 DAQ 模組 CSVI 虛擬儀表與驅動 (四位一體)
+$daqCsvis = Get-ChildItem -Path "$PSScriptRoot\..\src\MODULES\DAQ" -Filter "*.csvi" -Recurse -File
+foreach ($csvi in $daqCsvis) {
+    $rel = $csvi.FullName.Substring((Resolve-Path "$PSScriptRoot\..\src\MODULES\DAQ").Path.Length + 1)
+    $dest = Join-Path "$OutputDir\MODULES\DAQ" $rel
+    New-Item -ItemType Directory -Path (Split-Path $dest) -Force | Out-Null
+    Copy-Item -LiteralPath $csvi.FullName -Destination $dest -Force
+}
+
+# 部署 VARIABLE 模組 CSVI 虛擬儀表 (四位一體)
+$variableCsvis = Get-ChildItem -Path "$PSScriptRoot\..\src\MODULES\VARIABLE" -Filter "*.csvi" -File
+foreach ($csvi in $variableCsvis) {
+    Copy-Item -LiteralPath $csvi.FullName -Destination "$OutputDir\MODULES\VARIABLE\$($csvi.Name)" -Force
+}
+
+# 部署 MOTION 模組 CSVI 虛擬儀表與驅動 (四位一體)
+$motionCsvis = Get-ChildItem -Path "$PSScriptRoot\..\src\MODULES\MOTION" -Filter "*.csvi" -Recurse -File
+foreach ($csvi in $motionCsvis) {
+    $rel = $csvi.FullName.Substring((Resolve-Path "$PSScriptRoot\..\src\MODULES\MOTION").Path.Length + 1)
+    $dest = Join-Path "$OutputDir\MODULES\MOTION" $rel
+    New-Item -ItemType Directory -Path (Split-Path $dest) -Force | Out-Null
+    Copy-Item -LiteralPath $csvi.FullName -Destination $dest -Force
 }
 
 # 徹底刪除任何 USERPARAMETEREDITOR 遺留目錄與暫存建置資料夾

@@ -13,6 +13,12 @@ namespace ARCOS.Core.Tests;
 
 public class IoTrampolineTests
 {
+    static IoTrampolineTests()
+    {
+        _ = typeof(Avalonia.Data.RelativeSource).Assembly;
+        _ = typeof(Avalonia.Controls.Control).Assembly;
+        _ = typeof(Avalonia.Markup.Xaml.AvaloniaRuntimeXamlLoader).Assembly;
+    }
     private readonly BasicEngines _engines;
     private readonly IoEngine _io;
 

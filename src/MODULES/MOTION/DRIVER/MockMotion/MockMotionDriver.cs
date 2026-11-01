@@ -99,25 +99,46 @@ public class MockMotionDriver : IDriver
 
             case "Go":
                 SetBusy(true);
-                // 參數為具體座標 X=...,Y=...
-                var targetPt = ParsePointFromParam(ticket.Parameter);
-                ApplyInfAxisMask(targetPt);
-                await SimulateInterpolationAsync(targetPt, token);
-                SetBusy(false);
-                ticket.SetCompleted();
+                try
+                {
+                    // 參數為具體座標 X=...,Y=...
+                    var targetPt = ParsePointFromParam(ticket.Parameter);
+                    ApplyInfAxisMask(targetPt);
+                    await SimulateInterpolationAsync(targetPt, token);
+                }
+                finally
+                {
+                    SetBusy(false);
+                    ticket.SetCompleted();
+                }
                 break;
 
             case "GoPoint":
                 SetBusy(true);
-                // 參數為點位名稱 (如 P1, Tray[2])
-                if (_engines != null)
+                try
                 {
-                    var pt = _engines.Point.GetPoint(ticket.Parameter);
+                    // 參數為點位名稱 (如 P1, Tray[2]) 或具體座標 (Speed=...,X=...,Y=...)
+                    MachinePoint pt;
+                    if (ticket.Parameter.Contains("X=", StringComparison.OrdinalIgnoreCase))
+                    {
+                        pt = ParsePointFromParam(ticket.Parameter);
+                    }
+                    else if (_engines != null)
+                    {
+                        pt = _engines.Point.GetPoint(ticket.Parameter);
+                    }
+                    else
+                    {
+                        pt = MachinePoint.AllInf();
+                    }
                     ApplyInfAxisMask(pt);
                     await SimulateInterpolationAsync(pt, token);
                 }
-                SetBusy(false);
-                ticket.SetCompleted();
+                finally
+                {
+                    SetBusy(false);
+                    ticket.SetCompleted();
+                }
                 break;
 
             case "ClearPath":

@@ -1,4 +1,5 @@
 using System.IO;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using ARCOS.Core.Csvi;
@@ -17,8 +18,12 @@ public class McpServer
 
     public async Task RunAsync(CancellationToken cancellationToken = default)
     {
-        using var reader = new StreamReader(Console.OpenStandardInput(), Console.InputEncoding);
-        using var writer = new StreamWriter(Console.OpenStandardOutput(), Console.OutputEncoding) { AutoFlush = true };
+        var utf8NoBom = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
+        Console.InputEncoding = utf8NoBom;
+        Console.OutputEncoding = utf8NoBom;
+
+        using var reader = new StreamReader(Console.OpenStandardInput(), utf8NoBom);
+        using var writer = new StreamWriter(Console.OpenStandardOutput(), utf8NoBom) { AutoFlush = true };
 
         while (!cancellationToken.IsCancellationRequested)
         {
@@ -187,7 +192,8 @@ public class McpServer
                     ["type"] = "object",
                     ["properties"] = new JsonObject
                     {
-                        ["csviPath"] = new JsonObject { ["type"] = "string", ["description"] = ".csvi 檔案完整或相對路徑" }
+                        ["csviPath"] = new JsonObject { ["type"] = "string", ["description"] = ".csvi 檔案完整或相對路徑" },
+                        ["password"] = new JsonObject { ["type"] = "string", ["description"] = "可選密碼 (若需檢視加密包內的檔案清單)" }
                     },
                     ["required"] = new JsonArray { "csviPath" }
                 }
@@ -217,7 +223,9 @@ public class McpServer
                     ["properties"] = new JsonObject
                     {
                         ["outputPath"] = new JsonObject { ["type"] = "string", ["description"] = "輸出 .csvi 路徑" },
-                        ["commandKey"] = new JsonObject { ["type"] = "string", ["description"] = "指令 Key，例如 IO@SetPort" },
+                        ["commandKey"] = new JsonObject { ["type"] = "string", ["description"] = "指令 Key，例如 IO@SetPort 或 MockIO" },
+                        ["module"] = new JsonObject { ["type"] = "string", ["description"] = "所屬模組名稱，例如 IO" },
+                        ["componentType"] = new JsonObject { ["type"] = "string", ["enum"] = new JsonArray { "Command", "Driver", "Library" } },
                         ["sourceFiles"] = new JsonObject { ["type"] = "object", ["description"] = "原始碼字典：檔名 -> 代碼字串" },
                         ["packagingMode"] = new JsonObject { ["type"] = "string", ["enum"] = new JsonArray { "PortableOpen", "PasswordLocked", "StrippedRelease" } },
                         ["password"] = new JsonObject { ["type"] = "string", ["description"] = "密碼 (若是 PasswordLocked)" },
@@ -241,12 +249,11 @@ public class McpServer
                     },
                     ["required"] = new JsonArray { "csviPath", "parameter" }
                 }
-            }
-,
+            },
             new JsonObject
             {
                 ["name"] = "csvi_capture_ui",
-                ["description"] = "由 CSVI Studio 載入編譯後的 .dll 或 .csvi，在虛擬環境渲染參數導引視窗 (Wizard) 或驅動前面板 (Panel) 並自動截圖回傳給 AI Agent 進行視覺版面校驗與反覆修改",
+                ["description"] = "由 CSVI Studio 載入編譯後的 .dll 或 .csvi，渲染參數導引視窗 (Wizard) 或驅動前面板 (Panel) 並自動截圖回傳給 AI Agent 進行視覺版面校驗與反覆修改",
                 ["inputSchema"] = new JsonObject
                 {
                     ["type"] = "object",
@@ -255,8 +262,8 @@ public class McpServer
                         ["csviPath"] = new JsonObject { ["type"] = "string", ["description"] = ".csvi 或 .dll 檔案路徑" },
                         ["target"] = new JsonObject { ["type"] = "string", ["enum"] = new JsonArray { "Wizard", "Panel" }, ["description"] = "欲渲染與截圖的目標視窗 (預設 Wizard)" },
                         ["outputPath"] = new JsonObject { ["type"] = "string", ["description"] = "截圖輸出圖片檔案路徑 (可選)" },
-                        ["width"] = new JsonObject { ["type"] = "integer", ["description"] = "視窗寬度 (預設 720)" },
-                        ["height"] = new JsonObject { ["type"] = "integer", ["description"] = "視窗高度 (預設 540)" }
+                        ["width"] = new JsonObject { ["type"] = "integer", ["description"] = "視窗寬度 (預設 1000)" },
+                        ["height"] = new JsonObject { ["type"] = "integer", ["description"] = "視窗高度 (預設 700)" }
                     },
                     ["required"] = new JsonArray { "csviPath" }
                 }
@@ -277,7 +284,6 @@ public class McpServer
                     string root = args["modulesRoot"]?.GetValue<string>() ?? "MODULES";
                     if (!Directory.Exists(root))
                     {
-                        // 嘗試在當前目錄或 src/MODULES 尋找
                         if (Directory.Exists("src/MODULES")) root = "src/MODULES";
                     }
 
@@ -309,17 +315,24 @@ public class McpServer
                 case "csvi_inspect":
                 {
                     string path = args["csviPath"]?.GetValue<string>() ?? throw new ArgumentException("Missing csviPath");
+                    string? pass = args["password"]?.GetValue<string>();
                     if (!File.Exists(path)) throw new FileNotFoundException("CSVI file not found", path);
 
                     byte[] bytes = File.ReadAllBytes(path);
-                    var package = CsviPackage.LoadFromBytes(bytes);
+                    // 先讀取 Manifest 與 RuntimeXaml (不強制解包加密源碼以免未帶密碼時拋出例外)
+                    var package = CsviPackage.LoadFromBytes(bytes, pass, unpackSources: false);
+                    if (package.HasSourceBundleResource && (package.Manifest.PackagingMode == CsviPackagingMode.PortableOpen || !string.IsNullOrEmpty(pass)))
+                    {
+                        package = CsviPackage.LoadFromBytes(bytes, pass, unpackSources: true);
+                    }
 
                     var ret = new JsonObject
                     {
                         ["filePath"] = Path.GetFullPath(path),
                         ["fileSize"] = bytes.Length,
                         ["manifest"] = JsonSerializer.SerializeToNode(package.Manifest),
-                        ["hasSourceBundle"] = package.EmbeddedSourceFiles.Count > 0,
+                        ["hasSourceBundle"] = package.HasSourceBundleResource,
+                        ["isSourceUnlocked"] = package.EmbeddedSourceFiles.Count > 0,
                         ["sourceFileNames"] = new JsonArray(package.EmbeddedSourceFiles.Keys.Select(k => (JsonNode)JsonValue.Create(k)!).ToArray()),
                         ["runtimeXamlNames"] = new JsonArray(package.EmbeddedRuntimeXaml.Keys.Select(k => (JsonNode)JsonValue.Create(k)!).ToArray())
                     };
@@ -336,7 +349,7 @@ public class McpServer
                     if (!File.Exists(path)) throw new FileNotFoundException("CSVI file not found", path);
 
                     byte[] bytes = File.ReadAllBytes(path);
-                    var package = CsviPackage.LoadFromBytes(bytes, pass);
+                    var package = CsviPackage.LoadFromBytes(bytes, pass, unpackSources: true);
 
                     var filesObj = new JsonObject();
                     foreach (var kvp in package.EmbeddedSourceFiles)
@@ -377,11 +390,18 @@ public class McpServer
                     string author = args["author"]?.GetValue<string>() ?? "AI Agent";
                     string summary = args["revisionSummary"]?.GetValue<string>() ?? "Compiled via CSVI Studio MCP";
 
+                    string modName = args["module"]?.GetValue<string>() ?? (cmdKey.Contains('@') ? cmdKey.Split('@')[0] : "IO");
+                    string compTypeStr = args["componentType"]?.GetValue<string>() ?? (cmdKey.Contains('@') ? "Command" : "Driver");
+                    var compType = Enum.Parse<CsviComponentType>(compTypeStr, ignoreCase: true);
+
                     string asmName = Path.GetFileNameWithoutExtension(outPath);
                     var manifest = new CsviManifest
                     {
+                        Module = modName,
                         CommandKey = cmdKey,
+                        ComponentType = compType,
                         PackagingMode = mode,
+                        SourceEncrypted = (mode == CsviPackagingMode.PasswordLocked),
                         LastAuthor = author,
                         RevisionHistory = new List<CsviRevisionEntry>
                         {
@@ -428,118 +448,66 @@ public class McpServer
                 }
 
                 case "csvi_capture_ui":
-
                 {
-
                     string path = args["csviPath"]?.GetValue<string>() ?? throw new ArgumentException("Missing csviPath");
-
                     string target = args["target"]?.GetValue<string>() ?? "Wizard";
-
                     string? outPath = args["outputPath"]?.GetValue<string>();
-
-                    int width = args["width"]?.GetValue<int>() ?? 720;
-
-                    int height = args["height"]?.GetValue<int>() ?? 540;
-
-
+                    int width = args["width"]?.GetValue<int>() ?? 1000;
+                    int height = args["height"]?.GetValue<int>() ?? 700;
 
                     if (!File.Exists(path)) throw new FileNotFoundException("Target file not found", path);
 
-
-
                     if (string.IsNullOrEmpty(outPath))
-
                     {
-
                         string defaultDir = Path.Combine(Path.GetTempPath(), "csvi_previews");
-
                         Directory.CreateDirectory(defaultDir);
-
-                        outPath = Path.Combine(defaultDir, $"{Path.GetFileNameWithoutExtension(path)}_{target}_{DateTime.Now:yyyyMMdd_HHmmss}.jpg");
-
+                        outPath = Path.Combine(defaultDir, $"{Path.GetFileNameWithoutExtension(path)}_{target}_{DateTime.Now:yyyyMMdd_HHmmss}.png");
                     }
 
-
-
-                    // 透過 Cockpit CLI 在虛擬第二螢幕無干擾截圖
-
-                    string cockpitCli = @"D:\Users\arco0\.gemini\config\plugins\antigravity-desktop-cockpit\skills\desktop-cockpit\scripts\cockpit_cli.py";
+                    string fullCsviPath = Path.GetFullPath(path);
+                    string fullOutPath = Path.GetFullPath(outPath);
+                    if (File.Exists(fullOutPath)) File.Delete(fullOutPath);
 
                     bool captureSuccess = false;
-
                     string captureError = string.Empty;
 
-
-
                     try
-
                     {
-
+                        // 啟動 CSVI_Studio.exe 子行程載入該 .csvi，切換至指定 Wizard / Panel 頁籤並以 RenderTargetBitmap 直接渲染輸出圖片
+                        string selfExe = Environment.ProcessPath ?? Path.Combine(AppContext.BaseDirectory, "CSVI_Studio.exe");
                         var psi = new System.Diagnostics.ProcessStartInfo
-
                         {
-
-                            FileName = "python.exe",
-
-                            Arguments = $"-X utf8 \"{cockpitCli}\" capture -o \"{outPath}\"",
-
+                            FileName = selfExe,
+                            Arguments = $"\"{fullCsviPath}\" --capture-target \"{target}\" --capture-out \"{fullOutPath}\"",
                             RedirectStandardOutput = true,
-
                             RedirectStandardError = true,
-
                             UseShellExecute = false,
-
                             CreateNoWindow = true
-
                         };
 
                         using var proc = System.Diagnostics.Process.Start(psi);
-
-                        proc?.WaitForExit(8000);
-
-                        captureSuccess = File.Exists(outPath);
-
+                        proc?.WaitForExit(10000);
+                        captureSuccess = File.Exists(fullOutPath) && new FileInfo(fullOutPath).Length > 0;
                     }
-
                     catch (Exception ex)
-
                     {
-
                         captureError = ex.Message;
-
                     }
-
-
 
                     var ret = new JsonObject
-
                     {
-
                         ["success"] = captureSuccess,
-
-                        ["imagePath"] = Path.GetFullPath(outPath),
-
+                        ["imagePath"] = fullOutPath,
                         ["target"] = target,
-
                         ["width"] = width,
-
                         ["height"] = height,
-
-                        ["fileSize"] = File.Exists(outPath) ? new FileInfo(outPath).Length : 0,
-
+                        ["fileSize"] = File.Exists(fullOutPath) ? new FileInfo(fullOutPath).Length : 0,
                         ["error"] = captureError
-
                     };
 
-
-
                     content.Add(new JsonObject { ["type"] = "text", ["text"] = ret.ToJsonString() });
-
                     break;
-
                 }
-
-
 
                 case "csvi_sandbox_execute":
                 {
@@ -549,8 +517,9 @@ public class McpServer
                     if (!File.Exists(path)) throw new FileNotFoundException("CSVI file not found", path);
 
                     byte[] bytes = File.ReadAllBytes(path);
-                    var pkg = CsviPackage.LoadFromBytes(bytes);
-                    string cmdKey = !string.IsNullOrEmpty(pkg.Manifest.CommandKey) ? pkg.Manifest.CommandKey : "Test@Command";
+                    // 不強制解包 Source.Bundle，讓 PasswordLocked 與 StrippedRelease 皆可無需密碼直接執行 IL！
+                    var pkg = CsviPackage.LoadFromBytes(bytes, unpackSources: false);
+                    string cmdKey = !string.IsNullOrEmpty(pkg.Manifest.CommandKey) ? pkg.Manifest.CommandKey : Path.GetFileNameWithoutExtension(path);
 
                     var runRes = _sandbox.Execute(bytes, cmdKey, param);
 

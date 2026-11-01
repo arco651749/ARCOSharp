@@ -32,6 +32,10 @@ public partial class SequencerEditorControl : UserControl
     private int _latestNoticedPC = -1;
     private int _currentRenderedPC = -1;
 
+    public ObservableCollection<SequencerRowViewModel> Rows => _rows;
+    public int CurrentProgramNumber => _currentProgNo;
+    public bool IsLocked => _isLocked;
+
     public SequencerEditorControl()
     {
         InitializeComponent();
@@ -204,7 +208,7 @@ public partial class SequencerEditorControl : UserControl
         string? selectedCmd = await ComSelectWindow.SelectCommandAsync(topLevel, _vm?.Executor.Registry);
         if (string.IsNullOrWhiteSpace(selectedCmd)) return;
 
-        string? confirmedParam = await ParameterGuidanceWindow.ShowGuidanceAsync(topLevel, selectedCmd, row.Parameter, _vm?.Engines);
+        string? confirmedParam = await ParameterGuidanceManager.Instance.RequestGuidanceAsync(selectedCmd, row.Parameter, _vm?.Engines, topLevel);
         if (confirmedParam != null)
         {
             row.Command = selectedCmd;
@@ -242,6 +246,76 @@ public partial class SequencerEditorControl : UserControl
             row.Parameter = updatedParam;
             SyncUIToProgram();
         }
+    }
+
+    // =========================================================
+    // MCP 與自動化控制專用公開方法
+    // =========================================================
+
+    public void SetSupervisorMode(bool supervisor)
+    {
+        if (supervisor) OnTabSupClick(null, new RoutedEventArgs());
+        else OnTabOpClick(null, new RoutedEventArgs());
+    }
+
+    public async Task<string?> OpenParameterGuidanceForRowAsync(int rowIndex)
+    {
+        if (rowIndex < 0 || rowIndex >= _rows.Count) return null;
+        if (_isLocked) SetSupervisorMode(true);
+        NavigateToRow(rowIndex);
+
+        var topLevel = TopLevel.GetTopLevel(this) as Window;
+        if (topLevel == null) return null;
+
+        var row = _rows[rowIndex];
+        string targetCmd = !string.IsNullOrWhiteSpace(row.Command) ? row.Command : "System@Log Message";
+        string? updatedParam = await ParameterGuidanceManager.Instance.RequestGuidanceAsync(targetCmd, row.Parameter, _vm?.Engines, topLevel);
+        if (updatedParam != null)
+        {
+            row.Parameter = updatedParam;
+            SyncUIToProgram();
+        }
+        return updatedParam;
+    }
+
+    public void SelectRow(int rowIndex) => NavigateToRow(rowIndex);
+    public void TriggerStep() => BtnStep_Click(null, new RoutedEventArgs());
+    public void TriggerAutoRun() => BtnAuto_Click(null, new RoutedEventArgs());
+    public void TriggerPause() => BtnPause_Click(null, new RoutedEventArgs());
+    public void TriggerReset() => BtnReset_Click(null, new RoutedEventArgs());
+
+    public void TriggerJump(int rowIndex)
+    {
+        NavigateToRow(rowIndex);
+        BtnJump_Click(null, new RoutedEventArgs());
+    }
+
+    public void TriggerAddRow(int? atIndex = null, string command = "System@Delay", string parameter = "0.1")
+    {
+        var grid = this.FindControl<DataGrid>("GridCommands");
+        int insertIndex = atIndex ?? ((grid?.SelectedIndex ?? -1) + 1);
+        if (insertIndex < 0 || insertIndex > _rows.Count) insertIndex = _rows.Count;
+
+        _rows.Insert(insertIndex, new SequencerRowViewModel
+        {
+            LineNumber = insertIndex,
+            Command = command,
+            Parameter = parameter
+        });
+
+        RenumberRows();
+        SyncUIToProgram();
+        NavigateToRow(insertIndex);
+    }
+
+    public void TriggerDeleteRow(int? atIndex = null)
+    {
+        var grid = this.FindControl<DataGrid>("GridCommands");
+        if (atIndex.HasValue && atIndex.Value >= 0 && atIndex.Value < _rows.Count && grid != null)
+        {
+            grid.SelectedIndex = atIndex.Value;
+        }
+        BtnDelete_Click(null, new RoutedEventArgs());
     }
 
     private void BindToolbarButtons()
@@ -452,10 +526,11 @@ public partial class SequencerEditorControl : UserControl
         ctx.Program = prog;
     }
 
-    public void UpdatePCPointer(int pc)
+    public void UpdatePCPointer(int progIndex1Based)
     {
-        // 零等待原子寫入：直接通知最新位置，絕不阻塞 CMDEXECUTE 調度
-        Interlocked.Exchange(ref _latestNoticedPC, pc);
+        // 將 1-based 的 VM ProgIndex 轉為 0-based 的 UI DataGrid 列索引
+        int uiRow = progIndex1Based >= 1 ? progIndex1Based - 1 : 0;
+        Interlocked.Exchange(ref _latestNoticedPC, uiRow);
     }
 
     /// <summary>
@@ -497,14 +572,16 @@ public partial class SequencerEditorControl : UserControl
         var ctx = GetActiveContext();
         if (!ctx.IsRunning)
         {
-            _vm.StartThread(ctx.ThreadId, _currentProgNo, ctx.ProgIndex >= 0 ? ctx.ProgIndex : 0);
+            int startIdx = (ctx.ProgIndex >= 1 && ctx.ProgIndex <= _rows.Count) ? ctx.ProgIndex : 1;
+            _vm.StartThread(ctx.ThreadId, _currentProgNo, startIdx);
         }
 
         UpdateMachineStatus("RUNNING");
         _vm.Executor.ExecuteStep(ctx);
         UpdatePCPointer(ctx.ProgIndex);
+        DrainPCPointer();
 
-        if (!ctx.IsRunning || ctx.ProgIndex >= _rows.Count)
+        if (!ctx.IsRunning || ctx.ProgIndex > _rows.Count)
         {
             UpdateMachineStatus("IDLE");
         }
@@ -518,7 +595,8 @@ public partial class SequencerEditorControl : UserControl
         var ctx = GetActiveContext();
         if (!ctx.IsRunning)
         {
-            _vm.StartThread(ctx.ThreadId, _currentProgNo, 0);
+            int startIdx = (ctx.ProgIndex >= 1 && ctx.ProgIndex <= _rows.Count) ? ctx.ProgIndex : 1;
+            _vm.StartThread(ctx.ThreadId, _currentProgNo, startIdx);
         }
 
         UpdateMachineStatus("RUNNING");
@@ -530,7 +608,7 @@ public partial class SequencerEditorControl : UserControl
         if (_vm == null) return;
         var ctx = GetActiveContext();
 
-        if (!ctx.IsRunning || ctx.ProgIndex >= _rows.Count)
+        if (!ctx.IsRunning || ctx.ProgIndex > _rows.Count)
         {
             _autoTimer.Stop();
             UpdateMachineStatus("IDLE");
@@ -556,9 +634,10 @@ public partial class SequencerEditorControl : UserControl
         {
             var ctx = GetActiveContext();
             ctx.IsRunning = false;
-            ctx.ProgIndex = 0;
+            ctx.ProgIndex = 1;
             ctx.State.Reset();
-            UpdatePCPointer(0);
+            UpdatePCPointer(1);
+            DrainPCPointer();
             UpdateMachineStatus("IDLE");
         }
     }
@@ -569,8 +648,10 @@ public partial class SequencerEditorControl : UserControl
         if (grid?.SelectedItem is SequencerRowViewModel row && _vm != null)
         {
             var ctx = GetActiveContext();
-            ctx.ProgIndex = row.LineNumber;
-            UpdatePCPointer(row.LineNumber);
+            ctx.ProgIndex = row.LineNumber + 1;
+            ctx.State.Reset();
+            UpdatePCPointer(ctx.ProgIndex);
+            DrainPCPointer();
             ctx.Log($"[PC JUMP] PC pointer jumped to Line {row.LineNumber}: {row.Command}");
         }
     }

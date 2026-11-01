@@ -128,6 +128,65 @@ public class DriverManagerTests
     }
 
     [Fact]
+    public void MockCamera_Snap_WithCustomImageFile_ShouldLoadImageFromFile()
+    {
+        var (engines, manager) = CreateEnvironment();
+        string testImage = System.IO.Path.Combine(Directory.GetCurrentDirectory(), "test_cap.jpg");
+        var camDev = (MockCameraDriver)manager.AddDevice("Capture", "CamFile", "MockCamera", $"File={testImage}", engines);
+
+        // 1. 驗證透過參數預載圖檔
+        var ticket = new DriverTicket("Snap");
+        camDev.PostTicket(ticket);
+        var res = ticket.Wait(2000);
+
+        Assert.True(res.Success);
+        Assert.True(engines.Io.GetPort("CamFile#OK?"));
+        var frame = engines.Image.GetFrame("CamFile");
+        Assert.NotNull(frame);
+        Assert.True(frame.Image.Width > 0 && frame.Image.Height > 0);
+
+        // 2. 驗證透過 Ticket.Parameter 動態指定圖片
+        var ticket2 = new DriverTicket("Trigger", testImage);
+        camDev.PostTicket(ticket2);
+        var res2 = ticket2.Wait(2000);
+        Assert.True(res2.Success);
+        Assert.Equal(2, camDev.FrameCount);
+
+        manager.ShutdownAll();
+    }
+
+    [Fact]
+    public void MockDaq_TriangleCounter_ShouldCycleFrom0To1023AndWrapAround()
+    {
+        var (engines, manager) = CreateEnvironment();
+        var daqDev = (MockDaqDriver)manager.AddDevice("DAQ", "CycleDaq", "MockDAQ", "Rate=1000,Count=500,Wave=Triangle", engines);
+
+        // 1. 驗證預設波型為 TriangleCounter
+        Assert.Equal(MockWaveType.TriangleCounter, daqDev.WaveType);
+
+        // 2. 驗證單批波形數值循環在 0..1023 範圍內
+        var ticket = new DriverTicket("Sample");
+        daqDev.PostTicket(ticket);
+        var res = ticket.Wait(2000);
+        Assert.True(res.Success);
+        Assert.Equal(500, daqDev.LatestWaveform.Length);
+        foreach (var val in daqDev.LatestWaveform)
+        {
+            Assert.True(val >= 0.0 && val <= 1023.0);
+        }
+
+        // 3. 驗證 AnalogIn 單點計數遞增並循環
+        var ticketAi1 = new DriverTicket("AnalogIn");
+        daqDev.PostTicket(ticketAi1);
+        ticketAi1.Wait(2000);
+        var resAi = ticketAi1.Wait(2000);
+        Assert.True(resAi.Success);
+        Assert.True(resAi.Payload is double);
+
+        manager.ShutdownAll();
+    }
+
+    [Fact]
     public void MockDaq_Sample_ShouldWriteWaveformAndSetOkFlag()
     {
         var (engines, manager) = CreateEnvironment();

@@ -27,7 +27,7 @@ public partial class MockDaqView : UserControl
         var txtInfo = this.FindControl<TextBlock>("TxtDeviceInfo");
         if (txtInfo != null)
         {
-            txtInfo.Text = $"{_driver.DeviceName} ({_driver.DriverType}) | 採樣率: {_driver.SampleRate}Hz | 點數: {_driver.SampleCount}";
+            txtInfo.Text = $"{_driver.DeviceName} ({_driver.DriverType}) | 採樣率: {_driver.SampleRate}Hz | 點數: {_driver.SampleCount} | 循環三角波 (0~1023)";
         }
 
         var btnSample = this.FindControl<Button>("BtnSample");
@@ -41,6 +41,8 @@ public partial class MockDaqView : UserControl
 
         _driver.DaqStateUpdated += OnDaqStateUpdated;
         DetachedFromVisualTree += (s, e) => _driver.DaqStateUpdated -= OnDaqStateUpdated;
+
+        UpdateVisuals();
     }
 
     private void InitializeComponent()
@@ -56,7 +58,7 @@ public partial class MockDaqView : UserControl
     private void UpdateVisuals()
     {
         var txtInstant = this.FindControl<TextBlock>("TxtInstant");
-        if (txtInstant != null) txtInstant.Text = _driver.InstantValue.ToString("F2", CultureInfo.InvariantCulture);
+        if (txtInstant != null) txtInstant.Text = $"{_driver.InstantValue:F0} / 1023";
 
         var ledSampling = this.FindControl<Ellipse>("LedSampling");
         if (ledSampling != null) ledSampling.Fill = _driver.IsSampling ? Brushes.LimeGreen : Brushes.Gray;
@@ -83,10 +85,10 @@ public partial class MockDaqView : UserControl
         double height = canvas.Bounds.Height;
         if (width <= 0 || height <= 0) return;
 
-        double max = yData.Max();
-        double min = yData.Min();
-        double span = max - min;
-        if (span <= 0) span = 1;
+        // 固定刻度：0 ~ 1023
+        double min = 0.0;
+        double max = 1023.0;
+        double span = 1023.0;
 
         double stepX = width / (yData.Length - 1);
 

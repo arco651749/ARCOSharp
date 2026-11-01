@@ -7,8 +7,10 @@ namespace ARCOS.Driver.MockCamera;
 
 /// <summary>
 /// 模擬視覺相機驅動 (MockCameraDriver)
-/// 對齊 Motion 的 Queue 模式，支援 Snap 單張取像、Trigger 飛拍壓入、
-/// 本地圖檔虛擬取像，並自動連動 ImageEngine 與 $(Cam)#OK?
+/// 對齊視覺檢測流程，支援：
+/// 1. Snap 單張取像、Trigger 飛拍壓入
+/// 2. 支援指定/瀏覽載入本機圖檔 (支援 .jpg, .png, .bmp)
+/// 3. 自動連動 ImageEngine 與 $(Cam)#OK? 旗標
 /// </summary>
 public class MockCameraDriver : IDriver
 {
@@ -24,7 +26,7 @@ public class MockCameraDriver : IDriver
     public int Width { get; private set; } = 640;
     public int Height { get; private set; } = 480;
     public double ExposureMs { get; private set; } = 20.0;
-    public string? PreloadedImagePath { get; private set; }
+    public string? PreloadedImagePath { get; set; }
 
     public int FrameCount { get; private set; } = 0;
     public event Action? CameraStateUpdated;
@@ -35,14 +37,32 @@ public class MockCameraDriver : IDriver
         _engines = engines;
 
         // 解析參數：Width=640,Height=480,Exposure=20,File=sample.png
-        var args = ArgParaHelper.ParseKeyValueArgs(param, out _);
+        var args = ArgParaHelper.ParseKeyValueArgs(param, out var posArgs);
         if (args.TryGetValue("Width", out var wStr) && int.TryParse(wStr, out int w)) Width = w;
         if (args.TryGetValue("Height", out var hStr) && int.TryParse(hStr, out int h)) Height = h;
         if (args.TryGetValue("Exposure", out var expStr) && double.TryParse(expStr, out double exp)) ExposureMs = exp;
         if (args.TryGetValue("File", out var fileStr)) PreloadedImagePath = fileStr;
+        else if (args.TryGetValue("Path", out var pathStr)) PreloadedImagePath = pathStr;
+        else if (posArgs.Count > 0 && File.Exists(posArgs[0])) PreloadedImagePath = posArgs[0];
+
+        // 若未指定但當前目錄有 test_cap.jpg，作為預設預載圖檔
+        if (string.IsNullOrEmpty(PreloadedImagePath))
+        {
+            string defaultImg = System.IO.Path.Combine(Directory.GetCurrentDirectory(), "test_cap.jpg");
+            if (File.Exists(defaultImg)) PreloadedImagePath = defaultImg;
+        }
 
         _cts = new CancellationTokenSource();
         _workerTask = Task.Run(() => WorkerLoop(_cts.Token));
+    }
+
+    public void SetImageFile(string? path)
+    {
+        if (!string.IsNullOrWhiteSpace(path))
+        {
+            PreloadedImagePath = path.Trim();
+            CameraStateUpdated?.Invoke();
+        }
     }
 
     public void PostTicket(DriverTicket ticket)
@@ -79,15 +99,22 @@ public class MockCameraDriver : IDriver
     {
         string cmd = ticket.Command.Trim();
 
+        // 檢查指令參數中是否帶有自訂圖檔路徑 (例如 Snap::Cam0, D:\test.jpg 或 File=test.jpg)
+        string? customFile = ExtractFilePathFromParam(ticket.Parameter);
+        if (!string.IsNullOrEmpty(customFile) && File.Exists(customFile))
+        {
+            PreloadedImagePath = customFile;
+        }
+
         switch (cmd)
         {
             case "Snap":
-                // 模擬曝光時間
                 if (ExposureMs > 0) await Task.Delay((int)ExposureMs, token);
                 var snapMat = GenerateOrLoadImage();
                 if (_engines != null)
                 {
                     _engines.Image.SetSingleImage(DeviceName, snapMat);
+                    _engines.Io.SetPort($"{DeviceName}#OK?", true);
                 }
                 snapMat.Dispose();
                 FrameCount++;
@@ -95,13 +122,14 @@ public class MockCameraDriver : IDriver
                 break;
 
             case "Trigger":
-                // 飛拍模式壓入陣列
                 if (ExposureMs > 0) await Task.Delay((int)ExposureMs, token);
                 var trigMat = GenerateOrLoadImage();
-                string arrayName = string.IsNullOrEmpty(ticket.Parameter) ? DeviceName : ticket.Parameter;
+                string arrayName = string.IsNullOrEmpty(ticket.Parameter) || ticket.Parameter == customFile
+                    ? DeviceName : ticket.Parameter;
                 if (_engines != null)
                 {
                     _engines.Image.AppendImage(arrayName, trigMat);
+                    _engines.Io.SetPort($"{DeviceName}#OK?", true);
                 }
                 trigMat.Dispose();
                 FrameCount++;
@@ -111,6 +139,7 @@ public class MockCameraDriver : IDriver
             case "Config":
                 var cfgArgs = ArgParaHelper.ParseKeyValueArgs(ticket.Parameter, out _);
                 if (cfgArgs.TryGetValue("Exposure", out var exp) && double.TryParse(exp, out double dExp)) ExposureMs = dExp;
+                if (cfgArgs.TryGetValue("File", out var f)) PreloadedImagePath = f;
                 ticket.SetCompleted();
                 break;
 
@@ -119,6 +148,7 @@ public class MockCameraDriver : IDriver
                 {
                     PreloadedImagePath = ticket.Parameter;
                     _engines?.Image.LoadImage(DeviceName, ticket.Parameter);
+                    _engines?.Io.SetPort($"{DeviceName}#OK?", true);
                     FrameCount++;
                     ticket.SetCompleted();
                 }
@@ -141,16 +171,43 @@ public class MockCameraDriver : IDriver
         CameraStateUpdated?.Invoke();
     }
 
+    private string? ExtractFilePathFromParam(string param)
+    {
+        if (string.IsNullOrWhiteSpace(param)) return null;
+        var args = ArgParaHelper.ParseKeyValueArgs(param, out var posArgs);
+        if (args.TryGetValue("File", out var f) && !string.IsNullOrWhiteSpace(f)) return f;
+        if (args.TryGetValue("Path", out var p) && !string.IsNullOrWhiteSpace(p)) return p;
+        foreach (var arg in posArgs)
+        {
+            if (File.Exists(arg)) return arg;
+            if (arg.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase) ||
+                arg.EndsWith(".png", StringComparison.OrdinalIgnoreCase) ||
+                arg.EndsWith(".bmp", StringComparison.OrdinalIgnoreCase))
+            {
+                return arg;
+            }
+        }
+        return null;
+    }
+
     public Mat GenerateOrLoadImage()
     {
         if (!string.IsNullOrEmpty(PreloadedImagePath) && File.Exists(PreloadedImagePath))
         {
-            return Cv2.ImRead(PreloadedImagePath, ImreadModes.Color);
+            var loaded = Cv2.ImRead(PreloadedImagePath, ImreadModes.Color);
+            if (!loaded.Empty()) return loaded;
+        }
+
+        // 若無指定圖檔，檢查根目錄是否有 test_cap.jpg 作為預設載入圖片
+        string defaultCap = System.IO.Path.Combine(Directory.GetCurrentDirectory(), "test_cap.jpg");
+        if (File.Exists(defaultCap))
+        {
+            var loaded = Cv2.ImRead(defaultCap, ImreadModes.Color);
+            if (!loaded.Empty()) return loaded;
         }
 
         // 動態生成帶時間戳與十字線的測試圖檔
         var mat = new Mat(Height, Width, MatType.CV_8UC3, new Scalar(40, 40, 40));
-        // 繪製中心十字與同心圓
         int cx = Width / 2;
         int cy = Height / 2;
         Cv2.Circle(mat, new Point(cx, cy), 50, new Scalar(0, 255, 0), 2);

@@ -13,8 +13,9 @@ public class CsviPackage
     public Dictionary<string, string> EmbeddedSourceFiles { get; set; } = new();
     public Dictionary<string, string> EmbeddedRuntimeXaml { get; set; } = new();
     public byte[] AssemblyRawBytes { get; set; } = Array.Empty<byte>();
+    public bool HasSourceBundleResource { get; set; }
 
-    public static CsviPackage LoadFromBytes(byte[] csviBytes, string? password = null)
+    public static CsviPackage LoadFromBytes(byte[] csviBytes, string? password = null, bool unpackSources = true)
     {
         var package = new CsviPackage
         {
@@ -49,24 +50,28 @@ public class CsviPackage
             }
         }
 
-        // 3. 解包 Source Bundle
+        // 3. 檢查並解包 Source Bundle
         using (var bundleStream = asm.GetManifestResourceStream("CSVI.Source.Bundle"))
         {
             if (bundleStream != null)
             {
-                using var ms = new MemoryStream();
-                bundleStream.CopyTo(ms);
-                byte[] bundleBytes = ms.ToArray();
-                package.EmbeddedSourceFiles = CsviSourceBundle.Unpack(bundleBytes, package.Manifest.PackagingMode, password);
+                package.HasSourceBundleResource = true;
+                if (unpackSources)
+                {
+                    using var ms = new MemoryStream();
+                    bundleStream.CopyTo(ms);
+                    byte[] bundleBytes = ms.ToArray();
+                    package.EmbeddedSourceFiles = CsviSourceBundle.Unpack(bundleBytes, package.Manifest.PackagingMode, password);
+                }
             }
         }
 
         return package;
     }
 
-    public static CsviPackage LoadFromFile(string filePath, string? password = null)
+    public static CsviPackage LoadFromFile(string filePath, string? password = null, bool unpackSources = true)
     {
         byte[] bytes = File.ReadAllBytes(filePath);
-        return LoadFromBytes(bytes, password);
+        return LoadFromBytes(bytes, password, unpackSources);
     }
 }

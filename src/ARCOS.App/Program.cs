@@ -1,7 +1,9 @@
 using System;
 using System.IO;
+using System.Linq;
 using System.Runtime.Loader;
 using Avalonia;
+using ARCOS.App.Mcp;
 
 namespace ARCOS.App;
 
@@ -20,6 +22,22 @@ public static class Program
             }
             return null;
         };
+
+        bool isMcpMode = args.Any(a => a.Equals("--mcp", StringComparison.OrdinalIgnoreCase));
+        if (isMcpMode)
+        {
+            // 若桌面上已有執行中的 ARCOS.App 實例，直接將 Stdio MCP 請求轉發至該實例
+            if (ArcosMcpServer.TryForwardStdioToRunningInstance())
+            {
+                return;
+            }
+
+            // 否則在本進程啟動完整 Avalonia UI，並隔離標準輸出供 MCP JSON-RPC 專用
+            var rawStdin = Console.OpenStandardInput();
+            var rawStdout = Console.OpenStandardOutput();
+            Console.SetOut(Console.Error);
+            ArcosMcpServer.StartInProcessStdioMcpLoop(rawStdin, rawStdout);
+        }
 
         BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
     }

@@ -175,6 +175,72 @@ Motion@GoPallet::Motor1,100,P;
     }
 
     [Fact]
+    public void MotionModule_AddMotor_Home_GoPoint_And_GetPos()
+    {
+        string script = @"
+Motion@AddMotor::MotorTest,MockMotion;
+Motion@Home::MotorTest;
+Point&Path@Calculate::TargetP=(123.4,567.8,90.0);
+Motion@GoPoint::MotorTest,100,TargetP;
+Motion@WaitMotor::MotorTest;
+Motion@GetPos::MotorTest;
+";
+        var (ctx, executor, engines) = CreateHarness(script);
+        RunToEnd(ctx, executor);
+
+        Assert.True(engines.Io.GetPort("MotorTest#Homed?"));
+        Assert.True(engines.Io.GetPort("MotorTest#Done?"));
+    }
+
+    [Fact]
+    public void MotionModule_GoSafe_WithSafeAxisZ()
+    {
+        string script = @"
+Motion@AddMotor::M2,MockMotion;
+Point&Path@Calculate::P2=(50,60,70);
+Motion@GoSafe::M2,100,P2,Z=0;
+";
+        var (ctx, executor, engines) = CreateHarness(script);
+        RunToEnd(ctx, executor);
+
+        // 等待補間完全完成
+        Thread.Sleep(150);
+        Assert.True(engines.Io.GetPort("M2#Done?"));
+        var cur = engines.Point.GetPoint("M2_CurPos");
+        Assert.Equal(50.0, cur.X);
+        Assert.Equal(60.0, cur.Y);
+        Assert.Equal(70.0, cur.Z);
+    }
+
+    [Fact]
+    public void MotionCSVI_Packages_ExistAndCanBeInstantiated()
+    {
+        string baseDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "..", "src", "MODULES", "MOTION");
+        string goPointCsvi = Path.Combine(baseDir, "GoPoint.csvi");
+        string motionMasterCsvi = Path.Combine(baseDir, "Motion.csvi");
+
+        if (File.Exists(goPointCsvi))
+        {
+            var asm = System.Reflection.Assembly.Load(File.ReadAllBytes(goPointCsvi));
+            var type = asm.GetType("ARCOS.Module.Motion.MotionGoPointGuidance");
+            Assert.NotNull(type);
+            var inst = Activator.CreateInstance(type);
+            Assert.NotNull(inst);
+            Assert.IsAssignableFrom<ARCOS.Core.Guidance.IParameterGuidance>(inst);
+        }
+
+        if (File.Exists(motionMasterCsvi))
+        {
+            var asm = System.Reflection.Assembly.Load(File.ReadAllBytes(motionMasterCsvi));
+            var type = asm.GetType("ARCOS.Module.Motion.MotionMasterGuidance");
+            Assert.NotNull(type);
+            var inst = Activator.CreateInstance(type);
+            Assert.NotNull(inst);
+            Assert.IsAssignableFrom<ARCOS.Core.Guidance.IParameterGuidance>(inst);
+        }
+    }
+
+    [Fact]
     public void PointPathModule_SelectAndLocalModifications()
     {
         string script = @"

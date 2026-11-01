@@ -154,7 +154,8 @@ public sealed class ParameterGuidanceManager
                     if (Activator.CreateInstance(t) is IParameterGuidance g)
                     {
                         if (g.CommandKey.Equals(targetCommandKey, StringComparison.OrdinalIgnoreCase) ||
-                            g.CommandKey.Equals($"IO@{targetCommandKey}", StringComparison.OrdinalIgnoreCase))
+                            g.CommandKey.EndsWith($"@{targetCommandKey}", StringComparison.OrdinalIgnoreCase) ||
+                            (targetCommandKey.Contains("Comment", StringComparison.OrdinalIgnoreCase) && g.CommandKey.Contains("Comment", StringComparison.OrdinalIgnoreCase)))
                         {
                             return g;
                         }
@@ -182,39 +183,42 @@ public sealed class ParameterGuidanceManager
         try
         {
             var parent = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../.."));
-            if (Directory.Exists(parent)) candidateRoots.Add(parent);
+            if (Directory.Exists(parent)) { candidateRoots.Add(parent); if (Directory.Exists(Path.Combine(parent, "src"))) candidateRoots.Add(Path.Combine(parent, "src")); }
         }
         catch { }
+
+        string safeAction = string.Concat(action.Split(Path.GetInvalidFileNameChars()));
+        if (action.StartsWith("#Comment", StringComparison.OrdinalIgnoreCase)) safeAction = "Comment";
 
         foreach (var root in candidateRoots)
         {
             if (!string.IsNullOrEmpty(module))
             {
                 // 1. 指令專屬 CSVI 虛擬儀表 (最高優先，直接位於 MODULES/<Module>/ 目錄下)
-                string pCsvi1 = Path.Combine(root, "MODULES", module, $"{action}.csvi");
+                string pCsvi1 = Path.Combine(root, "MODULES", module, $"{safeAction}.csvi");
                 if (File.Exists(pCsvi1)) return pCsvi1;
 
-                string pCsvi2 = Path.Combine(root, "MODULES", module, $"{module}@{action}.csvi");
+                string pCsvi2 = Path.Combine(root, "MODULES", module, $"{module}@{safeAction}.csvi");
                 if (File.Exists(pCsvi2)) return pCsvi2;
 
                 string pCsviMod = Path.Combine(root, "MODULES", module, $"{module}.csvi");
                 if (File.Exists(pCsviMod)) return pCsviMod;
 
                 // 2. 舊式相容備援 (若有歷史遺留檔案才查閱)
-                string pLegacy1 = Path.Combine(root, "MODULES", module, "USERPARAMETEREDITOR", $"{action}.csvi");
+                string pLegacy1 = Path.Combine(root, "MODULES", module, "USERPARAMETEREDITOR", $"{safeAction}.csvi");
                 if (File.Exists(pLegacy1)) return pLegacy1;
 
-                string pLegacy2 = Path.Combine(root, "MODULES", module, "USERPARAMETEREDITOR", $"{action}.Guidance.dll");
+                string pLegacy2 = Path.Combine(root, "MODULES", module, "USERPARAMETEREDITOR", $"{safeAction}.Guidance.dll");
                 if (File.Exists(pLegacy2)) return pLegacy2;
 
                 string pLegacy3 = Path.Combine(root, "MODULES", module, "USERPARAMETEREDITOR", $"{module}.Guidance.dll");
                 if (File.Exists(pLegacy3)) return pLegacy3;
             }
 
-            string pExtCsvi = Path.Combine(root, "EXTRACMD", $"{action}.csvi");
+            string pExtCsvi = Path.Combine(root, "EXTRACMD", $"{safeAction}.csvi");
             if (File.Exists(pExtCsvi)) return pExtCsvi;
 
-            string p4Csvi = Path.Combine(root, "EXTRACMD", "USERPARAMETEREDITOR", $"{action}.csvi");
+            string p4Csvi = Path.Combine(root, "EXTRACMD", "USERPARAMETEREDITOR", $"{safeAction}.csvi");
             if (File.Exists(p4Csvi)) return p4Csvi;
         }
 
@@ -233,7 +237,7 @@ public sealed class ParameterGuidanceManager
         try
         {
             var parent = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../.."));
-            if (Directory.Exists(parent)) candidateRoots.Add(parent);
+            if (Directory.Exists(parent)) { candidateRoots.Add(parent); if (Directory.Exists(Path.Combine(parent, "src"))) candidateRoots.Add(Path.Combine(parent, "src")); }
         }
         catch { }
 

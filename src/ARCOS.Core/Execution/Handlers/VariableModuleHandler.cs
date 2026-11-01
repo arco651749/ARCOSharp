@@ -107,6 +107,19 @@ public class VariableModuleHandler : IModuleHandler
                     sec = candidateSec;
                 }
 
+                formula = ctx.Engines.Variable.FilterParameters(formula, sec);
+                formula = Regex.Replace(formula, @"\b([a-zA-Z_][a-zA-Z0-9_]*)\b", m =>
+                {
+                    string identifier = m.Groups[1].Value;
+                    try
+                    {
+                        var val = ctx.Engines.Variable.Get(identifier, sec);
+                        if (double.TryParse(val, NumberStyles.Any, CultureInfo.InvariantCulture, out _)) return val;
+                    }
+                    catch { }
+                    return identifier;
+                });
+
                 try
                 {
                     var dt = new DataTable();
