@@ -281,8 +281,8 @@ public partial class ParameterGuidanceWindow : Window
             return "System@Record $RecordName,$Message";
         if (cmd.Equals("System@LogRecordCycleTime", StringComparison.OrdinalIgnoreCase))
             return "System@LogRecordCycleTime $RecordName,$Unit";
-        if (cmd.Equals("System@#Comment----->>", StringComparison.OrdinalIgnoreCase))
-            return "System@#Comment----->> $CommentText";
+        if (cmd.Equals("System@Note", StringComparison.OrdinalIgnoreCase) || cmd.Equals("System@#Comment----->>", StringComparison.OrdinalIgnoreCase))
+            return "System@Note $CommentText";
         if (cmd.Equals("Motion@GoPoint", StringComparison.OrdinalIgnoreCase))
             return "Motion@GoPoint $MotorName,$Speed,$PointName";
         if (cmd.Equals("Motion@WaitMotor", StringComparison.OrdinalIgnoreCase))

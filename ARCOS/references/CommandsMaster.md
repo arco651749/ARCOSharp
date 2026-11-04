@@ -179,7 +179,7 @@
 
 | 指令 (Command) | 語法簽名 (Signature) | 參數說明 (Parameters) | 說明與核心語意 | 防呆與注意事項 |
 | :--- | :--- | :--- | :--- | :--- |
-| **#Comment----->>**| `System@#Comment----->>::$msg;` | 註解文字 | 腳本行內結構化註解 | 提升腳本可讀性 |
+| **Note** | `System@Note::$msg;` | 註解文字 | 腳本行內工步結構化註記 | 提升腳本可讀性與工步標題說明 |
 | **Delay** | `System@Delay::$second;` | `$second`: 秒數 (浮點數) | 當前執行緒延遲等待 | Manager 輪詢必須帶 `0.1`，避免 CPU 100% |
 | **Log Message**| `System@Log Message::$msg;` | 訊息文字 (支援 `$(var)`) | 記錄一般資訊至 Log 視窗與檔案 | 檔案存於 `Log/yyyymmdd-hhmmss.log` |
 | **Log Error** | `System@Log Error::$msg;` | 錯誤訊息 | 記錄致命錯誤並觸發全機急停 (EMG Stop) | 慎用！會引發系統中斷 |

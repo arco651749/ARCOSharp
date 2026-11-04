@@ -180,7 +180,7 @@ public sealed class ParameterGuidanceManager
                     {
                         if (g.CommandKey.Equals(targetCommandKey, StringComparison.OrdinalIgnoreCase) ||
                             g.CommandKey.EndsWith($"@{targetCommandKey}", StringComparison.OrdinalIgnoreCase) ||
-                            (targetCommandKey.Contains("Comment", StringComparison.OrdinalIgnoreCase) && g.CommandKey.Contains("Comment", StringComparison.OrdinalIgnoreCase)))
+                            (targetCommandKey.Contains("Note", StringComparison.OrdinalIgnoreCase) && g.CommandKey.Contains("Note", StringComparison.OrdinalIgnoreCase)) || (targetCommandKey.Contains("Comment", StringComparison.OrdinalIgnoreCase) && g.CommandKey.Contains("Comment", StringComparison.OrdinalIgnoreCase)))
                         {
                             return g;
                         }
@@ -213,7 +213,7 @@ public sealed class ParameterGuidanceManager
         catch { }
 
         string safeAction = string.Concat(action.Split(Path.GetInvalidFileNameChars()));
-        if (action.StartsWith("#Comment", StringComparison.OrdinalIgnoreCase)) safeAction = "Comment";
+        if (action.Equals("Note", StringComparison.OrdinalIgnoreCase) || action.StartsWith("#Comment", StringComparison.OrdinalIgnoreCase)) safeAction = "Note";
 
         foreach (var root in candidateRoots)
         {

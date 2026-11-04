@@ -8,7 +8,7 @@
 ## 🛠️ 基本語法與格式規範
 1. **指令句型**：所有的 System 指令都必須以 `System@` 開頭，後接指令名稱，再以 `::` 區隔參數。
 2. **參數分隔**：多個參數之間必須使用逗號 `,` 隔開。
-3. **程式註解**：若為純註解，請使用 `#Comment----->>` 指令。
+3. **程式註記**：若為工步註解與段落標題，請使用 `Note` 指令。
 
 ---
 
@@ -17,7 +17,7 @@
 ### 1. 訊息提示與日誌記錄 (Logging & Messages)
 | 指令 | 參數範例 | 說明 |
 | :--- | :--- | :--- |
-| **#Comment----->>** | `$message` | 寫入程式區段的註解文字 |
+| **Note** | `$message` | 寫入工步區段的流程註記文字 |
 | **Log Message** | `$message` | 記錄一般系統訊息到 Log 欄位 |
 | **Log Error** | `$message` | 發出錯誤 `$message`，並觸發系統錯誤處理 `EMG Stop` 程序 |
 | **Clear Message** | (無) | 清除畫面上的 Log 訊息欄 |
@@ -64,7 +64,7 @@
 當您需要讓動作緩衝時，可以插入 Delay 並顯示相關 Log：
 
 ```markdown
-System@#Comment----->>::開始執行汽缸下壓動作;
+System@Note::開始執行汽缸下壓動作;
 System@Log Message::Cylinder is moving down;
 System@Delay::0.5
 ```

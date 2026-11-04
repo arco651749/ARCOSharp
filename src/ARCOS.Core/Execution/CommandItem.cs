@@ -99,7 +99,7 @@ public sealed class CommandItem
 
         bool isComment = false;
         if (module.Equals("System", StringComparison.OrdinalIgnoreCase) && 
-            action.StartsWith("#Comment", StringComparison.OrdinalIgnoreCase))
+            action.Equals("Note", StringComparison.OrdinalIgnoreCase) || action.StartsWith("#Comment", StringComparison.OrdinalIgnoreCase))
         {
             isComment = true;
         }

@@ -1,7 +1,7 @@
 # ARCOSharp 全量 CSVI 虛擬儀表 CODE-Map 拓撲與因果依賴評估報告
 
-> **檢驗時間**：2026-11-04 16:01:14  
-> **被測虛擬儀表總數**：`200` 個 `.csvi`  
+> **檢驗時間**：2026-11-04 16:07:33  
+> **被測虛擬儀表總數**：`201` 個 `.csvi`  
 > **檢驗引擎**：`Tree-sitter AST & NetworkX CODE-Map Engine (d:\AntiGravity\UIA_Coder)`  
 
 ---
@@ -29,7 +29,7 @@
 | **MOTION** | 30 | 30/30 (100%) | `AddMotion.csvi`, `AddMotor.csvi`, `AddPath.csvi` *(等共 30 檔)* | 🟢 PASS |
 | **PANEL** | 2 | 2/2 (100%) | `UserPanel.csvi`, `UserPanel.csvi` | 🟢 PASS |
 | **PYTHON** | 12 | 12/12 (100%) | `File.csvi`, `GetCapture.csvi`, `GetPoint.csvi` *(等共 12 檔)* | 🟢 PASS |
-| **SYSTEM** | 27 | 27/27 (100%) | `AddExternalDevice.csvi`, `AddExternalDriver.csvi`, `Clear Error.csvi` *(等共 27 檔)* | 🟢 PASS |
+| **SYSTEM** | 28 | 28/28 (100%) | `AddExternalDevice.csvi`, `AddExternalDriver.csvi`, `Clear Error.csvi` *(等共 28 檔)* | 🟢 PASS |
 | **THREAD** | 32 | 32/32 (100%) | `Call.csvi`, `Else.csvi`, `ElseIf.csvi` *(等共 32 檔)* | 🟢 PASS |
 | **VARIABLE** | 35 | 35/35 (100%) | `Append.csvi`, `Calculate.csvi`, `Dec.csvi` *(等共 35 檔)* | 🟢 PASS |
 

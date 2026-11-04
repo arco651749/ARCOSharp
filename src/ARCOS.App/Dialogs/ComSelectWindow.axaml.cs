@@ -64,7 +64,7 @@ public partial class ComSelectWindow : Window
         // 1. System
         _moduleActions["System"] = new List<string>
         {
-            "#Comment>>", "Log Message", "Log Error", "Clear Message",
+            "Note", "Log Message", "Log Error", "Clear Message",
             "Clear Error", "Delay", "Record", "RecordWrite",
             "RecordRead", "LogRecordCycleTime", "TimerReset", "TimerCheck",
             "CounterReset", "CounterCheck", "MessageBox", "WarningBox",

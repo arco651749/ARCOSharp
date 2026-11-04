@@ -4,14 +4,14 @@ using ARCOS.Core.Execution;
 namespace ARCOS.Core.Serialization;
 
 /// <summary>
-/// ARCOS 腳本與專案檔序列化器
-/// 支援 .pro (Windows INI 標準多區段專案檔) 與 .init (單一程式腳本) 讀寫，
-/// 並原生支援多行 Parameter (相容 Motion@ExtraCMD 手臂多行腳本與 Python 原始碼)。
+/// ARCOS ?�本?��?案�?序�??�器
+/// ?�援 .pro (Windows INI 標�?多�?段�?案�?) ??.init (?��?程�??�本) 讀寫�?
+/// 並�??�支?��?�?Parameter (?�容 Motion@ExtraCMD ?��?多�??�本??Python ?��?�???
 /// </summary>
 public static class ScriptSerializer
 {
     /// <summary>
-    /// 將多個 ProgramTable 儲存為 .pro 檔案 (INI 格式)
+    /// 將�???ProgramTable ?��???.pro 檔�? (INI ?��?)
     /// </summary>
     public static void SaveProFile(string filePath, IEnumerable<ProgramTable> programs)
     {
@@ -26,7 +26,7 @@ public static class ScriptSerializer
             for (int i = 1; i <= prog.Count; i++)
             {
                 var item = prog[i];
-                // 轉義換行符號以相容單行 INI
+                // 轉義?��?符�?以相容單�?INI
                 string escapedParam = item.RawParameter
                     .Replace("\r\n", "\\n")
                     .Replace("\n", "\\n");
@@ -40,7 +40,7 @@ public static class ScriptSerializer
     }
 
     /// <summary>
-    /// 從 .pro 檔案載入所有程式區段
+    /// �?.pro 檔�?載入?�?��?式�?�?
     /// </summary>
     public static List<ProgramTable> LoadProFile(string filePath)
     {
@@ -80,7 +80,7 @@ public static class ScriptSerializer
             }
             else if (int.TryParse(key, out int lineNum))
             {
-                // 還原換行符號
+                // ?��??��?符�?
                 string unescaped = val.Replace("\\n", "\n");
                 currentProg.Add(CommandItem.Parse(unescaped, lineNum));
             }
@@ -90,7 +90,7 @@ public static class ScriptSerializer
     }
 
     /// <summary>
-    /// 解析字串內容格式的 .pro 檔案為 Dictionary(int, ProgramTable)
+    /// �??字串?�容?��???.pro 檔�???Dictionary(int, ProgramTable)
     /// </summary>
     public static Dictionary<int, ProgramTable> DeserializePro(string content)
     {
@@ -139,7 +139,7 @@ public static class ScriptSerializer
     }
 
     /// <summary>
-    /// 將 ProgramTable 轉為乾淨、無 INI 行號、支援多行還原的純指令腳本 (供 Meld 比對與編輯前處理)
+    /// �?ProgramTable 轉為乾淨?�無 INI 行�??�支?��?行�??��?純�?令腳??(�?Meld 比�??�編輯�??��?)
     /// </summary>
     public static string ProgramToCleanScript(ProgramTable prog)
     {
@@ -165,7 +165,7 @@ public static class ScriptSerializer
     }
 
     /// <summary>
-    /// 將 Meld 編輯後的純指令腳本重新解析並自動編號為 ProgramTable (Meld 編輯後處理重排)
+    /// �?Meld 編輯後�?純�?令腳?��??�解?�並?��?編�???ProgramTable (Meld 編輯後�??��???
     /// </summary>
     public static ProgramTable CleanScriptToProgram(string scriptText, int progNumber, string progName = "")
     {
@@ -195,8 +195,8 @@ public static class ScriptSerializer
     }
 
     /// <summary>
-    /// 將單一程式段寫入二進制 .init 檔案
-    /// 二進制規範：Row Count (int32) + Col Count (int32 = 2) + 各字串長度與內容
+    /// 將單一程�?段寫?��??�制 .init 檔�?
+    /// 二進制規�?：Row Count (int32) + Col Count (int32 = 2) + ?��?串長度�??�容
     /// </summary>
     public static void SaveInitFile(string filePath, ProgramTable program)
     {
@@ -222,7 +222,7 @@ public static class ScriptSerializer
     }
 
     /// <summary>
-    /// 從二進制 .init 檔案載入單一程式段
+    /// 從�??�制 .init 檔�?載入?��?程�?�?
     /// </summary>
     public static ProgramTable LoadInitFile(string filePath, int progNo = 0, string name = "")
     {
@@ -235,7 +235,7 @@ public static class ScriptSerializer
         if (fs.Length < 8) return prog;
 
         int rowCount = br.ReadInt32();
-        int colCount = br.ReadInt32(); // 固定為 2
+        int colCount = br.ReadInt32(); // ?��???2
 
         for (int i = 0; i < rowCount; i++)
         {

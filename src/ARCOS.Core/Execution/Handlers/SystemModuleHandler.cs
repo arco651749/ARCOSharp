@@ -12,6 +12,7 @@ public class SystemModuleHandler : IModuleHandler
 
     private static readonly string[] Commands = new[]
     {
+        "Note",
         "#Comment----->>",
         "Log Message",
         "Log Error",
@@ -44,8 +45,8 @@ public class SystemModuleHandler : IModuleHandler
 
     public CommandResult Execute(string action, string filteredParam, ExecutionContext ctx)
     {
-        // 0. 註解指令
-        if (action.StartsWith("#Comment", StringComparison.OrdinalIgnoreCase))
+        // 0. 流程註記指令 (Note / Legacy #Comment)
+        if (action.Equals("Note", StringComparison.OrdinalIgnoreCase) || action.StartsWith("#Comment", StringComparison.OrdinalIgnoreCase))
         {
             return CommandResult.Done();
         }
