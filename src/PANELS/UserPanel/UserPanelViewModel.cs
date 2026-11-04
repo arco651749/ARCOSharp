@@ -130,20 +130,33 @@ public class UserPanelViewModel : INotifyPropertyChanged
         _engines = engines;
         if (_engines == null) return;
 
-        // 從 VariableEngine 讀取產線計數變數
-        string totalStr = _engines.Variable.Get("$TotalCount");
+        // 從 VariableEngine 讀取產線計數變數 (使用安全讀取防呆)
+        string totalStr = GetVariableSafe("$TotalCount");
         if (int.TryParse(totalStr, out int t) && t > 0) TotalParts = t;
 
-        string okStr = _engines.Variable.Get("$OkCount");
+        string okStr = GetVariableSafe("$OkCount");
         if (int.TryParse(okStr, out int ok) && ok >= 0) OkParts = ok;
 
-        string ngStr = _engines.Variable.Get("$NgCount");
+        string ngStr = GetVariableSafe("$NgCount");
         if (int.TryParse(ngStr, out int ng) && ng >= 0) NgParts = ng;
 
-        string ctStr = _engines.Variable.Get("$CycleTime");
+        string ctStr = GetVariableSafe("$CycleTime");
         if (!string.IsNullOrWhiteSpace(ctStr)) CycleTime = ctStr;
 
         RefreshIoStates();
+    }
+
+    private string GetVariableSafe(string key)
+    {
+        if (_engines == null) return string.Empty;
+        try
+        {
+            return _engines.Variable.Get(key);
+        }
+        catch (System.Collections.Generic.KeyNotFoundException)
+        {
+            return string.Empty;
+        }
     }
 
     public void RefreshIoStates()

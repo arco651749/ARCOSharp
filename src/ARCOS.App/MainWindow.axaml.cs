@@ -1085,9 +1085,11 @@ public partial class MainWindow : Window
                 if (panel is Control ctrl)
                 {
                     var m1 = ctrl.GetType().GetMethod("Init") ?? ctrl.GetType().GetMethod("RefreshFromEngines");
-                    m1?.Invoke(ctrl, new object[] { _engines });
-
-                    if (ctrl.DataContext != null)
+                    if (m1 != null)
+                    {
+                        m1.Invoke(ctrl, new object[] { _engines });
+                    }
+                    else if (ctrl.DataContext != null)
                     {
                         var m2 = ctrl.DataContext.GetType().GetMethod("Init") ?? ctrl.DataContext.GetType().GetMethod("RefreshFromEngines");
                         m2?.Invoke(ctrl.DataContext, new object[] { _engines });
@@ -1104,7 +1106,8 @@ public partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            _vm.MainThreads[0].Log($"[UserPanelOpen] Exception loading User Panel: {ex.Message}", isError: true);
+            var baseEx = ex.GetBaseException();
+            _vm.MainThreads[0].Log($"[UserPanelOpen] Exception loading User Panel: {baseEx.Message}", isError: true);
             return false;
         }
     }

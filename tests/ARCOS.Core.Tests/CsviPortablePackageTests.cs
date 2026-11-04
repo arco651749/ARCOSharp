@@ -111,5 +111,19 @@ public class CsviPortablePackageTests
 
         var ctrlType = pkg.LoadedAssembly.GetTypes().FirstOrDefault(t => t.Name == "UserPanelView");
         Assert.NotNull(ctrlType);
+        try
+        {
+            var inst = Activator.CreateInstance(ctrlType);
+            Assert.NotNull(inst);
+            var engines = new ARCOS.Core.Drivers.BasicEngines();
+            var m1 = inst.GetType().GetMethod("Init") ?? inst.GetType().GetMethod("RefreshFromEngines");
+            Assert.NotNull(m1);
+            m1.Invoke(inst, new object[] { engines });
+        }
+        catch (Exception ex)
+        {
+            var inner = ex.InnerException ?? ex;
+            throw new Exception("FAIL TO INVOKE INIT: " + inner.GetType().FullName + ": " + inner.Message + "\nSTACK:\n" + inner.StackTrace, ex);
+        }
     }
 }
