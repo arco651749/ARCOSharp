@@ -169,3 +169,7 @@ python.exe -X utf8 tools/test_arcosharp_e2e.py --no-launch
 python.exe -X utf8 tools/test_arcosharp_e2e.py
 ```
 **唯有 7 大階段全數輸出 `[PASS]`，方可視為驗收完成！**
+
+
+> [!TIP]
+> **自主 Subagent 測試協同**：若欲節省 Token 並執行人機零干擾 UI 巡檢，可參考全域技能 [cockpit-subagent-testing](file:///D:/Users/arco0/.gemini/config/skills/cockpit-subagent-testing/SKILL.md)，指派輕量級 `flash_lite` Subagent 依循標準「遇錯即停」紀律執行全自動操作與缺陷排查。
