@@ -593,7 +593,11 @@ public class IoInitIoPortGuidance : BaseIoGuidance
             {
                 var ticket = new DriverTicket(action);
                 driver.PostTicket(ticket);
-                ticket.Wait(500);
+                var res = ticket.Wait(500);
+                if (!res.Success)
+                {
+                    return CommandResult.Fail($"{action} failed: {res.Message}");
+                }
             }
         }
         return CommandResult.Done();
@@ -617,7 +621,11 @@ public class IoForceUpdateGuidance : BaseIoGuidance
             {
                 var ticket = new DriverTicket(action);
                 driver.PostTicket(ticket);
-                ticket.Wait(500);
+                var res = ticket.Wait(500);
+                if (!res.Success)
+                {
+                    return CommandResult.Fail($"{action} failed: {res.Message}");
+                }
             }
         }
         return CommandResult.Done();

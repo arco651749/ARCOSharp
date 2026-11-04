@@ -1,6 +1,6 @@
 # ARCOSharp 全量 CSVI 虛擬儀表 CODE-Map 拓撲與因果依賴評估報告
 
-> **檢驗時間**：2026-11-04 11:17:19  
+> **檢驗時間**：2026-11-04 12:08:14  
 > **被測虛擬儀表總數**：`198` 個 `.csvi`  
 > **檢驗引擎**：`Tree-sitter AST & NetworkX CODE-Map Engine (d:\AntiGravity\UIA_Coder)`  
 
@@ -43,7 +43,7 @@
 | :--- | :---: | :---: | :---: | :--- | :---: |
 | **UserPanel (PANEL)** | 3 | 91 (UI: 9, Func: 63) | 68 (Contains: 7, Triggers: 6) | ✅ 零風險警報 | 🟢 READY_TO_SHIP |
 | **MyCsvi (EXTERNAL)** | 4 | 87 (UI: 24, Func: 38) | 59 (Contains: 15, Triggers: 0) | ℹ️ 3 處隱藏容器 | 🔴 BLOCKED_BY_INVARIANTS |
-| **IO Module (IO)** | 12 | 593 (UI: 129, Func: 360) | 601 (Contains: 97, Triggers: 7) | ⚠️ 1 處 .Wait() 死鎖風險<br>ℹ️ 36 處隱藏容器 | 🔴 BLOCKED_BY_INVARIANTS |
+| **IO Module (IO)** | 12 | 593 (UI: 129, Func: 360) | 603 (Contains: 97, Triggers: 7) | ⚠️ 1 處 .Wait() 死鎖風險<br>ℹ️ 36 處隱藏容器 | 🔴 BLOCKED_BY_INVARIANTS |
 | **Motion Module (MOTION)** | 5 | 144 (UI: 36, Func: 85) | 117 (Contains: 19, Triggers: 1) | ✅ 零風險警報 | 🟢 READY_TO_SHIP |
 | **Capture Module (CAPTURE)** | 5 | 113 (UI: 19, Func: 81) | 104 (Contains: 10, Triggers: 1) | ✅ 零風險警報 | 🟢 READY_TO_SHIP |
 | **DAQ Module (DAQ)** | 5 | 114 (UI: 15, Func: 87) | 94 (Contains: 9, Triggers: 1) | ⚠️ 1 處 .Wait() 死鎖風險 | 🔴 BLOCKED_BY_INVARIANTS |

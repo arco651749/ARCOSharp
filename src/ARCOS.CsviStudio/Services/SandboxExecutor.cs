@@ -110,11 +110,17 @@ public class SandboxExecutor
                 drv.Init("SandboxDev", string.IsNullOrWhiteSpace(parameter) ? "Device=com1,OutStart=P0.0,OutPorts=16,InStart=P1.0,InPorts=16" : parameter, engines);
                 var ticket = new DriverTicket("FORCE_UPDATE");
                 drv.PostTicket(ticket);
-                ticket.Wait(200);
+                var res = ticket.Wait(1000);
                 drv.Shutdown();
                 subSw.Stop();
 
                 sw.Stop();
+                if (!res.Success)
+                {
+                    result.Success = false;
+                    result.Error = $"FORCE_UPDATE ticket failed: {res.Message}";
+                    return result;
+                }
                 result.Success = true;
                 result.ElapsedMilliseconds = subSw.Elapsed.TotalMilliseconds;
                 result.Output = $"[IDriver] DriverType: {drv.DriverType}, Category: {drv.Category}, Init & FORCE_UPDATE Ticket Verified OK";

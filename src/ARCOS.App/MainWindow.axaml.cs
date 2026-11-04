@@ -800,24 +800,26 @@ public partial class MainWindow : Window
         PerformSnap();
     }
 
-    private void PerformSnap()
+    private async void PerformSnap()
     {
         var driver = _driverManager.GetDriver("Capture", "CamTop");
         if (driver != null)
         {
             var ticket = new DriverTicket("Snap");
             driver.PostTicket(ticket);
-            ticket.Wait(500);
-
-            var frame = _engines.Image.GetFrame("CamTop");
-            if (frame != null && !frame.Image.IsDisposed)
+            var res = await ticket.Task;
+            if (res.Success)
             {
-                var imgView = this.FindControl<Image>("ImgLivePreview");
-                if (imgView != null)
+                var frame = _engines.Image.GetFrame("CamTop");
+                if (frame != null && !frame.Image.IsDisposed)
                 {
-                    Cv2.ImEncode(".bmp", frame.Image, out byte[] buf);
-                    using var ms = new MemoryStream(buf);
-                    imgView.Source = new Bitmap(ms);
+                    var imgView = this.FindControl<Image>("ImgLivePreview");
+                    if (imgView != null)
+                    {
+                        Cv2.ImEncode(".bmp", frame.Image, out byte[] buf);
+                        using var ms = new MemoryStream(buf);
+                        imgView.Source = new Bitmap(ms);
+                    }
                 }
             }
         }

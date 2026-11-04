@@ -279,7 +279,12 @@ public class IoModuleHandler : IModuleHandler
                 {
                     var ticket = new DriverTicket(action);
                     driver.PostTicket(ticket);
-                    ticket.Wait(500);
+                    var res = ticket.Wait(500);
+                    if (!res.Success)
+                    {
+                        string msg = string.IsNullOrEmpty(errorMsg) ? $"{action} failed on '{posArgs[0]}': {res.Message}" : errorMsg;
+                        return CommandResult.Fail(msg, errorLabel);
+                    }
                 }
             }
             return CommandResult.Done();

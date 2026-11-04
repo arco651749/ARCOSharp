@@ -84,7 +84,12 @@ public class CaptureModuleHandler : IModuleHandler
             {
                 var ticket = new DriverTicket("Config", filteredParam);
                 driver.PostTicket(ticket);
-                ticket.Wait(500);
+                var res = ticket.Wait(500);
+                if (!res.Success)
+                {
+                    string msg = string.IsNullOrEmpty(errorMsg) ? $"Config failed on '{firstArg}': {res.Message}" : errorMsg;
+                    return CommandResult.Fail(msg, errorLabel);
+                }
             }
             return CommandResult.Done();
         }
