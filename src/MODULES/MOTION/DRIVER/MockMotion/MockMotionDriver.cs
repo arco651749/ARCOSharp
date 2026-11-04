@@ -332,7 +332,6 @@ public class MockMotionDriver : IDriver
     public void Shutdown()
     {
         _cts?.Cancel();
-        try { _workerTask?.Wait(300); } catch { }
     }
 
     public void Dispose()

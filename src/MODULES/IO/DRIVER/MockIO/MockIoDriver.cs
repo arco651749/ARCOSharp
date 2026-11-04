@@ -186,11 +186,6 @@ public class MockIoDriver : IDriver
     public void Shutdown()
     {
         _cts?.Cancel();
-        try
-        {
-            _workerTask?.Wait(500);
-        }
-        catch { }
     }
 
     public void Dispose()
