@@ -36,6 +36,7 @@ public class MotionModuleHandler : IModuleHandler
         "WaitPosition",
         "WaitMotor",
         "WaitMotor(Error)",
+        "WaitMotion",
         "SetDO",
         "GetDI",
         "GetDO",
@@ -252,7 +253,8 @@ public class MotionModuleHandler : IModuleHandler
 
         // 9. WaitMotor / WaitMotor(Error) (非阻塞檢查機構 Busy 旗標)
         if (action.Equals("WaitMotor", StringComparison.OrdinalIgnoreCase) ||
-            action.Equals("WaitMotor(Error)", StringComparison.OrdinalIgnoreCase))
+            action.Equals("WaitMotor(Error)", StringComparison.OrdinalIgnoreCase) ||
+            action.Equals("WaitMotion", StringComparison.OrdinalIgnoreCase))
         {
             string busyIo = $"{motor}#Busy?";
             bool isBusy = ctx.Engines.Io.GetPort(busyIo);
