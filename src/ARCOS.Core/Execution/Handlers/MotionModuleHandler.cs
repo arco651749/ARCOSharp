@@ -34,9 +34,10 @@ public class MotionModuleHandler : IModuleHandler
         "GetPos",
         "GetState",
         "WaitPosition",
+        "WaitMotion",
+        "WaitMotion(Error)",
         "WaitMotor",
         "WaitMotor(Error)",
-        "WaitMotion",
         "SetDO",
         "GetDI",
         "GetDO",
@@ -288,7 +289,7 @@ public class MotionModuleHandler : IModuleHandler
             {
                 ctx.Engines.Variable.Set("Motion#ErrorCode", "1001", ctx.CurrentSection);
                 ctx.State.Reset();
-                string msg = string.IsNullOrEmpty(errorMsg) ? $"WaitMotor timeout on '{motor}' after {timeoutSec}s" : errorMsg;
+                string msg = string.IsNullOrEmpty(errorMsg) ? $"WaitMotion timeout on '{motor}' after {timeoutSec}s" : errorMsg;
                 return CommandResult.Fail(msg, errorLabel);
             }
 

@@ -76,8 +76,8 @@
 | **ClearPath** | `Motion@ClearPath::$motor` | 清除運動緩衝區 | 無 | 建構路徑前先清除 |
 | **AddPath** | `Motion@AddPath::$motor, $speed, $point` | 將點位與速度壓入連續軌跡隊列 | 無 | 搭配 `RunPath` 執行連續同動 |
 | **RunPath** | `Motion@RunPath::$motor` | 啟動預先建構的平滑連續軌跡 | `$(motor)#Busy?` 設為 On | 塗膠、同動焊接必備 |
-| **WaitMotor** | `Motion@WaitMotor::$motor(, TimeOut=$sec, [[$label]]$msg)` | 等待馬達停止動作 | 寫入 `Motion#ErrorCode` | **高風險指令**：量產版務必掛 `[[$label]]` |
-| **WaitMotor(Error)**| `Motion@WaitMotor(Error)::$motor(, TimeOut=$sec, [[$label]]$msg)` | 等待馬達並捕捉驅動器 Alarm | 寫入 `Motion#ErrorCode` | 包含驅動器硬體警報檢測 |
+| **WaitMotion** | `Motion@WaitMotion::$motor(, TimeOut=$sec, [[$label]]$msg)` | 等待馬達停止動作 | 寫入 `Motion#ErrorCode` | **高風險指令**：量產版務必掛 `[[$label]]` |
+| **WaitMotion(Error)**| `Motion@WaitMotion(Error)::$motor(, TimeOut=$sec, [[$label]]$msg)` | 等待馬達並捕捉驅動器 Alarm | 寫入 `Motion#ErrorCode` | 包含驅動器硬體警報檢測 |
 | **WaitPosition**| `Motion@WaitPosition::$motor, $tol, $point` | 等待位置誤差進入 `$tol` 容許公差 | 無 | 精度到位判定 |
 | **GetPos** | `Motion@GetPos::$motor` | 讀取機構當前位置 | 存入系統點位 `$motor` | 即時座標同步 |
 | **GetState** | `Motion@GetState::$motor(, [[$label]]$msg)` | 查詢機構錯誤狀態 | 寫入 `$(motor)#Busy?`, `Motion#ErrorCode` | 異常排查與連線探測使用 |

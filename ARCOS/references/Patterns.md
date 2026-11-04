@@ -72,11 +72,11 @@ Thread@EndIf::
 ```markdown
 // 直接點到點移動 (無安全高度退點)
 Motion@GoPoint::Robot,500,PickPos;
-Motion@WaitMotor::Robot;
+Motion@WaitMotion::Robot;
 IO@SetPort::VacuumValve;
 System@Delay::0.5;
 Motion@GoPoint::Robot,500,PlacePos;
-Motion@WaitMotor::Robot;
+Motion@WaitMotion::Robot;
 IO@ClrPort::VacuumValve
 ```
 
@@ -84,15 +84,15 @@ IO@ClrPort::VacuumValve
 ```markdown
 // 1. 先抬升至安全退點高度 Z(50)，避免橫移掃斷工件
 Motion@GoPoint::Robot,500,PickPos@Z(50);
-Motion@WaitMotor::Robot,TimeOut=5,[[MotionErr]]Robot Move SafeZ Fail;
+Motion@WaitMotion::Robot,TimeOut=5,[[MotionErr]]Robot Move SafeZ Fail;
 
 // 2. 在安全高度下，橫移至取料點上方 XY
 Motion@GoPoint::Robot,500,PickPos@XY;
-Motion@WaitMotor::Robot,TimeOut=5,[[MotionErr]]Robot Move XY Fail;
+Motion@WaitMotion::Robot,TimeOut=5,[[MotionErr]]Robot Move XY Fail;
 
 // 3. 落地：下放 Z 軸至取料深度
 Motion@GoPoint::Robot,300,PickPos@Z;
-Motion@WaitMotor::Robot,TimeOut=5,[[MotionErr]]Robot Descend Fail;
+Motion@WaitMotion::Robot,TimeOut=5,[[MotionErr]]Robot Descend Fail;
 
 // 4. 開啟真空電磁閥，並嚴格等待真空負壓建立 (限時 1.5 秒)
 IO@SetPort::VacuumValve;
@@ -100,15 +100,15 @@ IO@WaitPortOn::VacuumSensor?,1.5,[[VacuumErr]]Vacuum Build Failed;
 
 // 5. 吸附成功，垂直起拔回安全高度
 Motion@GoPoint::Robot,300,PickPos@Z(50);
-Motion@WaitMotor::Robot,TimeOut=5,[[MotionErr]]Robot Ascend Fail;
+Motion@WaitMotion::Robot,TimeOut=5,[[MotionErr]]Robot Ascend Fail;
 
 // 6. 橫移至放料點上方 XY
 Motion@GoPoint::Robot,500,PlacePos@XY;
-Motion@WaitMotor::Robot,TimeOut=5,[[MotionErr]]Robot Move Place XY Fail;
+Motion@WaitMotion::Robot,TimeOut=5,[[MotionErr]]Robot Move Place XY Fail;
 
 // 7. 下降至放料深度
 Motion@GoPoint::Robot,300,PlacePos@Z;
-Motion@WaitMotor::Robot,TimeOut=5,[[MotionErr]]Robot Descend Place Fail;
+Motion@WaitMotion::Robot,TimeOut=5,[[MotionErr]]Robot Descend Place Fail;
 
 // 8. 破真空釋放工件，確認脫料開關
 IO@ClrPort::VacuumValve;
@@ -117,7 +117,7 @@ IO@WaitPortOff::VacuumSensor?,1.0;
 
 // 9. 脫料完成，手臂退回安全高度
 Motion@GoPoint::Robot,500,PlacePos@Z(50);
-Motion@WaitMotor::Robot,TimeOut=5,[[MotionErr]]Robot Exit Fail;
+Motion@WaitMotion::Robot,TimeOut=5,[[MotionErr]]Robot Exit Fail;
 Thread@Stop::;
 
 // ======== 錯誤處理與脫困常式 ========
@@ -125,7 +125,7 @@ Thread@ErrorHandler::[[VacuumErr]];
 // 吸取失敗：關閉真空，手動退出回安全高度後停機
 IO@ClrPort::VacuumValve;
 Motion@GoPoint::Robot,200,PickPos@Z(50);
-Motion@WaitMotor::Robot;
+Motion@WaitMotion::Robot;
 Thread@Stop::True,Part Pick Failed: Vacuum Not Established;
 
 Thread@ErrorHandler::[[MotionErr]];
@@ -144,21 +144,21 @@ Thread@Stop::True,Robot Motion Interrupted By Timeout
 ```markdown
 // 每次呼叫自動走下一個陣列點
 Motion@GoPallet::Robot,500,TrayPallet;
-Motion@WaitMotor::Robot
+Motion@WaitMotion::Robot
 ```
 
 ### B. 產線量產版 (Production Level: 走訪、滿盤判定、換盤交握與索引歸零)
 ```markdown
 // 1. 執行 Pallet 步進移動 (內部索引自動 +1)
 Motion@GoPallet::Robot,500,TrayPallet;
-Motion@WaitMotor::Robot,TimeOut=10,[[PalletErr]]Pallet Motion Timeout;
+Motion@WaitMotion::Robot,TimeOut=10,[[PalletErr]]Pallet Motion Timeout;
 
 // 2. 判斷是否已走到最後一顆點位 (系統自動舉牌 $(point)#Last?)
 Thread@If::TrayPallet#Last?;
    System@Log Message::Tray is exhausted, requesting auto tray exchange;
    // 抬起至安全高度
    Motion@GoPoint::Robot,500,TrayPallet@Z(50);
-   Motion@WaitMotor::Robot;
+   Motion@WaitMotion::Robot;
    
    // 通知送料機構換盤，等待新盤定位到位 (限時 30 秒)
    IO@SetPort::TrayChangeRequest;

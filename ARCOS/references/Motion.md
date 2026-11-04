@@ -43,15 +43,15 @@
 | **RunPath** | `$motor` | 啟動連續線性路徑運動 (預先透過 AddPath 建構) |
 
 ### 5. 狀態取得與等待指令 (支援 Error Handling)
-> **注意**：`WaitMotor` 與 `WaitMotor(Error)` 為高風險指令，在撰寫腳本時務必依照 [使用範例](#使用範例) 加入 `ErrorHandler` 進行異常處理。
+> **注意**：`WaitMotion` 與 `WaitMotion(Error)` 為高風險指令，在撰寫腳本時務必依照 [使用範例](#使用範例) 加入 `ErrorHandler` 進行異常處理。
 
 | 指令 | 參數 | 說明 |
 | :--- | :--- | :--- |
 | **GetPos** | `$motor` | 讀取馬達當前位置，會存入以該 Motion 為名稱的系統點資料中 |
 | **GetState** | `$motor(, [[$label]]$message)` | 讀取並更新 Motion 最新錯誤狀態。若發生異常：參數僅提供字串則彈出錯誤視窗；若帶有 `[[$label]]` 則跳轉至錯誤處理區段。此指令會自動將 `$(motor)#Busy?` 寫入虛擬 IO，並將錯誤碼寫入當前 Thread 變數區的 `Motion#ErrorCode` 中。 |
 | **WaitPosition** | `$motor, $tolerance, $point` <br>或 `$motor, $tolerance, (x,y,z,inf...)` | **等待到位**。等待馬達目前位置與 `$point` 之間的誤差進入 `$tolerance` 範圍內 |
-| **WaitMotor** | `$motor(, TimeOut=$second, [[$label]]$message)` | **等待運動完成**。超時後若只帶字串則彈出錯誤視窗；若帶有 `[[$label]]` 則跳轉到錯誤處理區段。同時會自動將錯誤碼寫入當前 Thread 變數區的 `Motion#ErrorCode` 中 |
-| **WaitMotor(Error)** | `$motor(, TimeOut=$second, [[$label]]$message)` | **等待運動並捕捉異常**。超時或發生異常時若只帶字串則彈出錯誤視窗；若帶有 `[[$label]]` 則跳轉到錯誤處理區段。同時會自動將錯誤碼寫入當前 Thread 變數區的 `Motion#ErrorCode` 中 |
+| **WaitMotion** | `$motor(, TimeOut=$second, [[$label]]$message)` | **等待運動完成**。超時後若只帶字串則彈出錯誤視窗；若帶有 `[[$label]]` 則跳轉到錯誤處理區段。同時會自動將錯誤碼寫入當前 Thread 變數區的 `Motion#ErrorCode` 中 |
+| **WaitMotion(Error)** | `$motor(, TimeOut=$second, [[$label]]$message)` | **等待運動並捕捉異常**。超時或發生異常時若只帶字串則彈出錯誤視窗；若帶有 `[[$label]]` 則跳轉到錯誤處理區段。同時會自動將錯誤碼寫入當前 Thread 變數區的 `Motion#ErrorCode` 中 |
 ## 使用範例
 
 ### 範例：安全移動與運動等待 (包含 Error Handling)
@@ -64,7 +64,7 @@ Point&Path@Calculate::P1=(100,200,50);
 Motion@GoSafe::Robot,$RobotSpeed,P1,Z=0;
 
 // 等待機構移動完成，若 10 秒內未完成則跳轉處理
-Motion@WaitMotor::Robot,TimeOut=10,[[RobotError]]Robot Fail;
+Motion@WaitMotion::Robot,TimeOut=10,[[RobotError]]Robot Fail;
 Thread@Stop::;
 
 // ======== 錯誤處理區段 ========

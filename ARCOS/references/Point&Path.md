@@ -36,15 +36,15 @@
      
      // 2. 起手式：將 Z 軸率先拉升至安全高度 100 (其餘軸保持 inf 不動作)
      Motion@GoPoint::Robot,500,PT@Z(100)
-     Motion@WaitMotor::Robot
+     Motion@WaitMotion::Robot
      
      // 3. 途中橫移：在安全高度下，將 XY 面移動至目標位置上方 (其餘軸不動)
      Motion@GoPoint::Robot,500,PT@XY
-     Motion@WaitMotor::Robot
+     Motion@WaitMotion::Robot
      
      // 4. 落地：最後將 Z 軸下放至 PT 的原始深度
      Motion@GoPoint::Robot,500,PT@Z
-     Motion@WaitMotor::Robot
+     Motion@WaitMotion::Robot
      ```
 
 - **單點定義 (使用 `=`)**：

@@ -286,7 +286,7 @@ ARCOS 是一個強大的多線程架構，擁有 100 個程式區段 (Program 0~
 ### 支援指令清單
 
 - **IO 檢查**：`IO@WaitPortOn`, `IO@WaitPortOff`, `IO@CheckLogicOn`, `IO@CheckLogicOff`
-- **運動控制**：`Motion@WaitMotor`, `Motion@WaitMotor(Error)`, `Motion@GetState`
+- **運動控制**：`Motion@WaitMotion`, `Motion@WaitMotion(Error)`, `Motion@GetState`
 - **影像擷取**：`Capture@Snap`, `Capture@Trigger`
 - **其　　他**：所有擴充模組中的 `Wait` 類型指令。
 
@@ -312,7 +312,7 @@ Thread@ErrorRetry::
 
 ```markdown
 Motion@GoPoint::Robot,500,P1;
-Motion@WaitMotor::Robot,TimeOut=10,[[RobotError]]Robot Fail Try Error Handler;
+Motion@WaitMotion::Robot,TimeOut=10,[[RobotError]]Robot Fail Try Error Handler;
 Thread@Stop::;
 
 Thread@ErrorHandler::[[RobotError]];
