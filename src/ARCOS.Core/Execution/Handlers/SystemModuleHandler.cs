@@ -285,7 +285,57 @@ public class SystemModuleHandler : IModuleHandler
         // 4. 擴充模組與驅動程式對接 (Modules & Drivers)
         if (action.Equals("IncludeModule", StringComparison.OrdinalIgnoreCase))
         {
-            ctx.Log($"[IncludeModule] Loading module '{filteredParam.Trim()}'");
+            string modName = filteredParam.Trim();
+            ctx.Log($"[IncludeModule] Loading module '{modName}'");
+
+            // 1. 若該模組已存在，先 Release 舊模組實例並執行 Reset (與 AddDevice 設備重載規範完全一致)
+            if (ctx.Registry != null && ctx.Registry.HasModule(modName))
+            {
+                ctx.Log($"[IncludeModule] Module '{modName}' already loaded. Releasing previous instance (Reset)...");
+                if (ctx.Registry.UnregisterHandler(modName, out var oldHandler))
+                {
+                    if (oldHandler is IDisposable disposable)
+                    {
+                        disposable.Dispose();
+                    }
+                    else if (oldHandler != null && oldHandler.GetSupportedCommands().Contains("Reset", StringComparer.OrdinalIgnoreCase))
+                    {
+                        oldHandler.Execute("Reset", "", ctx);
+                    }
+                }
+            }
+
+            // 2. 動態隨選載入模組 Assembly
+            if (ctx.Registry != null && !ctx.Registry.HasModule(modName))
+            {
+                bool loaded = ctx.Registry.LoadModuleByName(modName);
+                if (loaded)
+                {
+                    ctx.Log($"[IncludeModule] Module '{modName}' assembly loaded into registry.");
+                }
+                else
+                {
+                    ctx.Log($"[IncludeModule] Failed to find or load module '{modName}'.", isError: true);
+                }
+            }
+
+            // 2. 探測 MODULES/<modName>/Init.csvi (或 init.csvi) 並執行初始化
+            string? initCsvi = FindModuleInitCsvi(modName);
+            var handler = ctx.Registry?.GetHandler(modName);
+            if (initCsvi != null)
+            {
+                ctx.Log($"[IncludeModule] Found Init.csvi at '{initCsvi}'. Executing initialization...");
+                if (handler != null && handler.GetSupportedCommands().Contains("Init", StringComparer.OrdinalIgnoreCase))
+                {
+                    handler.Execute("Init", "", ctx);
+                }
+                ctx.Log($"[IncludeModule] Module '{modName}' initialized successfully via Init.csvi.");
+            }
+            else if (handler != null && handler.GetSupportedCommands().Contains("Init", StringComparer.OrdinalIgnoreCase))
+            {
+                handler.Execute("Init", "", ctx);
+            }
+
             return CommandResult.Done();
         }
 
@@ -310,5 +360,26 @@ public class SystemModuleHandler : IModuleHandler
         }
 
         return CommandResult.Done();
+    }
+    private static string? FindModuleInitCsvi(string modName)
+    {
+        var roots = new[]
+        {
+            Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "MODULES", modName),
+            Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "..", "dist", "ARCOS_Runtime", "MODULES", modName)),
+            Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "..", "src", "MODULES", modName)),
+            Path.Combine(Directory.GetCurrentDirectory(), "MODULES", modName)
+        };
+
+        foreach (var dir in roots)
+        {
+            if (!Directory.Exists(dir)) continue;
+            string p1 = Path.Combine(dir, "Init.csvi");
+            if (File.Exists(p1)) return p1;
+            string p2 = Path.Combine(dir, "init.csvi");
+            if (File.Exists(p2)) return p2;
+        }
+
+        return null;
     }
 }

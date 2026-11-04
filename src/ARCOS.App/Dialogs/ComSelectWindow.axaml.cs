@@ -91,7 +91,7 @@ public partial class ComSelectWindow : Window
         _moduleActions["Motion"] = new List<string>
         {
             "AbsMove", "RelMove", "Jog", "Home",
-            "Stop", "WaitDone", "AddMotor", "GetPos"
+            "Stop", "WaitDone", "AddMotion", "GetPos"
         };
 
         // 5. Capture
@@ -137,13 +137,35 @@ public partial class ComSelectWindow : Window
             "ShowDialog", "InputText", "Confirm", "SelectRecipe"
         };
 
-        // 12. Call
-        _moduleActions["Call"] = new List<string>
+        // 12. Call (動態掃描 ExternalModules/ 目錄下所有可用之 CSVI 虛擬儀表)
+        var callActions = new List<string>();
+        try
         {
-            "CallVI", "CallDLL", "CallPython"
+            string extDir = ARCOS.Core.Common.ArcosPaths.ExternalModulesDirectory;
+            if (Directory.Exists(extDir))
+            {
+                foreach (var f in Directory.GetFiles(extDir, "*.csvi"))
+                {
+                    callActions.Add(Path.GetFileName(f));
+                }
+            }
+        }
+        catch { }
+        if (callActions.Count == 0)
+        {
+            callActions.Add("mycsvi.csvi");
+        }
+        _moduleActions["Call"] = callActions;
+
+        // 13. Python
+        _moduleActions["Python"] = new List<string>
+        {
+            "Script", "File", "SetVariable", "GetVariable",
+            "SetPoint", "GetPoint", "SetCapture", "GetCapture",
+            "SetCaptureFile", "ResetSession", "Init"
         };
 
-        // 13. AiAgent
+        // 14. AiAgent
         _moduleActions["AiAgent"] = new List<string>
         {
             "InspectDefect", "SuggestCorrection", "AuditLogs", "AutonomousRun"

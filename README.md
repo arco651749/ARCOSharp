@@ -27,6 +27,8 @@
 
 | 文件名稱 | 內容說明 |
 | :--- | :--- |
+| **[docs/OPERATIONAL_TEST_PROCEDURE.md](docs/OPERATIONAL_TEST_PROCEDURE.md)** | **ARCOSharp 端到端全操作流測試規範與自動化回歸指南（ADC + JSON-RPC 七階段驗證）** |
+| **[ExternalModules/README.md](ExternalModules/README.md)** | **Call@ 模組獨立 CSVI 開發與兩階段導引規範（四位一體規格與 AI Agent 規範）** |
 | **[`docs/CSVI_STUDIO_AND_PORTABLE_SPEC.md`](docs/CSVI_STUDIO_AND_PORTABLE_SPEC.md)** | **CSVI 3.0 可攜式自包含格式（內嵌 CS+AXAML）與獨立 `CSVI Studio` 工具鏈規格書** |
 | **[`docs/DYNAMIC_ARCHITECTURE_AND_GUIDANCE_SPEC.md`](docs/DYNAMIC_ARCHITECTURE_AND_GUIDANCE_SPEC.md)** | **ARCOSharp CSVI 四位一體全局架構、目錄驅動探索與非鎖檔熱插拔規格書** |
 | **[`docs/GUIDANCE_DESIGN_PRINCIPLES.md`](docs/GUIDANCE_DESIGN_PRINCIPLES.md)** | **參數導引視窗設計原則（零記憶負荷原則與八大模組資源自動感知矩陣）** |
@@ -43,9 +45,12 @@
 git clone https://github.com/arco651749/ARCOSharp.git
 cd ARCOSharp
 
-# 2. 執行全套單元測試 (86 項測試)
+# 2. 執行全套單元測試 (119 項測試：Core 109 + Drivers 10)
 dotnet test ARCOS.sln
 
 # 3. 打包完整 Runtime 與所有 CSVI 虛擬儀表至 dist/ARCOS_Runtime
 powershell.exe -ExecutionPolicy Bypass -File .\tools\pack_runtime.ps1
+
+# 4. 執行工業級端到端全操作流自動化測試 (虛擬顯示器人機零干擾 7 階段完整回歸)
+python.exe -X utf8 tools/test_arcosharp_e2e.py
 ```

@@ -5,6 +5,16 @@ using ARCOS.Core.Model;
 namespace ARCOS.Core.Engines;
 
 /// <summary>
+/// IO 點位方向過濾列舉 (用於導引視窗動態過濾 Output / Input)
+/// </summary>
+public enum IoPortDirection
+{
+    All,
+    Output,
+    Input
+}
+
+/// <summary>
 /// 動態無限 IO 池引擎 (IoEngine)
 /// 管理實體點位 (Pn.m)、別名對應、系統虛擬 IO (如 Cam0#OK?) 與常數 (True/False)
 /// 具備執行緒安全、硬體批次搬運與狀態變更廣播
@@ -12,6 +22,9 @@ namespace ARCOS.Core.Engines;
 public class IoEngine
 {
     private readonly object _lock = new();
+
+    // 註冊的 IO 驅動裝置字典 (DeviceName -> Config/Description)
+    private readonly ConcurrentDictionary<string, string> _registeredDrivers = new(StringComparer.OrdinalIgnoreCase);
 
     // 實體點位池：以 (PortIndex, BitIndex) 索引，預設 P0.0 ~ P63.7，超過自動動態擴充
     private readonly ConcurrentDictionary<(int Port, int Bit), bool> _physicalPorts = new();
@@ -148,6 +161,79 @@ public class IoEngine
                 {
                     IoChanged?.Invoke(key, string.Empty, value);
                 }
+            }
+        }
+    }
+
+    /// <summary>
+    /// 註冊 IO 驅動裝置識別碼 (對應 IO@AddDrvier / IO@AddIODriver)
+    /// </summary>
+    public void RegisterDriver(string deviceName, string config = "")
+    {
+        if (string.IsNullOrWhiteSpace(deviceName)) return;
+        _registeredDrivers[deviceName.Trim()] = config ?? string.Empty;
+    }
+
+    /// <summary>
+    /// 移除已註冊的 IO 驅動裝置
+    /// </summary>
+    public bool UnregisterDriver(string deviceName)
+    {
+        if (string.IsNullOrWhiteSpace(deviceName)) return false;
+        return _registeredDrivers.TryRemove(deviceName.Trim(), out _);
+    }
+
+    /// <summary>
+    /// 取得所有已註冊的 IO 驅動裝置名稱清單 (例如: ["IO1", "IO2"])
+    /// </summary>
+    public IReadOnlyList<string> GetRegisteredDrivers()
+    {
+        var list = _registeredDrivers.Keys.OrderBy(k => k).ToList();
+        return list;
+    }
+
+    /// <summary>
+    /// 靜態預解析並註冊單行 IO 指令的定義（供 Sequencer 編輯期與腳本載入期秒級動態提取 PortName 與 Driver）
+    /// </summary>
+    public void ScanAndRegister(string command, string parameter)
+    {
+        if (string.IsNullOrWhiteSpace(command) || string.IsNullOrWhiteSpace(parameter)) return;
+        string cmd = command.Trim();
+        if (!cmd.StartsWith("IO@", StringComparison.OrdinalIgnoreCase)) return;
+
+        string action = cmd.Substring(3).Trim();
+        var parts = parameter.Split(',', StringSplitOptions.TrimEntries);
+        if (parts.Length == 0) return;
+
+        if (action.Equals("AddDrvier", StringComparison.OrdinalIgnoreCase) ||
+            action.Equals("AddDriver", StringComparison.OrdinalIgnoreCase) ||
+            action.Equals("AddIODriver", StringComparison.OrdinalIgnoreCase))
+        {
+            if (parts.Length > 0 && !string.IsNullOrEmpty(parts[0]))
+            {
+                RegisterDriver(parts[0], parameter);
+            }
+        }
+        else if (action.Equals("SetPortName", StringComparison.OrdinalIgnoreCase) ||
+                 action.Equals("SETPORTNAME", StringComparison.OrdinalIgnoreCase))
+        {
+            if (parts.Length >= 2 && !string.IsNullOrEmpty(parts[0]) && !string.IsNullOrEmpty(parts[1]))
+            {
+                SetPortName(parts[0], parts[1]);
+            }
+        }
+        else if (action.Equals("VirtualIO", StringComparison.OrdinalIgnoreCase) ||
+                 action.Equals("VIRTUALIO", StringComparison.OrdinalIgnoreCase) ||
+                 action.Equals("AddVirtualIO", StringComparison.OrdinalIgnoreCase))
+        {
+            if (parts.Length >= 2 && !string.IsNullOrEmpty(parts[0]))
+            {
+                string p = parts[0];
+                string v = parts[1];
+                bool bVal = v.Equals("1", StringComparison.OrdinalIgnoreCase) ||
+                            v.Equals("On", StringComparison.OrdinalIgnoreCase) ||
+                            v.Equals("True", StringComparison.OrdinalIgnoreCase);
+                AddVirtualIO(p, bVal);
             }
         }
     }
@@ -319,25 +405,42 @@ public class IoEngine
     }
 
     /// <summary>
-    /// 取得所有可用的 PortName 清單 (包含使用者別名、系統虛擬點位與實體點位 P0.0~Pn.m)
+    /// 取得所有可用 PortName 清單 (包含別名、VIRTUALIO 與實體點位 P0.0 ~ P7.7)
+    /// ARCOS IO 設計不區分 Input / Output，本質為統一的布林讀寫陣列 (bool[])。
+    /// 選單依序提供：自訂別名、VIRTUALIO，以及未命名的實體點位，確保調機打樣時未命名點位依然可直接被 Read/Write 測試。
     /// </summary>
-    public IReadOnlyList<string> GetAllPortNames()
+    public IReadOnlyList<string> GetConfiguredPortNames(IoPortDirection direction = IoPortDirection.All)
     {
         var names = new List<string>();
 
-        // 1. 使用者自訂別名優先置頂 (例如: Cylinder_Extend, Vacuum_1)
-        foreach (var alias in _aliasToPhysical.Keys.OrderBy(a => a))
+        // 1. 取得使用者透過 SETPORTNAME 設定之所有別名 (優先置頂，字母排序)
+        var aliases = _aliasToPhysical.Keys.OrderBy(a => a, StringComparer.OrdinalIgnoreCase);
+        foreach (var alias in aliases)
         {
             names.Add(alias);
         }
 
-        // 2. 常用實體點位 (P0.0 ~ P7.7，共 64 點常用標準點位)
-        for (int p = 0; p < 8; p++)
+        // 2. 取得使用者透過 VIRTUALIO / AddVirtualIO 設定之虛擬 IO (排除 TRUE/FALSE 常數)
+        foreach (var vKey in _virtualIos.Keys.OrderBy(k => k, StringComparer.OrdinalIgnoreCase))
+        {
+            if (string.Equals(vKey, "TRUE", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(vKey, "FALSE", StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            if (!names.Contains(vKey, StringComparer.OrdinalIgnoreCase))
+            {
+                names.Add(vKey);
+            }
+        }
+
+        // 3. 納入實體點位 (P0.0 ~ P63.7，共 512 點，對標 CAPTURE 與主視窗 64 Ports x 8 Bits)：
+        // 考慮到工程師在打樣、配盤或尚未想好名稱時，未命名的點位依然需要能夠被 Read / Write 測試。
+        for (int p = 0; p < 64; p++)
         {
             for (int b = 0; b < 8; b++)
             {
                 string portStr = $"P{p}.{b}";
-                if (!names.Contains(portStr))
+                if (!names.Contains(portStr, StringComparer.OrdinalIgnoreCase))
                 {
                     names.Add(portStr);
                 }
@@ -345,6 +448,33 @@ public class IoEngine
         }
 
         return names;
+    }
+
+    public IReadOnlyList<string> GetOutputPortNames() => GetConfiguredPortNames(IoPortDirection.All);
+    public IReadOnlyList<string> GetInputPortNames() => GetConfiguredPortNames(IoPortDirection.All);
+
+    /// <summary>
+    /// 取得實體硬體點位清單 (供 SETPORTNAME 映射選擇來源實體點，共 512 點)
+    /// </summary>
+    public IReadOnlyList<string> GetPhysicalPortList(int maxPort = 64)
+    {
+        var list = new List<string>();
+        for (int p = 0; p < maxPort; p++)
+        {
+            for (int b = 0; b < 8; b++)
+            {
+                list.Add($"P{p}.{b}");
+            }
+        }
+        return list;
+    }
+
+    /// <summary>
+    /// 取得所有已登記之 PortName 清單 (動態別名 + 虛擬 IO)
+    /// </summary>
+    public IReadOnlyList<string> GetAllPortNames()
+    {
+        return GetConfiguredPortNames(IoPortDirection.All);
     }
 
     /// <summary>

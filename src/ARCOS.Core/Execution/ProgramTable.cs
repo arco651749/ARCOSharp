@@ -114,6 +114,14 @@ public sealed class ProgramTable
             {
                 return lblLine;
             }
+
+            // 容錯支援標籤前綴帶 $ (例如 [[]] 自動匹配 [[ErrCatch]])
+            if (clean.StartsWith('$'))
+            {
+                string stripped = clean.TrimStart('$');
+                if (_errorHandlerIndex.TryGetValue(stripped, out int sLine)) return sLine;
+                if (_labelIndex.TryGetValue(stripped, out int slLine)) return slLine;
+            }
         }
 
         if (_defaultErrorHandlerLine > 0)
@@ -130,11 +138,70 @@ public sealed class ProgramTable
     public static ProgramTable FromLines(IEnumerable<string> lines, int progNo = 0, string name = "")
     {
         var table = new ProgramTable { ProgramNumber = progNo, Name = name };
-        foreach (var line in lines)
+        string pending = "";
+
+        foreach (var rawLine in lines)
         {
-            table.Add(CommandItem.Parse(line));
+            if (string.IsNullOrWhiteSpace(rawLine) && string.IsNullOrEmpty(pending))
+            {
+                table.Add(CommandItem.Parse(rawLine));
+                continue;
+            }
+
+            string trimmed = rawLine.Trim();
+            if ((trimmed.StartsWith("//") || trimmed.StartsWith(';')) && string.IsNullOrEmpty(pending))
+            {
+                table.Add(CommandItem.Parse(rawLine));
+                continue;
+            }
+
+            // 若已有累積語句，且新行自身為獨立新指令起點（包含 Module@Action:: 或標籤 :），先結算前一指令
+            if (!string.IsNullOrEmpty(pending) && IsCommandHeader(rawLine))
+            {
+                table.Add(CommandItem.Parse(pending));
+                pending = "";
+            }
+
+            if (!string.IsNullOrEmpty(pending))
+            {
+                pending += "\n" + rawLine;
+            }
+            else
+            {
+                pending = rawLine;
+            }
+
+            string checkTrimmed = pending.Trim();
+            if (checkTrimmed.EndsWith(';') || checkTrimmed.StartsWith(':'))
+            {
+                table.Add(CommandItem.Parse(pending));
+                pending = "";
+            }
         }
+
+        if (!string.IsNullOrEmpty(pending))
+        {
+            table.Add(CommandItem.Parse(pending));
+        }
+
         return table;
+    }
+
+    private static bool IsCommandHeader(string line)
+    {
+        if (string.IsNullOrWhiteSpace(line)) return false;
+        string t = line.Trim();
+        if (t.StartsWith(':')) return true;
+        if (t.StartsWith("//") || t.StartsWith(';')) return false;
+        int atIdx = t.IndexOf('@');
+        if (atIdx > 0 && atIdx < t.Length - 1)
+        {
+            int colonIdx = t.IndexOf("::", atIdx, StringComparison.Ordinal);
+            if (colonIdx > atIdx) return true;
+            int tabIdx = t.IndexOf('\t', atIdx);
+            if (tabIdx > atIdx) return true;
+        }
+        return false;
     }
 
     /// <summary>

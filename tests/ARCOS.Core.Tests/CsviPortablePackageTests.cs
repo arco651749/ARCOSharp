@@ -95,4 +95,21 @@ public class CsviPortablePackageTests
         Assert.Equal(CsviPackagingMode.PortableOpen, deserialized.PackagingMode);
         Assert.Single(deserialized.RevisionHistory);
     }
+
+    [Fact]
+    public void UserPanelCsvi_ShouldResolveAndLoadSuccessfully()
+    {
+        string path = ARCOS.Core.Common.ArcosPaths.ResolveUserPanelCsviPath("UserPanel.csvi");
+        Assert.True(File.Exists(path), $"UserPanel.csvi should exist at resolved path: {path}");
+
+        var pkg = CsviPackage.Load(path);
+        Assert.NotNull(pkg);
+        Assert.NotNull(pkg.Manifest);
+        Assert.Equal("SYSTEM", pkg.Manifest.Module);
+        Assert.Equal("UserPanel", pkg.Manifest.CommandKey);
+        Assert.NotNull(pkg.LoadedAssembly);
+
+        var ctrlType = pkg.LoadedAssembly.GetTypes().FirstOrDefault(t => t.Name == "UserPanelView");
+        Assert.NotNull(ctrlType);
+    }
 }

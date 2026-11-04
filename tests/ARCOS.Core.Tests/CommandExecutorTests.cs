@@ -283,6 +283,7 @@ public class CommandExecutorTests
     public void ExecuteStep_Python_VariableExchange()
     {
         string script = """
+            System@IncludeModule::Python;
             Variable@Set::InputVal,100;
             Python@SetVariable::InputVal,PythonName=X;
             Python@Script::Y=200;
@@ -291,6 +292,7 @@ public class CommandExecutorTests
 
         var (ctx, executor, engines, _) = CreateTestHarness(script);
 
+        executor.ExecuteStep(ctx);
         executor.ExecuteStep(ctx);
         executor.ExecuteStep(ctx);
         executor.ExecuteStep(ctx);

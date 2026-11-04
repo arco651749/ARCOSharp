@@ -64,7 +64,7 @@
 
 | 指令 (Command) | 語法簽名 (Signature) | 參數說明 (Parameters) | 虛擬 IO / 旗標副作用 | 防呆與注意事項 |
 | :--- | :--- | :--- | :--- | :--- |
-| **AddMotor** | `Motion@AddMotor::$motor, $driver(, $params...)` | `$motor`: 機構名稱<br>`$driver`: 軸卡驅動 | 註冊 Motion 機構 | 通常於機台初始化腳本執行 |
+| **AddMotion** | `Motion@AddMotion::$motor, $driver(, $params...)` | `$motor`: 機構名稱<br>`$driver`: 軸卡驅動 | 註冊 Motion 機構 | 通常於機台初始化腳本執行 |
 | **Config** | `Motion@Config::$motor, $param, $value` | 內部參數設定 | 無 | 依硬體手冊設定速度、加減速 |
 | **Home** | `Motion@Home::$motor(, $axis, CounterOnly)` | `$motor`: 機構名稱<br>`$axis`: 指定軸向 (選填) | 自動更新座標為原點 | 軸復歸指令，建議於 Prog 96 檢查原點旗標 |
 | **Stop** | `Motion@Stop::$motor` | `$motor`: 機構名稱 | 減速停止機構所有軸 | EMG Stop (Prog 99) 必備指令 |

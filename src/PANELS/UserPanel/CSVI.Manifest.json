@@ -1,0 +1,16 @@
+{
+  "Module": "SYSTEM",
+  "CommandKey": "UserPanel",
+  "ComponentType": 2,
+  "PackagingMode": 0,
+  "LastCompiledUtc": "2026-11-03T08:00:00Z",
+  "LastAuthor": "ARCO\\Engineer",
+  "RevisionHistory": [
+    {
+      "Revision": 1,
+      "TimestampUtc": "2026-11-03T08:00:00Z",
+      "Author": "ARCO\\Engineer",
+      "Summary": "CSVI 3.0 Standard User Front Panel (Station 01 HMI Canvas)"
+    }
+  ]
+}

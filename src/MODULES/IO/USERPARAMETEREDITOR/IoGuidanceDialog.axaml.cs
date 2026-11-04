@@ -91,7 +91,7 @@ public partial class IoGuidanceDialog : Window
 
         if (_portList.Count == 0)
         {
-            for (int p = 0; p < 8; p++)
+            for (int p = 0; p < 2; p++)
                 for (int b = 0; b < 8; b++)
                     _portList.Add($"P{p}.{b}");
         }
@@ -299,17 +299,55 @@ public partial class IoGuidanceDialog : Window
         if (_cmbLogicTimeout != null) { _cmbLogicTimeout.ItemsSource = timeouts; _cmbLogicTimeout.SelectedIndex = 2; }
         if (_cmbLogicLabel != null) { _cmbLogicLabel.ItemsSource = labels; _cmbLogicLabel.SelectedIndex = 0; }
 
-        var physicalOnly = _portList.Where(p => p.StartsWith("P", StringComparison.OrdinalIgnoreCase)).ToList();
-        if (_cmbRenamePort != null) _cmbRenamePort.ItemsSource = physicalOnly.Count > 0 ? physicalOnly : _portList;
+        // 實體點選擇清單：供 SETPORTNAME 映射選擇來源實體硬體點
+        var physicalList = new List<string>(_engines?.Io != null ? _engines.Io.GetPhysicalPortList(8) : Array.Empty<string>());
+        if (physicalList.Count == 0)
+        {
+            for (int p = 0; p < 8; p++)
+                for (int b = 0; b < 8; b++)
+                    physicalList.Add($"P{p}.{b}");
+        }
+        if (_cmbRenamePort != null) _cmbRenamePort.ItemsSource = physicalList;
 
         if (_cmbVirtualState != null) { _cmbVirtualState.ItemsSource = new[] { "ON", "OFF" }; _cmbVirtualState.SelectedIndex = 0; }
 
         if (_cmbDriverType != null) { _cmbDriverType.ItemsSource = new[] { "MockIO", "AdvantechIO", "ADLINK8164" }; _cmbDriverType.SelectedIndex = 0; }
 
-        var devNames = new[] { "IO1", "IO2", "StationIO", "MockIO" };
+        // 動態取得目前已註冊之 IO 驅動名稱 (例如: IO1, IO2)
+        var devNames = _engines?.Io?.GetRegisteredDrivers();
+        if (devNames == null || devNames.Count == 0)
+        {
+            devNames = new[] { "IO1" };
+        }
         if (_cmbDeviceName != null) { _cmbDeviceName.ItemsSource = devNames; _cmbDeviceName.SelectedIndex = 0; }
 
         if (_cmbShiftAmount != null) { _cmbShiftAmount.ItemsSource = new[] { "1", "-1", "2", "-2" }; _cmbShiftAmount.SelectedIndex = 0; }
+
+        SetupPortFilter(this.FindControl<TextBox>("TxtFilterSetPort"), _cmbSetPortName);
+        SetupPortFilter(this.FindControl<TextBox>("TxtFilterFlashPort"), _cmbFlashPort);
+        SetupPortFilter(this.FindControl<TextBox>("TxtFilterWaitPort"), _cmbWaitPort);
+    }
+
+    private void SetupPortFilter(TextBox? txtFilter, ComboBox? cmb)
+    {
+        if (txtFilter == null || cmb == null) return;
+        txtFilter.KeyUp += (s, e) =>
+        {
+            string q = txtFilter.Text?.Trim() ?? string.Empty;
+            if (string.IsNullOrEmpty(q))
+            {
+                cmb.ItemsSource = _portList;
+            }
+            else
+            {
+                var filtered = _portList.Where(p => p.Contains(q, StringComparison.OrdinalIgnoreCase)).ToList();
+                cmb.ItemsSource = filtered;
+                if (filtered.Count > 0 && (cmb.SelectedItem == null || !filtered.Contains(cmb.SelectedItem)))
+                {
+                    cmb.SelectedIndex = 0;
+                }
+            }
+        };
     }
 
     private void ParseInitialParam(string currentParam)

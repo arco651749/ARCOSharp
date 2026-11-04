@@ -20,7 +20,7 @@
 
 ## 2. Motors (Motion)
 ```markdown
-// 語法：Motion@AddMotor::$motor,$driver,$param...
+// 語法：Motion@AddMotion::$motor,$driver,$param...
 // 驅動來源：查閱 CoreModules/Motor Module/ 下之目錄與各 Driver 的 Parameter.txt
 ```
 

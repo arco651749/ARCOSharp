@@ -175,10 +175,10 @@ Motion@GoPallet::Motor1,100,P;
     }
 
     [Fact]
-    public void MotionModule_AddMotor_Home_GoPoint_And_GetPos()
+    public void MotionModule_AddMotion_Home_GoPoint_And_GetPos()
     {
         string script = @"
-Motion@AddMotor::MotorTest,MockMotion;
+Motion@AddMotion::MotorTest,MockMotion;
 Motion@Home::MotorTest;
 Point&Path@Calculate::TargetP=(123.4,567.8,90.0);
 Motion@GoPoint::MotorTest,100,TargetP;
@@ -193,10 +193,23 @@ Motion@GetPos::MotorTest;
     }
 
     [Fact]
+    public void MotionModule_AddMotor_BackwardCompatibility()
+    {
+        string script = @"
+Motion@AddMotor::MotorLegacy,MockMotion;
+Motion@Home::MotorLegacy;
+";
+        var (ctx, executor, engines) = CreateHarness(script);
+        RunToEnd(ctx, executor);
+
+        Assert.True(engines.Io.GetPort("MotorLegacy#Homed?"));
+    }
+
+    [Fact]
     public void MotionModule_GoSafe_WithSafeAxisZ()
     {
         string script = @"
-Motion@AddMotor::M2,MockMotion;
+Motion@AddMotion::M2,MockMotion;
 Point&Path@Calculate::P2=(50,60,70);
 Motion@GoSafe::M2,100,P2,Z=0;
 ";
@@ -458,4 +471,272 @@ LaserMarking@StartMark::Text=SN12345;
         Assert.Equal("CustomRecipePanel.csvi", requestedPanel);
     }
 
+
+    [Fact]
+    public void PythonModule_MultiSessionIsolation_VariablesDoNotCollide()
+    {
+        string script = @"
+System@IncludeModule::Python;
+Python@SetVariable::A,100,Session=Sess1;
+Python@SetVariable::A,999,Session=Sess2;
+Python@GetVariable::A,Session=Sess1,ARCOSName=ResultSess1;
+Python@GetVariable::A,Session=Sess2,ARCOSName=ResultSess2;
+";
+        var (ctx, executor, engines) = CreateHarness(script);
+        RunToEnd(ctx, executor);
+
+        Assert.Equal("100", engines.Variable.Get("ResultSess1"));
+        Assert.Equal("999", engines.Variable.Get("ResultSess2"));
+    }
+
+    [Fact]
+    public void PythonModule_ThreadImplicit_Isolation()
+    {
+        var io = new IoEngine();
+        var varEng = new VariableEngine();
+        var pt = new PointEngine(io);
+        var img = new ImageEngine(io);
+        var daq = new DaqEngine(io);
+        var timer = new TimerEngine(io);
+        var engines = new BasicEngines(io, varEng, pt, img, daq, timer);
+        var drivers = new DriverManager(engines);
+        var executor = new CommandExecutor(ModuleRegistry.CreateDefault());
+
+        // Thread 1
+        var prog1 = ProgramTable.FromText(@"
+System@IncludeModule::Python;
+Python@Script::counter = 42;
+Python@GetVariable::counter,ARCOSName=T1_Val;
+", 0, "T1");
+        var ctx1 = new ExecutionContext(0, "Thread1", prog1, engines, drivers);
+        ctx1.CurrentSection = "Thread1";
+        RunToEnd(ctx1, executor);
+
+        // Thread 2 (Python 模組已於系統載入，各 Thread 依 ThreadName 隱式隔離 Session)
+        var prog2 = ProgramTable.FromText(@"
+Python@Script::counter = 777;
+Python@GetVariable::counter,ARCOSName=T2_Val;
+", 0, "T2");
+        var ctx2 = new ExecutionContext(1, "Thread2", prog2, engines, drivers);
+        ctx2.CurrentSection = "Thread2";
+        RunToEnd(ctx2, executor);
+
+        // Thread 1 read again to ensure no cross-contamination
+        var prog1Check = ProgramTable.FromText(@"
+Python@GetVariable::counter,ARCOSName=T1_Final;
+", 0, "T1_Check");
+        var ctx1Check = new ExecutionContext(0, "Thread1", prog1Check, engines, drivers);
+        ctx1Check.CurrentSection = "Thread1";
+        RunToEnd(ctx1Check, executor);
+
+        Assert.Equal("42", engines.Variable.Get("T1_Val", "Thread1"));
+        Assert.Equal("777", engines.Variable.Get("T2_Val", "Thread2"));
+        Assert.Equal("42", engines.Variable.Get("T1_Final", "Thread1"));
+    }
+
+    [Fact]
+    public void PythonModule_PointExchange_NumPy()
+    {
+        string script = @"
+System@IncludeModule::Python;
+Python@SetPoint::PtOrig,PythonName=p;
+Python@Script::p[0] += 5.5
+p[1] *= 2.0;
+Python@GetPoint::p,ARCOSName=PtResult;
+";
+        var (ctx, executor, engines) = CreateHarness(script);
+        engines.Point.SetPoint("PtOrig", new MachinePoint { X = 10.0, Y = 20.0, Z = 30.0, U = 0, V = 0, W = 0 });
+        RunToEnd(ctx, executor);
+
+        var ptResult = engines.Point.GetPoint("PtResult");
+        Assert.Equal(15.5, ptResult.X, 3);
+        Assert.Equal(40.0, ptResult.Y, 3);
+        Assert.Equal(30.0, ptResult.Z, 3);
+    }
+
+    [Fact]
+    public void PythonModule_ImageExchange_OpenCv()
+    {
+        string script = @"
+System@IncludeModule::Python;
+Python@SetCapture::CamSource,PythonName=py_img;
+Python@Script::py_img[:, :] = (10, 20, 30);
+Python@GetCapture::py_img,ARCOSName=CamProcessed;
+";
+        var (ctx, executor, engines) = CreateHarness(script);
+        using var testMat = new OpenCvSharp.Mat(20, 30, OpenCvSharp.MatType.CV_8UC3, new OpenCvSharp.Scalar(0, 0, 0));
+        engines.Image.SetSingleImage("CamSource", testMat);
+        RunToEnd(ctx, executor);
+
+        var processedFrame = engines.Image.GetFrame("CamProcessed");
+        Assert.NotNull(processedFrame.Image);
+        Assert.Equal(30, processedFrame.Image.Width);
+        Assert.Equal(20, processedFrame.Image.Height);
+
+        // Check pixel value
+        var vec = processedFrame.Image.At<OpenCvSharp.Vec3b>(5, 5);
+        Assert.Equal(10, vec.Item0);
+        Assert.Equal(20, vec.Item1);
+        Assert.Equal(30, vec.Item2);
+    }
+
+    [Fact]
+    public void PythonModule_ResetSession_ClearsVariables()
+    {
+        string script = @"
+System@IncludeModule::Python;
+Python@Script::Session=TempSess, test_var = 12345;
+Python@GetVariable::test_var,Session=TempSess,ARCOSName=BeforeReset;
+Python@ResetSession::TempSess;
+Python@GetVariable::test_var,Session=TempSess,ARCOSName=AfterReset;
+";
+        var (ctx, executor, engines) = CreateHarness(script);
+        RunToEnd(ctx, executor);
+
+        Assert.Equal("12345", engines.Variable.Get("BeforeReset"));
+        Assert.True(string.IsNullOrEmpty(engines.Variable.Get("AfterReset")));
+    }
+
+
+    [Fact]
+    public void PythonModule_OnDemandLoading_NotLoadedAtBoot_LoadsOnIncludeModule()
+    {
+        // 1. 驗證開機時 Registry 絕無 Python 模組
+        var registry = ModuleRegistry.CreateDefault();
+        Assert.False(registry.HasModule("Python"), "Python module should NOT be loaded at boot!");
+
+        // 2. 執行腳本包含 System@IncludeModule::Python;
+        string script = @"
+System@IncludeModule::Python;
+Python@SetVariable::BootTestVar,ReadyToRun;
+Python@GetVariable::BootTestVar,ARCOSName=BootResult;
+";
+        var io = new IoEngine();
+        var varEng = new VariableEngine();
+        var pt = new PointEngine(io);
+        var img = new ImageEngine(io);
+        var daq = new DaqEngine(io);
+        var timer = new TimerEngine(io);
+        var engines = new BasicEngines(io, varEng, pt, img, daq, timer);
+        var drivers = new DriverManager(engines);
+        var prog = ProgramTable.FromText(script, 0, "BootTest");
+        var ctx = new ExecutionContext(0, "ThreadMain", prog, engines, drivers);
+        var executor = new CommandExecutor(registry);
+
+        int steps = 0;
+        while (ctx.IsRunning && steps++ < 10)
+        {
+            executor.ExecuteStep(ctx);
+        }
+
+        // 3. 驗證 IncludeModule 執行後，Python 已動態註冊並正常運算
+        Assert.True(registry.HasModule("Python"), "Python module should be loaded after IncludeModule!");
+        Assert.Equal("ReadyToRun", engines.Variable.Get("BootResult"));
+
+        // 4. 驗證系統日誌中包含 Init.csvi 調用紀錄
+        Assert.Contains(ctx.SysLogEntries, l => l.Contains("[IncludeModule]") && l.Contains("Python"));
+    }
+
+
+    [Fact]
+    public void PythonModule_IncludeModule_WhenCalledAgain_ResetsEntireModule()
+    {
+        var io = new IoEngine();
+        var varEng = new VariableEngine();
+        var pt = new PointEngine(io);
+        var img = new ImageEngine(io);
+        var daq = new DaqEngine(io);
+        var timer = new TimerEngine(io);
+        var engines = new BasicEngines(io, varEng, pt, img, daq, timer);
+        var drivers = new DriverManager(engines);
+        var executor = new CommandExecutor(ModuleRegistry.CreateDefault());
+
+        // 1. 初次載入並在 ThreadMain 建立變數
+        var prog1 = ProgramTable.FromText(@"
+System@IncludeModule::Python;
+Python@Script::global_var = 12345;
+Python@GetVariable::global_var,ARCOSName=Var_First;
+", 0, "T1");
+        var ctx1 = new ExecutionContext(0, "ThreadMain", prog1, engines, drivers);
+        RunToEnd(ctx1, executor);
+        Assert.Equal("12345", engines.Variable.Get("Var_First"));
+
+        // 2. 再次呼叫 System@IncludeModule::Python (比照 AddDevice 重複加入時 Release + Reload + Reset)
+        var prog2 = ProgramTable.FromText(@"
+System@IncludeModule::Python;
+Python@GetVariable::global_var,ARCOSName=Var_AfterReset;
+", 0, "T2");
+        var ctx2 = new ExecutionContext(0, "ThreadMain", prog2, engines, drivers);
+        RunToEnd(ctx2, executor);
+
+        // 驗證變數已被清空重置 (變數不存在回傳空字串)
+        Assert.Equal("", engines.Variable.Get("Var_AfterReset"));
+    }
+
+    [Fact]
+    public void CallModule_ExternalCsvi_ExecutesMathAndAssignsVariable()
+    {
+        string script = @"
+Call@mycsvi.csvi&::15,25,$MySum;
+";
+        var (ctx, executor, engines) = CreateHarness(script);
+        RunToEnd(ctx, executor);
+
+        Assert.Equal("40", engines.Variable.Get("MySum"));
+    }
+
+    [Fact]
+    public void CallModule_ExternalCsvi_ExecutesHistogramAndReturnsScore()
+    {
+        string script = @"
+Call@mycsvi.csvi&::Cam1,100,200,HistScore;
+";
+        var (ctx, executor, engines) = CreateHarness(script);
+        RunToEnd(ctx, executor);
+
+        Assert.Equal("127.5", engines.Variable.Get("HistScore"));
+    }
+
+    [Fact]
+    public void CallModule_ExternalCsvi_ReentrantMode_ExecutesParallelWithoutInterference()
+    {
+        string script = @"
+Call@mycsvi.csvi&&::12,18,Sum1;
+Call@mycsvi.csvi&&::Cam2,50,150,Score1;
+";
+        var (ctx, executor, engines) = CreateHarness(script);
+        RunToEnd(ctx, executor);
+
+        Assert.Equal("30", engines.Variable.Get("Sum1"));
+        Assert.Equal("85", engines.Variable.Get("Score1"));
+    }
+
+    [Fact]
+    public void CallModule_ExternalCsvi_LegacyViSyntax_AutomaticallyRedirectsToCsvi()
+    {
+        string script = @"
+Call@mycsvi.vi&::100,200,ViSum;
+";
+        var (ctx, executor, engines) = CreateHarness(script);
+        RunToEnd(ctx, executor);
+
+        Assert.Equal("300", engines.Variable.Get("ViSum"));
+    }
+
+    [Fact]
+    public void CallModule_ExternalCsvi_ErrorLabel_JumpsOnError()
+    {
+        string script = @"
+Variable@Set::State,Initial;
+Call@NoSuchModuleError.csvi&::1,2,[[$ErrCatch]]FailedToRun;
+Variable@Set::State,ShouldBeSkipped;
+Thread@Stop::;
+Thread@ErrorHandler::[[ErrCatch]];
+Variable@Set::State,Handled;
+";
+        var (ctx, executor, engines) = CreateHarness(script);
+        RunToEnd(ctx, executor);
+
+        Assert.Equal("Handled", engines.Variable.Get("State"));
+    }
 }

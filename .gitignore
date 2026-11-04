@@ -55,3 +55,7 @@ tools/MeldPortable/
 scratch/
 *.bmp
 PICTURE/
+
+*.pdb
+*.deps.json
+*.dll

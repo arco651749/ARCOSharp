@@ -1,0 +1,94 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="ExternalModules.MyCsvi.MyCsviGuidanceDialog"
+        Title="mycsvi.csvi - AOI 直方圖與自訂運算參數配置"
+        Width="520" Height="420"
+        WindowStartupLocation="CenterOwner"
+        CanResize="False"
+        RequestedThemeVariant="Light"
+        Background="#F8FAFC">
+
+    <Window.Styles>
+        <Style Selector="TextBox">
+            <Setter Property="Background" Value="#FFFFFF"/>
+            <Setter Property="Foreground" Value="#0F172A"/>
+            <Setter Property="CornerRadius" Value="4"/>
+        </Style>
+        <Style Selector="ComboBox">
+            <Setter Property="Background" Value="#FFFFFF"/>
+            <Setter Property="Foreground" Value="#0F172A"/>
+            <Setter Property="CornerRadius" Value="4"/>
+        </Style>
+    </Window.Styles>
+
+    <Grid RowDefinitions="Auto,*,Auto" Margin="16">
+        <!-- 頂部標題區 -->
+        <Border Grid.Row="0" Background="#EFF6FF" BorderBrush="#BFDBFE" BorderThickness="1" CornerRadius="6" Padding="12,8" Margin="0,0,0,12">
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <TextBlock Text="📊 mycsvi.csvi" FontWeight="Bold" FontSize="14" Foreground="#1D4ED8" VerticalAlignment="Center"/>
+                <TextBlock Text="| 專案專用 AOI 直方圖與自訂運算" FontSize="12" Foreground="#64748B" VerticalAlignment="Center"/>
+            </StackPanel>
+        </Border>
+
+        <!-- 中間參數設定區 -->
+        <Border Grid.Row="1" Background="#FFFFFF" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="6" Padding="14">
+            <StackPanel Spacing="12">
+                <!-- 運算模式切換 -->
+                <TextBlock Text="運算模式 (Operation Mode):" FontWeight="SemiBold" FontSize="12" Foreground="#334155"/>
+                <StackPanel Orientation="Horizontal" Spacing="16">
+                    <RadioButton x:Name="RbHistogram" Content="AOI 直方圖分析 (Histogram)" IsChecked="True"/>
+                    <RadioButton x:Name="RbMath" Content="數值計算加法 (Math Add)"/>
+                </StackPanel>
+
+                <Separator Background="#E2E8F0" Margin="0,4"/>
+
+                <!-- Histogram 模式設定項 -->
+                <StackPanel x:Name="PnlHistogram" Spacing="8">
+                    <Grid ColumnDefinitions="140,*">
+                        <TextBlock Grid.Column="0" Text="相機設備 (Camera):" VerticalAlignment="Center" Foreground="#475569"/>
+                        <TextBox Grid.Column="1" x:Name="TxtCamera" Text="Cam1" Height="28"/>
+                    </Grid>
+                    <Grid ColumnDefinitions="140,*">
+                        <TextBlock Grid.Column="0" Text="最小門檻 (Min Thresh):" VerticalAlignment="Center" Foreground="#475569"/>
+                        <TextBox Grid.Column="1" x:Name="TxtMinThresh" Text="0" Height="28"/>
+                    </Grid>
+                    <Grid ColumnDefinitions="140,*">
+                        <TextBlock Grid.Column="0" Text="最大門檻 (Max Thresh):" VerticalAlignment="Center" Foreground="#475569"/>
+                        <TextBox Grid.Column="1" x:Name="TxtMaxThresh" Text="255" Height="28"/>
+                    </Grid>
+                </StackPanel>
+
+                <!-- 數值計算模式設定項 -->
+                <StackPanel x:Name="PnlMath" Spacing="8" IsVisible="False">
+                    <Grid ColumnDefinitions="140,*">
+                        <TextBlock Grid.Column="0" Text="數值 A (Value 1):" VerticalAlignment="Center" Foreground="#475569"/>
+                        <TextBox Grid.Column="1" x:Name="TxtVal1" Text="10" Height="28"/>
+                    </Grid>
+                    <Grid ColumnDefinitions="140,*">
+                        <TextBlock Grid.Column="0" Text="數值 B (Value 2):" VerticalAlignment="Center" Foreground="#475569"/>
+                        <TextBox Grid.Column="1" x:Name="TxtVal2" Text="20" Height="28"/>
+                    </Grid>
+                </StackPanel>
+
+                <Separator Background="#E2E8F0" Margin="0,4"/>
+
+                <!-- 回傳變數與預覽 -->
+                <Grid ColumnDefinitions="140,*">
+                    <TextBlock Grid.Column="0" Text="回傳目標變數 (OutVar):" FontWeight="SemiBold" VerticalAlignment="Center" Foreground="#1E293B"/>
+                    <TextBox Grid.Column="1" x:Name="TxtReturnVar" Text="HistResult" Height="28"/>
+                </Grid>
+
+                <TextBlock Text="參數預覽 (Preview):" FontSize="11" Foreground="#64748B" Margin="0,4,0,0"/>
+                <TextBox x:Name="TxtPreview" IsReadOnly="True" Background="#F1F5F9" Foreground="#0F172A" Height="26" FontSize="11"/>
+            </StackPanel>
+        </Border>
+
+        <!-- 底部按鈕區 -->
+        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="10" Margin="0,12,0,0">
+            <Button x:Name="BtnCancel" Content="取消 (Cancel)" Width="90" Height="30"
+                    Background="#E2E8F0" Foreground="#334155" HorizontalContentAlignment="Center"/>
+            <Button x:Name="BtnConfirm" Content="確定 (OK)" Width="90" Height="30"
+                    Background="#2563EB" Foreground="#FFFFFF" FontWeight="Bold" HorizontalContentAlignment="Center"/>
+        </StackPanel>
+    </Grid>
+</Window>

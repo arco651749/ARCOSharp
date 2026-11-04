@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Controls.Shapes;
@@ -60,8 +61,8 @@ public partial class MainWindow : Window
         _engines = new BasicEngines(io, varEng, pt, img, daq, timer);
         _driverManager = new DriverManager(_engines);
 
-        // 2. 註冊預設 4 大 Mock 硬體驅動
-        RegisterDefaultMockDrivers();
+        // 2. 驅動程式按需動態掛載 (On-Demand Loading，僅於使用者下達指令時動態載入)
+        WireDriverDynamicEvents();
 
         // 3. 建立多執行緒排程虛擬機
         _vm = new ArcosThreadVM(_engines, _driverManager);
@@ -149,6 +150,104 @@ public partial class MainWindow : Window
     private void InitializeComponent()
     {
         AvaloniaXamlLoader.Load(this);
+    }
+
+    private void WireDriverDynamicEvents()
+    {
+        _driverManager.DeviceAdded += (category, deviceName, driver) =>
+        {
+            Dispatcher.UIThread.Post(() =>
+            {
+                if (category.Equals("Capture", StringComparison.OrdinalIgnoreCase))
+                {
+                    var lstCam = this.FindControl<ListBox>("LstCaptureCameras");
+                    if (lstCam != null && !lstCam.Items.Contains(deviceName))
+                    {
+                        lstCam.Items.Add(deviceName);
+                    }
+                }
+                else if (category.Equals("Motion", StringComparison.OrdinalIgnoreCase))
+                {
+                    var lstMot = this.FindControl<ListBox>("LstCaptureMotors");
+                    if (lstMot != null && !lstMot.Items.Contains(deviceName))
+                    {
+                        lstMot.Items.Add(deviceName);
+                    }
+                }
+                _vm.MainThreads[0].Log($"[DriverManager] Dynamic Device Attached: [{category}] {deviceName}");
+            });
+        };
+
+        _driverManager.DeviceRemoved += (category, deviceName) =>
+        {
+            Dispatcher.UIThread.Post(() =>
+            {
+                if (category.Equals("Capture", StringComparison.OrdinalIgnoreCase))
+                {
+                    var lstCam = this.FindControl<ListBox>("LstCaptureCameras");
+                    lstCam?.Items.Remove(deviceName);
+                }
+                else if (category.Equals("Motion", StringComparison.OrdinalIgnoreCase))
+                {
+                    var lstMot = this.FindControl<ListBox>("LstCaptureMotors");
+                    lstMot?.Items.Remove(deviceName);
+                }
+                _vm.MainThreads[0].Log($"[DriverManager] Dynamic Device Detached: [{category}] {deviceName}");
+            });
+        };
+    }
+
+    private static Control CreateDriverNotMountedPlaceholder(string category, string exampleCmd)
+    {
+        return new Border
+        {
+            Background = new SolidColorBrush(Color.Parse("#0F172A")),
+            BorderBrush = new SolidColorBrush(Color.Parse("#334155")),
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(8),
+            Padding = new Thickness(24),
+            Margin = new Thickness(16),
+            HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center,
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+            Child = new StackPanel
+            {
+                Spacing = 12,
+                HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center,
+                Children =
+                {
+                    new TextBlock
+                    {
+                        Text = $"⚠️ [ 尚未載入 {category} 驅動設備 ]",
+                        FontWeight = FontWeight.Bold,
+                        FontSize = 15,
+                        Foreground = new SolidColorBrush(Color.Parse("#F59E0B")),
+                        HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center
+                    },
+                    new TextBlock
+                    {
+                        Text = $"請在腳本中執行指令以掛載硬體驅動，範例：",
+                        FontSize = 13,
+                        Foreground = new SolidColorBrush(Color.Parse("#94A3B8")),
+                        HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center
+                    },
+                    new Border
+                    {
+                        Background = new SolidColorBrush(Color.Parse("#1E293B")),
+                        CornerRadius = new CornerRadius(4),
+                        Padding = new Thickness(12, 6),
+                        Child = new TextBlock
+                        {
+                            Text = exampleCmd,
+                            FontFamily = new FontFamily("Consolas, Courier New, monospace"),
+                            FontSize = 13,
+                            FontWeight = FontWeight.SemiBold,
+                            Foreground = new SolidColorBrush(Color.Parse("#38BDF8")),
+                            HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center
+                        }
+                    }
+                }
+            }
+        };
     }
 
     private void RegisterDefaultMockDrivers()
@@ -242,49 +341,16 @@ public partial class MainWindow : Window
         });
 
         // 2. 預設初始化 512 個實體 IO 點位 (P0.0 ~ P63.7，共 64 Ports x 8 Bits)
+        // 保持純淨出廠狀態：預設無任何 Demo 別名，僅依使用者腳本或配方中的 IO@SetPortName 動態命名
         for (int port = 0; port < 64; port++)
         {
             for (int bit = 0; bit < 8; bit++)
             {
                 string portName = $"P{port}.{bit}";
-                string alias = portName switch
-                {
-                    "P0.0" => "Safety Door Switch",
-                    "P0.1" => "Air Pressure Sensor",
-                    "P0.2" => "Part In Feed Detector",
-                    "P0.3" => "Align Cylinder Fwd",
-                    "P0.4" => "Align Cylinder Back",
-                    "P0.5" => "Vacuum Sensor 1",
-                    "P0.6" => "Vacuum Sensor 2",
-                    "P0.7" => "Camera Trigger Out",
-                    "P1.0" => "Feeder Motor Ready",
-                    "P1.1" => "Discharge Sensor",
-                    "P1.2" => "Reject Cylinder",
-                    "P1.3" => "Tower Lamp Green",
-                    "P1.4" => "Tower Lamp Yellow",
-                    "P1.5" => "Tower Lamp Red",
-                    "P1.6" => "Buzzer Alarm",
-                    "P1.7" => "Ionizer Blower",
-                    "P2.0" => "Conveyor Motor Run",
-                    "P2.1" => "Gripper Open Sensor",
-                    "P2.2" => "Gripper Close Sensor",
-                    "P2.3" => "Station Index Proximity",
-                    "P2.4" => "Light Source Ch1",
-                    "P2.5" => "Light Source Ch2",
-                    "P2.6" => "Calibration Target",
-                    "P2.7" => "Laser Pointer Out",
-                    _ => portName
-                };
-
-                if (alias != portName)
-                {
-                    _engines.Io.SetPortName(portName, alias);
-                }
-
                 _ioChannels.Add(new IoChannelViewModel
                 {
                     Port = portName,
-                    Name = alias,
+                    Name = portName,
                     State = _engines.Io.GetPort(portName),
                     IsVisible = true
                 });
@@ -390,12 +456,8 @@ public partial class MainWindow : Window
                     }
                     break;
                 case 2: // MockIO Driver Panel (MockIO.csvi)
-                    var driver = _driverManager.GetDevice("IO", "StationIO");
-                    var driverView = driver?.CreateDriverView();
-                    if (driverView != null)
-                    {
-                        container.Content = driverView;
-                    }
+                    var driver = _driverManager.GetDevice("IO", "StationIO") ?? _driverManager.GetDevicesByCategory("IO").FirstOrDefault();
+                    container.Content = driver?.CreateDriverView() ?? CreateDriverNotMountedPlaceholder("IO", "IO@AddDriver StationIO, MockIO");
                     break;
                 case 3: // System Master Dashboard (System.csvi Front Panel)
                     var sysPanel = ARCOS.App.Guidance.ParameterGuidanceManager.Instance.GetFrontPanel("System");
@@ -418,18 +480,16 @@ public partial class MainWindow : Window
                     if (capPanel != null) container.Content = capPanel;
                     break;
                 case 6: // MockCamera Driver (MockCamera.csvi Front Panel)
-                    var camDriver = _driverManager.GetDevice("Capture", "CamTop");
-                    var camView = camDriver?.CreateDriverView();
-                    if (camView != null) container.Content = camView;
+                    var camDriver = _driverManager.GetDevice("Capture", "CamTop") ?? _driverManager.GetDevicesByCategory("Capture").FirstOrDefault();
+                    container.Content = camDriver?.CreateDriverView() ?? CreateDriverNotMountedPlaceholder("Capture", "Capture@AddCam CamTop, MockCamera");
                     break;
                 case 7: // DAQ Oscilloscope (DAQ.csvi Front Panel)
                     var daqPanel = ARCOS.App.Guidance.ParameterGuidanceManager.Instance.GetFrontPanel("DAQ");
                     if (daqPanel != null) container.Content = daqPanel;
                     break;
                 case 8: // MockDAQ Driver (MockDAQ.csvi Front Panel)
-                    var daqDriver = _driverManager.GetDevice("DAQ", "PressSensor") ?? _driverManager.GetDevice("DAQ", "Daq0");
-                    var daqView = daqDriver?.CreateDriverView();
-                    if (daqView != null) container.Content = daqView;
+                    var daqDriver = _driverManager.GetDevice("DAQ", "PressSensor") ?? _driverManager.GetDevice("DAQ", "Daq0") ?? _driverManager.GetDevicesByCategory("DAQ").FirstOrDefault();
+                    container.Content = daqDriver?.CreateDriverView() ?? CreateDriverNotMountedPlaceholder("DAQ", "DAQ@AddDAQ Daq0, MockDAQ");
                     break;
                 case 9: // Variable Watcher (Variable.csvi Front Panel)
                     var varPanel = ARCOS.App.Guidance.ParameterGuidanceManager.Instance.GetFrontPanel("Variable");
@@ -456,9 +516,8 @@ public partial class MainWindow : Window
                     }
                     break;
                 case 11: // MockMotion Driver (MockMotion.csvi Front Panel)
-                    var motDriver = _driverManager.GetDevice("Motion", "Station1") ?? _driverManager.GetDevice("Motion", "Motor1") ?? _driverManager.GetDevice("Motion", "Arm1");
-                    var motView = motDriver?.CreateDriverView();
-                    if (motView != null) container.Content = motView;
+                    var motDriver = _driverManager.GetDevice("Motion", "Station1") ?? _driverManager.GetDevice("Motion", "RobotGantry") ?? _driverManager.GetDevicesByCategory("Motion").FirstOrDefault();
+                    container.Content = motDriver?.CreateDriverView() ?? CreateDriverNotMountedPlaceholder("Motion", "Motion@AddMotion RobotGantry, MockMotion");
                     break;
             }
         };
@@ -1023,10 +1082,16 @@ public partial class MainWindow : Window
             if (panel != null)
             {
                 container.Content = panel;
-                if (panel is Control ctrl && ctrl.DataContext != null)
+                if (panel is Control ctrl)
                 {
-                    var refreshM = ctrl.DataContext.GetType().GetMethod("RefreshFromEngines");
-                    refreshM?.Invoke(ctrl.DataContext, new object[] { _engines });
+                    var m1 = ctrl.GetType().GetMethod("Init") ?? ctrl.GetType().GetMethod("RefreshFromEngines");
+                    m1?.Invoke(ctrl, new object[] { _engines });
+
+                    if (ctrl.DataContext != null)
+                    {
+                        var m2 = ctrl.DataContext.GetType().GetMethod("Init") ?? ctrl.DataContext.GetType().GetMethod("RefreshFromEngines");
+                        m2?.Invoke(ctrl.DataContext, new object[] { _engines });
+                    }
                 }
                 _vm.MainThreads[0].Log($"[UserPanelOpen] Mounted User Panel: '{cmdKey}' ({System.IO.Path.GetFileName(resolved)})");
                 return true;

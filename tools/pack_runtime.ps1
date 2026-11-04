@@ -23,7 +23,7 @@ if (Test-Path "$OutputDir") {
 }
 
 # 1. Create standard topology directories
-$modules = @("IO", "CAPTURE", "MOTION", "DAQ", "SYSTEM", "THREAD", "VARIABLE")
+$modules = @("IO", "CAPTURE", "MOTION", "DAQ", "SYSTEM", "THREAD", "VARIABLE", "PYTHON")
 foreach ($m in $modules) {
     New-Item -ItemType Directory -Path "$OutputDir\MODULES\$m\DRIVER" -Force | Out-Null
     New-Item -ItemType Directory -Path "$OutputDir\MODULES\$m\USERPARAMETEREDITOR" -Force | Out-Null
@@ -36,7 +36,8 @@ New-Item -ItemType Directory -Path "$OutputDir\PICTURE\CAM1" -Force | Out-Null
 New-Item -ItemType Directory -Path "$OutputDir\PICTURE\CamTop" -Force | Out-Null
 New-Item -ItemType Directory -Path "$OutputDir\WAVEFORM" -Force | Out-Null
 New-Item -ItemType Directory -Path "$OutputDir\POINT&PATH" -Force | Out-Null
-New-Item -ItemType Directory -Path "$OutputDir\Python" -Force | Out-Null
+New-Item -ItemType Directory -Path "$OutputDir\Python" -Force | Out-Null
+New-Item -ItemType Directory -Path "$OutputDir\ExternalModules" -Force | Out-Null
 
 # 2. Publish ARCOS.App Host
 Write-Host "`n[1/5] Publishing ARCOS.App Host..." -ForegroundColor Yellow
@@ -53,7 +54,8 @@ $moduleProjects = @(
     @{ Proj = "$PSScriptRoot\..\src\MODULES\DAQ\ARCOS.Module.Daq.csproj"; Out = "$OutputDir\MODULES\DAQ"; Name = "DAQ.Module" },
     @{ Proj = "$PSScriptRoot\..\src\MODULES\SYSTEM\ARCOS.Module.System.csproj"; Out = "$OutputDir\MODULES\SYSTEM"; Name = "System.Module" },
     @{ Proj = "$PSScriptRoot\..\src\MODULES\THREAD\ARCOS.Module.Thread.csproj"; Out = "$OutputDir\MODULES\THREAD"; Name = "Thread.Module" },
-    @{ Proj = "$PSScriptRoot\..\src\MODULES\VARIABLE\ARCOS.Module.Variable.csproj"; Out = "$OutputDir\MODULES\VARIABLE"; Name = "Variable.Module" }
+    @{ Proj = "$PSScriptRoot\..\src\MODULES\VARIABLE\ARCOS.Module.Variable.csproj"; Out = "$OutputDir\MODULES\VARIABLE"; Name = "Variable.Module" },
+    @{ Proj = "$PSScriptRoot\..\src\MODULES\PYTHON\ARCOS.Module.Python.csproj"; Out = "$OutputDir\MODULES\PYTHON"; Name = "Python.Module" }
 )
 
 foreach ($m in $moduleProjects) {
@@ -172,6 +174,23 @@ foreach ($csvi in $systemCsvis) {
     Copy-Item -LiteralPath $csvi.FullName -Destination "$OutputDir\MODULES\SYSTEM\$($csvi.Name)" -Force
 }
 
+# 部署 UserPanel.csvi (獨立 CSVI 3.0 前面板)
+Write-Host "Building and packaging UserPanel.csvi..." -ForegroundColor Magenta
+$userPanelProj = "$PSScriptRoot\..\src\PANELS\UserPanel\ARCOS.UserPanel.csproj"
+if (Test-Path -LiteralPath $userPanelProj) {
+    $tempPanelBuild = "$OutputDir\temp_userpanel_build"
+    dotnet build "$userPanelProj" -c Release -o "$tempPanelBuild" --nologo -v q
+    $userPanelDll = "$tempPanelBuild\UserPanel.dll"
+    if (Test-Path -LiteralPath $userPanelDll) {
+        Copy-Item -LiteralPath $userPanelDll -Destination "$OutputDir\UserPanel.csvi" -Force
+        Copy-Item -LiteralPath $userPanelDll -Destination "$OutputDir\MODULES\SYSTEM\UserPanel.csvi" -Force
+        Copy-Item -LiteralPath $userPanelDll -Destination "$PSScriptRoot\..\src\MODULES\SYSTEM\UserPanel.csvi" -Force
+        Copy-Item -LiteralPath $userPanelDll -Destination "$PSScriptRoot\..\UserPanel.csvi" -Force
+        Write-Host "  -> Successfully deployed UserPanel.csvi to root and MODULES\SYSTEM" -ForegroundColor Cyan
+    }
+    Remove-Item -Path "$tempPanelBuild" -Recurse -Force -ErrorAction SilentlyContinue
+}
+
 # 部署 THREAD 模組 CSVI 虛擬儀表 (四位一體)
 $threadCsvis = Get-ChildItem -Path "$PSScriptRoot\..\src\MODULES\THREAD" -Filter "*.csvi" -File
 foreach ($csvi in $threadCsvis) {
@@ -196,6 +215,12 @@ foreach ($csvi in $daqCsvis) {
     Copy-Item -LiteralPath $csvi.FullName -Destination $dest -Force
 }
 
+# 部署 PYTHON 模組 CSVI 虛擬儀表 (四位一體)
+$pythonCsvis = Get-ChildItem -Path "$PSScriptRoot\..\src\MODULES\PYTHON" -Filter "*.csvi" -File
+foreach ($csvi in $pythonCsvis) {
+    Copy-Item -LiteralPath $csvi.FullName -Destination "$OutputDir\MODULES\PYTHON\$($csvi.Name)" -Force
+}
+
 # 部署 VARIABLE 模組 CSVI 虛擬儀表 (四位一體)
 $variableCsvis = Get-ChildItem -Path "$PSScriptRoot\..\src\MODULES\VARIABLE" -Filter "*.csvi" -File
 foreach ($csvi in $variableCsvis) {
@@ -209,6 +234,25 @@ foreach ($csvi in $motionCsvis) {
     $dest = Join-Path "$OutputDir\MODULES\MOTION" $rel
     New-Item -ItemType Directory -Path (Split-Path $dest) -Force | Out-Null
     Copy-Item -LiteralPath $csvi.FullName -Destination $dest -Force
+}
+
+# 部署 ExternalModules (外部獨立 CSVI 模組，例如 mycsvi.csvi)
+Write-Host "`nBuilding and packaging ExternalModules CSVI (mycsvi.csvi)..." -ForegroundColor Magenta
+$myCsviProj = "$PSScriptRoot\..\src\EXTERNALMODULES\MyCsvi\MyCsvi.csproj"
+if (Test-Path -LiteralPath $myCsviProj) {
+    $tempCsviBuild = "$OutputDir\temp_csvi_build"
+    dotnet build "$myCsviProj" -c Release -o "$tempCsviBuild" --nologo -v q
+    $myCsviDll = "$tempCsviBuild\mycsvi.dll"
+    if (Test-Path -LiteralPath $myCsviDll) {
+        Copy-Item -LiteralPath $myCsviDll -Destination "$OutputDir\ExternalModules\mycsvi.csvi" -Force
+        Copy-Item -LiteralPath $myCsviDll -Destination "$PSScriptRoot\..\ExternalModules\mycsvi.csvi" -Force
+        Write-Host "  -> Successfully deployed mycsvi.csvi to ExternalModules/" -ForegroundColor Cyan
+    }
+    Remove-Item -Path "$tempCsviBuild" -Recurse -Force -ErrorAction SilentlyContinue
+}
+$srcExtReadme = "$PSScriptRoot\..\ExternalModules\README.md"
+if (Test-Path -LiteralPath $srcExtReadme) {
+    Copy-Item -LiteralPath $srcExtReadme -Destination "$OutputDir\ExternalModules\README.md" -Force
 }
 
 # 徹底刪除任何 USERPARAMETEREDITOR 遺留目錄與暫存建置資料夾
@@ -233,13 +277,22 @@ foreach ($d in $driverProjects) {
 $ioCsvis = (Get-ChildItem -Path "$OutputDir\MODULES\IO" -Filter "*.csvi" | Select-Object -ExpandProperty Name) -join ", "
 Write-Host "  -> MODULES\IO CSVI Instruments : [ $ioCsvis ]" -ForegroundColor Cyan
 
-Write-Host "`n[SUCCESS] ARCOS Runtime Bundle successfully packaged at: $OutputDir" -ForegroundColor Green
-
-# 7. Zip Runtime Bundle for Beta Distribution
-$zipFile = "$PSScriptRoot\..\dist\ARCOS_v3.0_Beta.zip"
-Write-Host "`n[Packaging] Compressing Runtime into $zipFile..." -ForegroundColor Yellow
-if (Test-Path $zipFile) {
-    Remove-Item -Path $zipFile -Force
-}
-Compress-Archive -Path "$OutputDir\*" -DestinationPath $zipFile -Force
+Write-Host "`n[SUCCESS] ARCOS Runtime Bundle successfully packaged at: $OutputDir" -ForegroundColor Green
+
+
+
+# 7. Zip Runtime Bundle for Beta Distribution
+
+$zipFile = "$PSScriptRoot\..\dist\ARCOS_v3.0_Beta.zip"
+
+Write-Host "`n[Packaging] Compressing Runtime into $zipFile..." -ForegroundColor Yellow
+
+if (Test-Path $zipFile) {
+
+    Remove-Item -Path $zipFile -Force
+
+}
+
+Compress-Archive -Path "$OutputDir\*" -DestinationPath $zipFile -Force
+
 Write-Host "[SUCCESS] ARCOS v3.0 Beta Zip Distribution created successfully: $zipFile" -ForegroundColor Green

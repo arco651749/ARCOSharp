@@ -74,7 +74,7 @@ ARCOS 系統由多個模組與輔助工具組成。在編寫特定模組腳本�
 - [`references/Cron&EventTab.md`](references/Cron&EventTab.md) - Cron 定時任務、Global 變數變更事件 (Event)、Redis Key 事件觸發
 - [`references/Redis.md`](references/Redis.md) - Redis 連線管理、鍵值快取、List 阻塞式操作、Pub/Sub 廣播
 - [`references/Python.md`](references/Python.md) - 內嵌 Python 3.10 運算模組、NumPy 座標與 OpenCV 影像數據交換
-- [`references/Call.md`](references/Call.md) - 外部 LabVIEW VI 程式呼叫 (Debug / Runtime / Reentrant 模式)
+- [`references/Call.md`](references/Call.md) - 外部獨立 CSVI 虛擬儀表程式呼叫 (兩階段參數導引、Debug / Runtime / Reentrant 模式)
 - [`references/AIAgent.md`](references/AIAgent.md) - AI 視覺監督、AOI 瑕疵輔助排查與異常後備處置模組
 
 ### 4. 介面與專案儲存 (UI & Storage)
@@ -90,6 +90,15 @@ ARCOS 系統由多個模組與輔助工具組成。在編寫特定模組腳本�
 - [`scripts/arcos_telnet.py`](scripts/arcos_telnet.py) - Telnet 遠端通訊與指令執行腳本（支援 `--dry-run` 封包預覽）
 - [`scripts/script_to_init.py`](scripts/script_to_init.py) - 將指令陣列或文字編譯為二進制 `.init` 檔案的 CLI 生成工具
 - [`scripts/arcos_parse.py`](scripts/arcos_parse.py) - 腳本語法剖析核心模組（支援陣列括號保護與 Python 多行區塊保留）
+
+### 6. 端到端操作流自動化測試與回歸 (E2E Operational Testing)
+
+- [`docs/OPERATIONAL_TEST_PROCEDURE.md`](../docs/OPERATIONAL_TEST_PROCEDURE.md) - **ARCOSharp 端到端全操作流測試規範與自動化回歸指南**（ADC 虛擬第二螢幕人機零干擾 + TCP 19528 JSON-RPC 七階段驗證）
+- **一鍵自動化測試指令**：
+  ```powershell
+  python.exe -X utf8 tools/test_arcosharp_e2e.py
+  ```
+  在修改直譯執行器、UI 導引對話盒或 CSVI 模組後，強制執行此指令並確保 7 大階段全部 PASS。
 
 ---
 
@@ -447,10 +456,10 @@ Thread@EndIf::
 
 1. **裝置管理 ([DEVICE SETTING.md](references/Save/DEVICE%20SETTING.md))**：
    - **動態核對**：新增設備前，必須先查閱 `CoreModules/<模組>/<Driver>/Parameter.txt` 核對驅動名稱與參數格式。
-   - **記錄規則**：使用 `IO@AddIODriver`、`Motion@AddMotor`、`Capture@AddCam`、`DAQ@AddDAQ` 新增裝置時，將指令完整記錄至對應小節。同名裝置以新指令替換。
+   - **記錄規則**：使用 `IO@AddIODriver`、`Motion@AddMotion`、`Capture@AddCam`、`DAQ@AddDAQ` 新增裝置時，將指令完整記錄至對應小節。同名裝置以新指令替換。
    - **重載還原 (Rehydration)**：依序執行各裝置指令，其中 IO 驅動建立後須調用 `IO@InitIOPort::$io` 進行初始化。參數直接以逗號分隔，嚴禁外加圓括號：
      - **IO**：`IO@AddIODriver::$io,$driver,$param...` 接著調用 `IO@InitIOPort::$io`
-     - **Motion**：`Motion@AddMotor::$motor,$driver,$param...`
+     - **Motion**：`Motion@AddMotion::$motor,$driver,$param...`
      - **Capture**：`Capture@AddCam::$cam,$driver,$param...`
      - **DAQ**：`DAQ@AddDAQ::$daq,$driver,$param...`
 2. **IO 名稱管理 ([IO_NAME SETTING.md](references/Save/IO_NAME%20SETTING.md))**：

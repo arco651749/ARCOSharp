@@ -21,6 +21,7 @@ public sealed class ParameterGuidanceManager
     public static ParameterGuidanceManager Instance => _lazy.Value;
 
     private readonly Dictionary<string, IParameterGuidance> _guidances = new(StringComparer.OrdinalIgnoreCase);
+    private readonly System.Threading.SemaphoreSlim _guidanceGate = new(1, 1);
 
     public void RegisterGuidance(IParameterGuidance guidance)
     {
@@ -60,7 +61,25 @@ public sealed class ParameterGuidanceManager
         return null;
     }
 
-    public async Task<string?> RequestGuidanceAsync(string commandKey, string currentParam, BasicEngines? engines, Window? owner)
+    public async Task<string?> RequestGuidanceAsync(string commandKey, string currentParam, BasicEngines? engines, Window? owner, Action<string>? onCommandUpdated = null)
+    {
+        // 若已有參數導引視窗正在顯示中，立即拒絕重入，徹底杜絕重複開啟兩個視窗重疊的 Bug
+        if (!await _guidanceGate.WaitAsync(0))
+        {
+            return null;
+        }
+
+        try
+        {
+            return await RequestGuidanceInternalAsync(commandKey, currentParam, engines, owner, onCommandUpdated);
+        }
+        finally
+        {
+            _guidanceGate.Release();
+        }
+    }
+
+    private async Task<string?> RequestGuidanceInternalAsync(string commandKey, string currentParam, BasicEngines? engines, Window? owner, Action<string>? onCommandUpdated = null)
     {
         string trimmedKey = commandKey?.Trim() ?? "";
         string module = "";
@@ -70,6 +89,12 @@ public sealed class ParameterGuidanceManager
             var parts = trimmedKey.Split('@', 2);
             module = parts[0].Trim();
             action = parts[1].Trim();
+        }
+
+        // 0. 特殊處理 Call 模組：兩階段外部 CSVI 選擇與專屬導引
+        if (module.Equals("Call", StringComparison.OrdinalIgnoreCase) && owner != null)
+        {
+            return await CallGuidanceWindow.ShowDialogAsync(owner, trimmedKey, currentParam, engines, onCommandUpdated);
         }
 
         // 1. 優先搜尋動態 DLL 插件 (對標 LabVIEW 動態呼叫 VI：原生同進程載入，直接傳遞 BasicEngines 實例)

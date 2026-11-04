@@ -220,7 +220,7 @@ flowchart TD
 >    - 直接雙擊 `MockIO.exe`、`ADLINK8164.exe` 或 `CustomAOI.exe`，內建的微型啟動器 (`StandaloneApp`) 會彈出一個輕量級測試視窗，直接呈現該硬體的專用前面板。
 >    - 工程師可現場直接撥動開關、點擊寸動回原點、調整曝光打光或手動載入圖片測試演算法，達到零負擔的單動硬體快速驗收 (FAT)。
 > 3. **模式二：被宿主嵌入模式 (Embedded Plugin DLL / 主程式動態加載)**：
->    - 當進入量產或整機運行時，主程式 (`ARCOS.App`) 執行 `IO@AddIODriver`、`Motion@AddMotor` 或 `Call@<Algo>`，透過 `DriverLoader` / `Assembly.LoadFrom("Device.dll")` 動態載入。
+>    - 當進入量產或整機運行時，主程式 (`ARCOS.App`) 執行 `IO@AddIODriver`、`Motion@AddMotion` 或 `Call@<Algo>`，透過 `DriverLoader` / `Assembly.LoadFrom("Device.dll")` 動態載入。
 >    - 主程式呼叫 `driver.CreateDriverView()`，取出**完全同一個 UserControl 前面板**，無縫動態嵌入到主程式的畫布中，後台直接連通 `BasicEngines` 與 13-Thread VM，程式碼 100% 複用。
 > 4. **外部小程式與演算法同等規範 (ExternalVI)**：
 >    - 例如視覺檢驗、客製點膠路徑計算小程式：平時雙擊是工程師手邊的獨立微調工具（.EXE）；被腳本呼叫時（如 `Call@Algo.dll&`）則是背景高效運行的動態庫（.DLL）。

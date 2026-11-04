@@ -23,8 +23,13 @@ public class IoModuleHandler : IModuleHandler
         "CheckLogicOff",
         "SetPortName",
         "AddVirtualIO",
+        "VirtualIO",
         "AddIODriver",
+        "AddDriver",
+        "AddDrvier",
         "InitIOPort",
+        "Initio",
+        "InitIO",
         "ForceUpdate",
         "Shift"
     };
@@ -223,8 +228,9 @@ public class IoModuleHandler : IModuleHandler
             return CommandResult.Done();
         }
 
-        // 6. AddVirtualIO
-        if (action.Equals("AddVirtualIO", StringComparison.OrdinalIgnoreCase))
+        // 6. AddVirtualIO / VirtualIO
+        if (action.Equals("AddVirtualIO", StringComparison.OrdinalIgnoreCase) ||
+            action.Equals("VirtualIO", StringComparison.OrdinalIgnoreCase))
         {
             if (posArgs.Count >= 2)
             {
@@ -238,13 +244,16 @@ public class IoModuleHandler : IModuleHandler
             return CommandResult.Done();
         }
 
-        // 7. AddIODriver
-        if (action.Equals("AddIODriver", StringComparison.OrdinalIgnoreCase))
+        // 7. AddIODriver / AddDrvier / AddDriver
+        if (action.Equals("AddIODriver", StringComparison.OrdinalIgnoreCase) ||
+            action.Equals("AddDrvier", StringComparison.OrdinalIgnoreCase) ||
+            action.Equals("AddDriver", StringComparison.OrdinalIgnoreCase))
         {
             if (posArgs.Count >= 1)
             {
                 string ioName = posArgs[0];
                 string driverType = posArgs.Count >= 2 ? posArgs[1] : (parsed.TryGetValue("Driver", out var dt) ? dt : "MockIO");
+                ctx.Engines.Io.RegisterDriver(ioName, filteredParam);
                 try
                 {
                     ctx.Drivers.AddDevice("IO", ioName, driverType, filteredParam, ctx.Engines);
@@ -257,8 +266,10 @@ public class IoModuleHandler : IModuleHandler
             return CommandResult.Done();
         }
 
-        // 8. InitIOPort / ForceUpdate
+        // 8. InitIOPort / Initio / InitIO / ForceUpdate
         if (action.Equals("InitIOPort", StringComparison.OrdinalIgnoreCase) ||
+            action.Equals("Initio", StringComparison.OrdinalIgnoreCase) ||
+            action.Equals("InitIO", StringComparison.OrdinalIgnoreCase) ||
             action.Equals("ForceUpdate", StringComparison.OrdinalIgnoreCase))
         {
             if (posArgs.Count > 0)

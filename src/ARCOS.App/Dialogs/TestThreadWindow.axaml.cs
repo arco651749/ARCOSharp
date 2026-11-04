@@ -8,7 +8,9 @@ using System.Threading;
 using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Input;
+using Avalonia.VisualTree;
 using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
 using Avalonia.Media;
@@ -744,15 +746,64 @@ public partial class TestThreadWindow : Window
 
     private void OnGridPointerPressed(object? sender, PointerPressedEventArgs e)
     {
-        if (e.KeyModifiers == KeyModifiers.Control && e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
+        var props = e.GetCurrentPoint(this).Properties;
+        if (!props.IsLeftButtonPressed) return;
+
+        var visual = e.Source as Visual;
+        if (visual == null) return;
+
+        // 1. 若點擊在資料行上，由行與單元格事件處理，不觸發空白處動作
+        if ((visual as Control)?.DataContext is SequencerRowViewModel) return;
+
+        // 2. 排除點擊在表頭、滾動條、縮放或按鈕控制項上的情況
+        if (IsInIgnoredGridArea(visual)) return;
+
+        // 3. Ctrl + 點擊：原有之複製插入貼上
+        if (e.KeyModifiers == KeyModifiers.Control)
         {
-            var sourceControl = e.Source as Visual;
-            if (sourceControl?.DataContext is not SequencerRowViewModel)
-            {
-                e.Handled = true;
-                ExecuteCopyInsert(null);
-            }
+            e.Handled = true;
+            ExecuteCopyInsert(null);
+            return;
         }
+
+        // 4. 無修飾鍵：在空白處點擊滑鼠左鍵 -> 預設動作為「在尾端新增指令行 (同 + 按鈕)」
+        if (e.KeyModifiers == KeyModifiers.None)
+        {
+            e.Handled = true;
+            PushUndoSnapshot();
+            var grid = this.FindControl<DataGrid>("GridCommands");
+            int ins = _rows.Count;
+            var newRow = new SequencerRowViewModel { LineNumber = ins, Command = "Timer@Delay", Parameter = "100" };
+            _rows.Add(newRow);
+            for (int i = 0; i < _rows.Count; i++) _rows[i].LineNumber = i;
+            UpdateUndoRedoButtonState();
+            if (grid != null)
+            {
+                grid.SelectedIndex = ins;
+                grid.ScrollIntoView(newRow, null);
+            }
+            return;
+        }
+    }
+
+    private static bool IsInIgnoredGridArea(Visual? visual)
+    {
+        if (visual == null) return true;
+
+        if (visual.FindAncestorOfType<DataGridRow>(includeSelf: true) != null ||
+            visual.FindAncestorOfType<DataGridCell>(includeSelf: true) != null ||
+            visual.FindAncestorOfType<DataGridRowHeader>(includeSelf: true) != null ||
+            visual.FindAncestorOfType<DataGridColumnHeader>(includeSelf: true) != null ||
+            visual.FindAncestorOfType<DataGridColumnHeadersPresenter>(includeSelf: true) != null ||
+            visual.FindAncestorOfType<ScrollBar>(includeSelf: true) != null ||
+            visual.FindAncestorOfType<Thumb>(includeSelf: true) != null ||
+            visual.FindAncestorOfType<Button>(includeSelf: true) != null ||
+            visual.FindAncestorOfType<TextBox>(includeSelf: true) != null)
+        {
+            return true;
+        }
+
+        return false;
     }
 
     private bool HandleShortcutPointerAction(SequencerRowViewModel? row, PointerPressedEventArgs e)

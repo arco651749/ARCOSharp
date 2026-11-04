@@ -15,6 +15,7 @@ public class MotionModuleHandler : IModuleHandler
 
     private static readonly string[] Commands = new[]
     {
+        "AddMotion",
         "AddMotor",
         "Config",
         "ExtraCMD",
@@ -52,8 +53,9 @@ public class MotionModuleHandler : IModuleHandler
         if (posArgs.Count == 0) return CommandResult.Done();
         string motor = posArgs[0];
 
-        // 1. AddMotor: $motor, $driver(,$parameter...)
-        if (action.Equals("AddMotor", StringComparison.OrdinalIgnoreCase))
+        // 1. AddMotion: $motor, $driver(,$parameter...)
+        if (action.Equals("AddMotion", StringComparison.OrdinalIgnoreCase) ||
+            action.Equals("AddMotor", StringComparison.OrdinalIgnoreCase))
         {
             if (posArgs.Count >= 2)
             {
@@ -64,7 +66,7 @@ public class MotionModuleHandler : IModuleHandler
                 }
                 catch (Exception ex)
                 {
-                    ctx.Log($"[AddMotor] Failed to add motor '{motor}': {ex.Message}", isError: true);
+                    ctx.Log($"[AddMotion] Failed to add motion device '{motor}': {ex.Message}", isError: true);
                 }
             }
             return CommandResult.Done();

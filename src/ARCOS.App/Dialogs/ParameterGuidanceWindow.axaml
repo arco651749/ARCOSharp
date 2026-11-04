@@ -86,12 +86,14 @@
                 <!-- 方案 A：IO 專屬 3 段下拉選單面板 (比照原廠 ARCOS 導引視窗) -->
                 <Grid x:Name="PnlIoGuidance" Grid.Row="1" ColumnDefinitions="*,Auto" VerticalAlignment="Center" IsVisible="True">
                     <StackPanel Grid.Column="0" Spacing="8" Margin="0,0,12,0">
-                        <!-- 第一項：$IOName 自動帶出所有 PORTNAME (紅色高亮邊框) -->
-                        <Grid ColumnDefinitions="Auto,*">
+                        <!-- 第一項：$IOName 自動帶出所有 PORTNAME (紅色高亮邊框，附帶即時搜尋篩選框) -->
+                        <Grid ColumnDefinitions="Auto,*,Auto">
                             <TextBlock Text="$IOName: " FontWeight="Bold" FontSize="11" Foreground="#DC2626" Width="90" VerticalAlignment="Center"/>
                             <ComboBox x:Name="CboIoName" Grid.Column="1" Height="32" HorizontalAlignment="Stretch"
                                       BorderBrush="#DC2626" BorderThickness="1.5"
-                                      PlaceholderText="請選擇或輸入 PortName (例如: P0.0)"/>
+                                      PlaceholderText="請選擇 PortName"/>
+                            <TextBox x:Name="TxtIoFilter" Grid.Column="2" Width="100" Height="32" Margin="6,0,0,0"
+                                     Watermark="🔍 篩選..." FontSize="11" VerticalContentAlignment="Center"/>
                         </Grid>
 
                         <!-- 第二項：$Delay 延遲時間下拉 (藍色高亮邊框) -->

@@ -112,4 +112,50 @@ public class IoEngineTests
         io.SetPort("P2.0", true);
         Assert.Equal(1, changeCount);
     }
+
+    [Fact]
+    public void DynamicPortNamesAndDrivers_ShouldUpdateAndFilterCorrectly()
+    {
+        var io = new IoEngine();
+
+        // 模擬使用者的標準 4 步驟
+        // 1. IO@AddDrvier IO1, DEVICE=COM1, OUTSTART=P0.0,OUTPORTS=8, INSTART=P1.0, INPORTS=8
+        io.ScanAndRegister("IO@AddDrvier", "IO1, DEVICE=COM1, OUTSTART=P0.0,OUTPORTS=8, INSTART=P1.0, INPORTS=8");
+        // 2. IO@SETPORTNAME P0.0, OUT1 & IO@SETPORTNAME P1.0, Start?
+        io.ScanAndRegister("IO@SETPORTNAME", "P0.0, OUT1");
+        io.ScanAndRegister("IO@SETPORTNAME", "P1.0, Start?");
+        // 4. IO@VIRTUALIO RESULT, 1
+        io.ScanAndRegister("IO@VIRTUALIO", "RESULT, 1");
+
+        // 驗證 Driver 清單
+        var drivers = io.GetRegisteredDrivers();
+        Assert.Single(drivers);
+        Assert.Equal("IO1", drivers[0]);
+
+        // 驗證點位清單：ARCOS IO 不分 Input / Output，皆為統一布林讀寫陣列
+        // 包含所有已命名 PORTNAME (OUT1, Start?)、VIRTUALIO (RESULT) 以及實體點位 (如 P0.0, P0.1 以供尚未命名時讀寫測試)
+        var outputs = io.GetOutputPortNames();
+        Assert.Contains("OUT1", outputs);
+        Assert.Contains("Start?", outputs);
+        Assert.Contains("RESULT", outputs);
+        Assert.Contains("P0.1", outputs);
+        Assert.Contains("P0.0", outputs);
+
+        var inputs = io.GetInputPortNames();
+        Assert.Contains("OUT1", inputs);
+        Assert.Contains("Start?", inputs);
+        Assert.Contains("RESULT", inputs);
+        Assert.Contains("P1.1", inputs);
+        Assert.Contains("P1.0", inputs);
+
+        // 驗證整體 ConfiguredPortNames (包含 512 個實體點位 P0.0 ~ P63.7 以及別名與虛擬點)
+        var allConfigured = io.GetConfiguredPortNames();
+        Assert.Contains("OUT1", allConfigured);
+        Assert.Contains("Start?", allConfigured);
+        Assert.Contains("RESULT", allConfigured);
+        Assert.Contains("P0.1", allConfigured);
+        Assert.Contains("P0.0", allConfigured);
+        Assert.Contains("P63.7", allConfigured);
+        Assert.Equal(512 + 5, allConfigured.Count);
+    }
 }

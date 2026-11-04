@@ -22,6 +22,7 @@ public sealed class CommandExecutor
     public CommandResult ExecuteStep(ExecutionContext ctx)
     {
         ArgumentNullException.ThrowIfNull(ctx);
+        ctx.Registry = Registry;
 
         if (!ctx.IsRunning)
         {
@@ -186,6 +187,7 @@ public sealed class CommandExecutor
     public CommandResult ExecuteCommandLine(ExecutionContext ctx, string commandLine)
     {
         ArgumentNullException.ThrowIfNull(ctx);
+        ctx.Registry = Registry;
         if (string.IsNullOrWhiteSpace(commandLine))
         {
             return CommandResult.Done();

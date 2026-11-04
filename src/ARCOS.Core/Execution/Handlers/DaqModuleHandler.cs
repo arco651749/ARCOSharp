@@ -37,6 +37,21 @@ public sealed class DaqModuleHandler : IModuleHandler
         if (posArgs.Count == 0) return CommandResult.Done();
         string daq = posArgs[0];
 
+        // 0. AddDAQ: $daq, $driverType, $parameter
+        if (action.Equals("AddDAQ", StringComparison.OrdinalIgnoreCase))
+        {
+            string driverType = posArgs.Count >= 2 ? posArgs[1] : (parsed.TryGetValue("Driver", out var dt) ? dt : "MockDAQ");
+            try
+            {
+                ctx.Drivers.AddDevice("DAQ", daq, driverType, filteredParam, ctx.Engines);
+            }
+            catch (Exception ex)
+            {
+                ctx.Log($"[AddDAQ] Failed to add DAQ '{daq}': {ex.Message}", isError: true);
+            }
+            return CommandResult.Done();
+        }
+
         // 1. AnalogIn / Sample / AnalogOut 轉發至驅動
         if (action.Equals("AnalogIn", StringComparison.OrdinalIgnoreCase) ||
             action.Equals("AnalogInWaveForm", StringComparison.OrdinalIgnoreCase) ||

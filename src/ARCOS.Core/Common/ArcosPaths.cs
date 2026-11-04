@@ -18,7 +18,33 @@ public static class ArcosPaths
 
     public static string RootDirectory
     {
-        get => _customRoot ?? Directory.GetCurrentDirectory();
+        get
+        {
+            if (_customRoot != null) return _customRoot;
+
+            var dir = new DirectoryInfo(Directory.GetCurrentDirectory());
+            while (dir != null)
+            {
+                if (File.Exists(Path.Combine(dir.FullName, "ARCOS.sln")))
+                {
+                    return dir.FullName;
+                }
+                dir = dir.Parent;
+            }
+
+            // 在發行環境 (無 ARCOS.sln) 則以 MODULES 目錄判定
+            dir = new DirectoryInfo(Directory.GetCurrentDirectory());
+            while (dir != null)
+            {
+                if (Directory.Exists(Path.Combine(dir.FullName, "MODULES")))
+                {
+                    return dir.FullName;
+                }
+                dir = dir.Parent;
+            }
+
+            return Directory.GetCurrentDirectory();
+        }
         set => _customRoot = value;
     }
 
@@ -28,6 +54,7 @@ public static class ArcosPaths
     public static string WaveformDirectory => Path.Combine(RootDirectory, "WAVEFORM");
     public static string PointAndPathDirectory => Path.Combine(RootDirectory, "POINT&PATH");
     public static string ToolsDirectory => Path.Combine(RootDirectory, "tools");
+    public static string ExternalModulesDirectory => Path.Combine(RootDirectory, "ExternalModules");
 
     /// <summary>
     /// Meld 視覺化比對編輯器路徑 (優先使用 tools/MeldPortable/Meld.exe，找不到則 fallback 至系統 PATH 上的 meld)
@@ -54,6 +81,7 @@ public static class ArcosPaths
             if (!Directory.Exists(PictureDirectory)) Directory.CreateDirectory(PictureDirectory);
             if (!Directory.Exists(WaveformDirectory)) Directory.CreateDirectory(WaveformDirectory);
             if (!Directory.Exists(PointAndPathDirectory)) Directory.CreateDirectory(PointAndPathDirectory);
+            if (!Directory.Exists(ExternalModulesDirectory)) Directory.CreateDirectory(ExternalModulesDirectory);
         }
         catch { }
     }
@@ -109,37 +137,100 @@ public static class ArcosPaths
     /// </summary>
     public static string ResolveUserPanelCsviPath(string csviFileName)
     {
+        if (string.IsNullOrWhiteSpace(csviFileName)) return string.Empty;
         if (Path.IsPathRooted(csviFileName)) return csviFileName;
-        string rootCandidate = Path.Combine(RootDirectory, csviFileName);
-        if (File.Exists(rootCandidate)) return rootCandidate;
-        string modulesCandidate = Path.Combine(RootDirectory, "MODULES", csviFileName);
-        if (File.Exists(modulesCandidate)) return modulesCandidate;
-        string srcModulesCandidate = Path.Combine(RootDirectory, "src", "MODULES", csviFileName);
-        if (File.Exists(srcModulesCandidate)) return srcModulesCandidate;
+
+        string withExt = csviFileName.EndsWith(".csvi", StringComparison.OrdinalIgnoreCase)
+            ? csviFileName
+            : $"{csviFileName}.csvi";
+
+        var candidates = new[]
+        {
+            Path.Combine(RootDirectory, csviFileName),
+            Path.Combine(RootDirectory, withExt),
+            Path.Combine(RootDirectory, "MODULES", csviFileName),
+            Path.Combine(RootDirectory, "MODULES", withExt),
+            Path.Combine(RootDirectory, "MODULES", "SYSTEM", csviFileName),
+            Path.Combine(RootDirectory, "MODULES", "SYSTEM", withExt),
+            Path.Combine(RootDirectory, "dist", "ARCOS_Runtime", csviFileName),
+            Path.Combine(RootDirectory, "dist", "ARCOS_Runtime", withExt),
+            Path.Combine(RootDirectory, "dist", "ARCOS_Runtime", "MODULES", "SYSTEM", csviFileName),
+            Path.Combine(RootDirectory, "dist", "ARCOS_Runtime", "MODULES", "SYSTEM", withExt),
+            Path.Combine(RootDirectory, "src", "MODULES", csviFileName),
+            Path.Combine(RootDirectory, "src", "MODULES", withExt),
+            Path.Combine(RootDirectory, "src", "MODULES", "SYSTEM", csviFileName),
+            Path.Combine(RootDirectory, "src", "MODULES", "SYSTEM", withExt),
+        };
+
+        foreach (var c in candidates)
+        {
+            if (File.Exists(c)) return c;
+        }
 
         try
         {
-            string modulesDir = Path.Combine(RootDirectory, "MODULES");
-            if (Directory.Exists(modulesDir))
+            var searchNames = new[] { csviFileName, withExt }.Distinct();
+            var searchDirs = new[]
             {
-                var match = Directory.GetFiles(modulesDir, csviFileName, SearchOption.AllDirectories).FirstOrDefault();
-                if (match != null) return match;
-            }
-            string srcModulesDir = Path.Combine(RootDirectory, "src", "MODULES");
-            if (Directory.Exists(srcModulesDir))
+                Path.Combine(RootDirectory, "MODULES"),
+                Path.Combine(RootDirectory, "dist", "ARCOS_Runtime"),
+                Path.Combine(RootDirectory, "src", "MODULES")
+            };
+
+            foreach (var dir in searchDirs)
             {
-                var match = Directory.GetFiles(srcModulesDir, csviFileName, SearchOption.AllDirectories).FirstOrDefault();
-                if (match != null) return match;
-            }
-            string distModulesDir = Path.Combine(RootDirectory, "dist", "ARCOS_Runtime", "MODULES");
-            if (Directory.Exists(distModulesDir))
-            {
-                var match = Directory.GetFiles(distModulesDir, csviFileName, SearchOption.AllDirectories).FirstOrDefault();
-                if (match != null) return match;
+                if (Directory.Exists(dir))
+                {
+                    foreach (var name in searchNames)
+                    {
+                        var match = Directory.GetFiles(dir, name, SearchOption.AllDirectories).FirstOrDefault();
+                        if (match != null) return match;
+                    }
+                }
             }
         }
         catch { }
 
-        return rootCandidate;
+        return Path.Combine(RootDirectory, withExt);
+    }
+
+    /// <summary>
+    /// 解析 ExternalModules/ 目錄下之目標 CSVI 外部模組路徑 (支援 .vi 自動轉換至 .csvi)
+    /// </summary>
+    public static string ResolveExternalModuleCsviPath(string csviNameOrPath)
+    {
+        if (string.IsNullOrWhiteSpace(csviNameOrPath)) return string.Empty;
+        if (Path.IsPathRooted(csviNameOrPath)) return csviNameOrPath;
+
+        string target = csviNameOrPath.Trim();
+        // 自動替換 legacy .vi 為 .csvi
+        if (target.EndsWith(".vi", StringComparison.OrdinalIgnoreCase))
+        {
+            target = target.Substring(0, target.Length - 3) + ".csvi";
+        }
+        else if (!target.EndsWith(".csvi", StringComparison.OrdinalIgnoreCase) &&
+                 !target.EndsWith(".dll", StringComparison.OrdinalIgnoreCase) &&
+                 !target.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) &&
+                 !target.EndsWith(".bat", StringComparison.OrdinalIgnoreCase))
+        {
+            target += ".csvi";
+        }
+
+        var candidates = new[]
+        {
+            Path.Combine(ExternalModulesDirectory, target),
+            Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "ExternalModules", target),
+            Path.Combine(Directory.GetCurrentDirectory(), "ExternalModules", target),
+            Path.Combine(RootDirectory, "MODULES", "CALL", target),
+            Path.Combine(RootDirectory, "dist", "ARCOS_Runtime", "ExternalModules", target),
+            Path.Combine(RootDirectory, target)
+        };
+
+        foreach (var c in candidates)
+        {
+            if (File.Exists(c)) return c;
+        }
+
+        return candidates[0];
     }
 }

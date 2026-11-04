@@ -3,8 +3,11 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Threading.Tasks;
+using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Controls.Shapes;
+using Avalonia.VisualTree;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
@@ -199,9 +202,11 @@ public partial class SequencerEditorControl : UserControl
         if (grid != null) grid.IsReadOnly = false;
     }
 
+    private bool _isOpeningCommandSelect = false;
+
     private async void OnCommandCellPointerPressed(object? sender, PointerPressedEventArgs e)
     {
-        if (_isLocked) return;
+        if (_isLocked || _isOpeningCommandSelect) return;
         var topLevel = TopLevel.GetTopLevel(this) as Window;
         if (topLevel == null) return;
 
@@ -209,51 +214,78 @@ public partial class SequencerEditorControl : UserControl
         if (HandleShortcutPointerAction(row, e)) return;
         if (row == null) return;
 
-        string? selectedCmd = await ComSelectWindow.SelectCommandAsync(topLevel, _vm?.Executor.Registry);
-        if (string.IsNullOrWhiteSpace(selectedCmd)) return;
-
-        string? confirmedParam = await ParameterGuidanceManager.Instance.RequestGuidanceAsync(selectedCmd, row.Parameter, _vm?.Engines, topLevel);
-        if (confirmedParam != null)
+        try
         {
-            PushUndoSnapshot();
-            row.Command = selectedCmd;
-            row.Parameter = confirmedParam;
-            SyncUIToProgram();
+            _isOpeningCommandSelect = true;
+            string? selectedCmd = await ComSelectWindow.SelectCommandAsync(topLevel, _vm?.Executor.Registry);
+            if (string.IsNullOrWhiteSpace(selectedCmd)) return;
+
+            SyncIoDefinitionsFromRows();
+            string? confirmedParam = await ParameterGuidanceManager.Instance.RequestGuidanceAsync(selectedCmd, row.Parameter, _vm?.Engines, topLevel, newCmd => { selectedCmd = newCmd; });
+            if (confirmedParam != null)
+            {
+                PushUndoSnapshot();
+                row.Command = selectedCmd;
+                row.Parameter = confirmedParam;
+                SyncUIToProgram();
+            }
+        }
+        finally
+        {
+            _isOpeningCommandSelect = false;
         }
     }
 
     private async void OnParameterCellDoubleTapped(object? sender, TappedEventArgs e)
     {
+        e.Handled = true;
         await OpenParameterGuidance(sender);
     }
 
-    private async void OnParameterCellPointerPressed(object? sender, PointerPressedEventArgs e)
+    private void OnParameterCellPointerPressed(object? sender, PointerPressedEventArgs e)
     {
         var row = (sender as Control)?.DataContext as SequencerRowViewModel;
         if (HandleShortcutPointerAction(row, e)) return;
+        // 注意：雙擊開啟導引視窗已由 OnParameterCellDoubleTapped 專責處理，此處切勿重複調用，避免同時開啟兩個視窗重疊
+    }
 
-        if (e.ClickCount >= 2)
+    private void SyncIoDefinitionsFromRows()
+    {
+        if (_vm?.Engines?.Io == null || _rows == null) return;
+        foreach (var r in _rows)
         {
-            await OpenParameterGuidance(sender);
+            if (string.IsNullOrWhiteSpace(r.Command) || string.IsNullOrWhiteSpace(r.Parameter)) continue;
+            _vm.Engines.Io.ScanAndRegister(r.Command, r.Parameter);
         }
     }
 
+    private bool _isOpeningGuidance = false;
+
     private async Task OpenParameterGuidance(object? sender)
     {
-        if (_isLocked) return;
+        if (_isLocked || _isOpeningGuidance) return;
         var topLevel = TopLevel.GetTopLevel(this) as Window;
         if (topLevel == null) return;
 
         var row = (sender as Control)?.DataContext as SequencerRowViewModel;
         if (row == null) return;
 
-        string targetCmd = !string.IsNullOrWhiteSpace(row.Command) ? row.Command : "System@Log Message";
-        string? updatedParam = await ParameterGuidanceManager.Instance.RequestGuidanceAsync(targetCmd, row.Parameter, _vm?.Engines, topLevel);
-        if (updatedParam != null)
+        try
         {
-            PushUndoSnapshot();
-            row.Parameter = updatedParam;
-            SyncUIToProgram();
+            _isOpeningGuidance = true;
+            string targetCmd = !string.IsNullOrWhiteSpace(row.Command) ? row.Command : "System@Log Message";
+            SyncIoDefinitionsFromRows();
+            string? updatedParam = await ParameterGuidanceManager.Instance.RequestGuidanceAsync(targetCmd, row.Parameter, _vm?.Engines, topLevel, newCmd => { row.Command = newCmd; });
+            if (updatedParam != null)
+            {
+                PushUndoSnapshot();
+                row.Parameter = updatedParam;
+                SyncUIToProgram();
+            }
+        }
+        finally
+        {
+            _isOpeningGuidance = false;
         }
     }
 
@@ -283,15 +315,54 @@ public partial class SequencerEditorControl : UserControl
 
     private void OnGridPointerPressed(object? sender, PointerPressedEventArgs e)
     {
-        if (e.KeyModifiers == KeyModifiers.Control && e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
+        var props = e.GetCurrentPoint(this).Properties;
+        if (!props.IsLeftButtonPressed) return;
+
+        var visual = e.Source as Visual;
+        if (visual == null) return;
+
+        // 1. 若點擊在資料行上，由行與單元格事件處理，不觸發空白處動作
+        if ((visual as Control)?.DataContext is SequencerRowViewModel) return;
+
+        // 2. 排除點擊在表頭、滾動條、縮放或按鈕控制項上的情況
+        if (IsInIgnoredGridArea(visual)) return;
+
+        // 3. Ctrl + 點擊：原有之複製插入貼上
+        if (e.KeyModifiers == KeyModifiers.Control)
         {
-            var sourceControl = e.Source as Control;
-            if (sourceControl?.DataContext is not SequencerRowViewModel)
-            {
-                e.Handled = true;
-                ExecuteCopyInsert(null);
-            }
+            e.Handled = true;
+            ExecuteCopyInsert(null);
+            return;
         }
+
+        // 4. 無修飾鍵：在空白處點擊滑鼠左鍵 -> 預設動作為「在尾端新增指令行 (同 + 按鈕)」
+        if (e.KeyModifiers == KeyModifiers.None)
+        {
+            if (_isLocked) return;
+            e.Handled = true;
+            TriggerAddRow(_rows.Count);
+            return;
+        }
+    }
+
+    private static bool IsInIgnoredGridArea(Visual? visual)
+    {
+        if (visual == null) return true;
+
+        if (visual.FindAncestorOfType<DataGridRow>(includeSelf: true) != null ||
+            visual.FindAncestorOfType<DataGridCell>(includeSelf: true) != null ||
+            visual.FindAncestorOfType<DataGridRowHeader>(includeSelf: true) != null ||
+            visual.FindAncestorOfType<DataGridColumnHeader>(includeSelf: true) != null ||
+            visual.FindAncestorOfType<DataGridColumnHeadersPresenter>(includeSelf: true) != null ||
+            visual.FindAncestorOfType<ScrollBar>(includeSelf: true) != null ||
+            visual.FindAncestorOfType<Thumb>(includeSelf: true) != null ||
+            visual.FindAncestorOfType<Button>(includeSelf: true) != null ||
+            visual.FindAncestorOfType<TextBox>(includeSelf: true) != null)
+        {
+            return true;
+        }
+
+        return false;
     }
 
     private bool HandleShortcutPointerAction(SequencerRowViewModel? row, PointerPressedEventArgs e)
@@ -544,6 +615,7 @@ public partial class SequencerEditorControl : UserControl
 
         var row = _rows[rowIndex];
         string targetCmd = !string.IsNullOrWhiteSpace(row.Command) ? row.Command : "System@Log Message";
+        SyncIoDefinitionsFromRows();
         string? updatedParam = await ParameterGuidanceManager.Instance.RequestGuidanceAsync(targetCmd, row.Parameter, _vm?.Engines, topLevel);
         if (updatedParam != null)
         {

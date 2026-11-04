@@ -54,6 +54,7 @@ public sealed class ExecutionContext
     public string CurrentSection { get; set; } = "Global";
     public BasicEngines Engines { get; }
     public DriverManager Drivers { get; }
+    public ModuleRegistry? Registry { get; set; }
     public ArcosThreadVM? VM { get; set; }
     public bool IsMuted { get; set; }
     public bool IsRunning { get; set; } = true;

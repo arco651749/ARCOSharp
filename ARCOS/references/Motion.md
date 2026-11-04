@@ -13,7 +13,7 @@
 ### 1. 系統組態與初始化指令
 | 指令 | 參數 | 說明 |
 | :--- | :--- | :--- |
-| **AddMotor** | `$motor, $driver(,$parameter...)` | 新增一個 motion 裝置組合 |
+| **AddMotion** | `$motor, $driver(,$parameter...)` | 新增一個 motion 裝置組合 |
 | **Config** | `$motor, $parameter, $value` | 設定 Motion 內部控制組態與參數 |
 | **ExtraCMD** | `$motor, $command` | 將底層 `$command` 直接發送給控制器處理 |
 

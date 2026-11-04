@@ -1,0 +1,10 @@
+{
+  "FormatVersion": "3.0",
+  "Module": "Call",
+  "CommandKey": "mycsvi.csvi",
+  "ComponentType": "Command",
+  "SdkSignature": "ARCOS-SDK-8.0.1-Avalonia-11.0.10",
+  "PackagingMode": "PortableOpen",
+  "LastAuthor": "ARCOSharp\\Engineer",
+  "Description": "專案客製 AOI 直方圖分析與數值計算工具 (mycsvi.csvi)"
+}

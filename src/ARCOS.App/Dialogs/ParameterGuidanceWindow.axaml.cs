@@ -99,17 +99,17 @@ public partial class ParameterGuidanceWindow : Window
         var cboIoForce = this.FindControl<ComboBox>("CboIoForceUpdate");
         var txtOut = this.FindControl<TextBox>("TxtParameterOut");
 
-        // 1. 動態從系統 IoEngine 獲取所有已登記之別名與實體點位
+        // 1. 動態從系統 IoEngine 獲取已登記之所有 PORTNAME 與虛擬點位 (ARCOS IO 不分 Input/Output)
         var portList = new List<string>();
         if (engines?.Io != null)
         {
-            portList.AddRange(engines.Io.GetAllPortNames());
+            portList.AddRange(engines.Io.GetConfiguredPortNames());
         }
 
-        // 若系統尚未初始化或為兜底模式，自動填充前 64 點實體點 (P0.0 ~ P7.7)
+        // 若系統完全尚未設定任何別名或虛擬點，提供前 16 點實體點 (P0.0 ~ P1.7)
         if (portList.Count == 0)
         {
-            for (int p = 0; p < 8; p++)
+            for (int p = 0; p < 2; p++)
             {
                 for (int b = 0; b < 8; b++)
                 {
@@ -148,6 +148,28 @@ public partial class ParameterGuidanceWindow : Window
             {
                 cboIoName.SelectedIndex = 0;
             }
+        }
+
+        var txtFilter = this.FindControl<TextBox>("TxtIoFilter");
+        if (txtFilter != null && cboIoName != null)
+        {
+            txtFilter.KeyUp += (s, e) =>
+            {
+                string filter = txtFilter.Text?.Trim() ?? string.Empty;
+                if (string.IsNullOrEmpty(filter))
+                {
+                    cboIoName.ItemsSource = portList;
+                }
+                else
+                {
+                    var filtered = portList.Where(p => p.Contains(filter, StringComparison.OrdinalIgnoreCase)).ToList();
+                    cboIoName.ItemsSource = filtered;
+                    if (filtered.Count > 0 && (cboIoName.SelectedItem == null || !filtered.Contains(cboIoName.SelectedItem)))
+                    {
+                        cboIoName.SelectedIndex = 0;
+                    }
+                }
+            };
         }
 
         // 3. 配置延遲選項 (支援常用秒數與輸入)
@@ -229,6 +251,26 @@ public partial class ParameterGuidanceWindow : Window
 
     private static string FormatCommandSignature(string cmd)
     {
+        if (cmd.StartsWith("Python@", StringComparison.OrdinalIgnoreCase))
+        {
+            string action = cmd.Substring(7);
+            return action.ToLowerInvariant() switch
+            {
+                "script" => "Python@Script $PythonCode(,$Session)",
+                "file" => "Python@File $PyFilePath(,$Session)",
+                "setvariable" => "Python@SetVariable $VarName,$PyVarName(,$Session)",
+                "getvariable" => "Python@GetVariable $PyVarName,ARCOSName=$VarName(,$Session)",
+                "setpoint" => "Python@SetPoint $PointName,$PyArrName(,$Session)",
+                "getpoint" => "Python@GetPoint $PyArrName,ARCOSName=$PointName(,$Session)",
+                "setcapture" => "Python@SetCapture $CamName,$PyImgName(,$Session)",
+                "getcapture" => "Python@GetCapture $PyImgName,ARCOSName=$CamName(,$Session)",
+                "setcapturefile" => "Python@SetCaptureFile $FilePath,$PyImgName(,$Session)",
+                "resetsession" => "Python@ResetSession $Session",
+                "init" => "Python@Init",
+                _ => $"{cmd} $Parameters"
+            };
+        }
+
         if (cmd.StartsWith("IO@", StringComparison.OrdinalIgnoreCase))
             return "IO@SetPort/ClrPort $IOName(,$Delay,ForceUpdate)";
         if (cmd.Equals("System@Log Message", StringComparison.OrdinalIgnoreCase))

@@ -44,7 +44,8 @@ public sealed class ModuleRegistry
             {
                 var dirName = Path.GetFileName(moduleDir);
                 if (dirName.Equals("DRIVER", StringComparison.OrdinalIgnoreCase) ||
-                    dirName.Equals("USERPARAMETEREDITOR", StringComparison.OrdinalIgnoreCase))
+                    dirName.Equals("USERPARAMETEREDITOR", StringComparison.OrdinalIgnoreCase) ||
+                    dirName.Equals("PYTHON", StringComparison.OrdinalIgnoreCase)) // 外部隨選擴充模組，開機不預載
                     continue;
 
                 // 方案 A 嚴格檔名契約 (Convention over Configuration)：
@@ -113,7 +114,6 @@ public sealed class ModuleRegistry
         registry.RegisterHandler(new Handlers.CallModuleHandler());
         registry.RegisterHandler(new Handlers.MultiStationModuleHandler());
         registry.RegisterHandler(new Handlers.RedisModuleHandler());
-        registry.RegisterHandler(new Handlers.PythonModuleHandler());
         registry.RegisterHandler(new Handlers.AiAgentModuleHandler());
         registry.RegisterHandler(new Handlers.PointPathModuleHandler());
 
@@ -132,6 +132,62 @@ public sealed class ModuleRegistry
         return registry;
     }
 
+    /// <summary>
+    /// 依據模組名稱隨選動態載入外部模組 (例如由 System@IncludeModule::Python 觸發)
+    /// </summary>
+    public bool LoadModuleByName(string moduleName, string? modulesRootPath = null)
+    {
+        if (string.IsNullOrWhiteSpace(moduleName)) return false;
+        string mod = moduleName.Trim();
+        if (HasModule(mod)) return true;
+
+        var candidateRoots = new List<string>();
+        if (!string.IsNullOrEmpty(modulesRootPath) && Directory.Exists(modulesRootPath))
+        {
+            candidateRoots.Add(modulesRootPath);
+        }
+
+        candidateRoots.Add(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "MODULES"));
+        candidateRoots.Add(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "EXTRACMD"));
+        candidateRoots.Add(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "..", "dist", "ARCOS_Runtime", "MODULES"));
+        candidateRoots.Add(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "..", "src", "MODULES"));
+
+        foreach (var root in candidateRoots)
+        {
+            if (!Directory.Exists(root)) continue;
+
+            string moduleDir = Path.Combine(root, mod);
+            if (Directory.Exists(moduleDir))
+            {
+                var candidateDllPaths = new[]
+                {
+                    Path.Combine(moduleDir, $"{mod}.Module.dll"),
+                    Path.Combine(moduleDir, $"{mod}.Command.dll"),
+                    Path.Combine(moduleDir, $"{mod}.dll"),
+                    Path.Combine(moduleDir, "bin", "Debug", "net8.0", $"{mod}.Module.dll"),
+                    Path.Combine(moduleDir, "bin", "Release", "net8.0", $"{mod}.Module.dll"),
+                    Path.Combine(moduleDir, $"{mod}Module.dll")
+                };
+
+                string? foundDll = candidateDllPaths.FirstOrDefault(File.Exists);
+                if (foundDll != null)
+                {
+                    TryLoadHandlersFromAssembly(foundDll);
+                    if (HasModule(mod)) return true;
+                }
+            }
+        }
+
+        // 若模組為 Python 且未找到外部獨立 DLL，使用 Core 內建保底實作
+        if (mod.Equals("Python", StringComparison.OrdinalIgnoreCase))
+        {
+            RegisterHandler(new Handlers.PythonModuleHandler());
+            return true;
+        }
+
+        return HasModule(mod);
+    }
+
     public IModuleHandler? GetHandler(string moduleName)
     {
         if (string.IsNullOrWhiteSpace(moduleName)) return null;
@@ -141,6 +197,16 @@ public sealed class ModuleRegistry
 
     public bool HasModule(string moduleName) =>
         !string.IsNullOrWhiteSpace(moduleName) && _handlers.ContainsKey(moduleName.Trim());
+
+    /// <summary>
+    /// 解除註冊特定模組處理器 (供 IncludeModule 重新載入時 Release 舊實例)
+    /// </summary>
+    public bool UnregisterHandler(string moduleName, out IModuleHandler? oldHandler)
+    {
+        oldHandler = null;
+        if (string.IsNullOrWhiteSpace(moduleName)) return false;
+        return _handlers.Remove(moduleName.Trim(), out oldHandler);
+    }
 
     /// <summary>
     /// 取得指令清單 (對應 *@getCMD)

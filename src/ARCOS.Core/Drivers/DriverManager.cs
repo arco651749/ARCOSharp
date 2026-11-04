@@ -146,6 +146,16 @@ public class DriverManager : IDisposable
     private readonly ConcurrentDictionary<string, Func<IDriver>> _factories =
         new(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// 當有新設備動態加入時觸發：(Category, DeviceName, Driver)
+    /// </summary>
+    public event Action<string, string, IDriver>? DeviceAdded;
+
+    /// <summary>
+    /// 當有設備被移除時觸發：(Category, DeviceName)
+    /// </summary>
+    public event Action<string, string>? DeviceRemoved;
+
     public DriverLoader Loader { get; }
 
     public DriverManager(string? driversRootPath = null)
@@ -185,7 +195,7 @@ public class DriverManager : IDisposable
     }
 
     /// <summary>
-    /// 動態加入設備 (對應 IO@AddIODriver, Motion@AddMotor, Capture@AddCam, DAQ@AddDAQ)
+    /// 動態加入設備 (對應 IO@AddIODriver, Motion@AddMotion, Capture@AddCam, DAQ@AddDAQ)
     /// </summary>
     public IDriver AddDevice(string category, string deviceName, string driverType, string param, BasicEngines engines)
     {
@@ -222,6 +232,7 @@ public class DriverManager : IDisposable
 
         driver.Init(key.Item2, param, engines);
         _devices[key] = driver;
+        DeviceAdded?.Invoke(key.Item1, key.Item2, driver);
         return driver;
     }
 
@@ -250,6 +261,7 @@ public class DriverManager : IDisposable
         {
             driver.Shutdown();
             driver.Dispose();
+            DeviceRemoved?.Invoke(key.Item1, key.Item2);
             return true;
         }
         return false;

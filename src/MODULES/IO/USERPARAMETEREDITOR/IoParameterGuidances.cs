@@ -19,8 +19,10 @@ public abstract class BaseIoGuidance : IParameterGuidance
 
     public async Task<string?> ShowGuidanceDialogAsync(string currentParam, BasicEngines engines, object? owner = null)
     {
-        var livePorts = engines.Io.GetAllPortNames();
-        var dialog = new IoGuidanceDialog(CommandKey, currentParam, livePorts);
+        // ARCOS IO 不分 Input/Output，統一傳遞所有已配置之 PORTNAME 與虛擬點位
+        var livePorts = engines.Io.GetConfiguredPortNames();
+
+        var dialog = new IoGuidanceDialog(CommandKey, currentParam, livePorts, engines);
         if (owner is Window win)
         {
             return await dialog.ShowDialog<string?>(win);

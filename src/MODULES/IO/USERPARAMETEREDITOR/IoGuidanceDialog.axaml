@@ -24,7 +24,10 @@
                     <!-- 1. SetPort / ClrPort 控制項 -->
                     <StackPanel x:Name="PnlSetClrPort" Spacing="12" IsVisible="True">
                         <StackPanel Spacing="4">
-                            <TextBlock Text="🔴 $port (點位名稱 / 別名):" FontWeight="SemiBold" Foreground="#DC2626" FontSize="12"/>
+                            <Grid ColumnDefinitions="*,Auto">
+                                <TextBlock Text="🔴 $port (點位名稱 / 別名):" FontWeight="SemiBold" Foreground="#DC2626" FontSize="12" VerticalAlignment="Center"/>
+                                <TextBox x:Name="TxtFilterSetPort" Watermark="🔍 快速篩選..." Width="120" Height="24" FontSize="11" Padding="4,2"/>
+                            </Grid>
                             <ComboBox x:Name="CmbSetPortName" HorizontalAlignment="Stretch" BorderBrush="#DC2626" BorderThickness="1.5" CornerRadius="4"/>
                         </StackPanel>
                         <StackPanel Spacing="4">
@@ -40,7 +43,10 @@
                     <!-- 2. Flash(OnOff) / Flash(OffOn) 控制項 -->
                     <StackPanel x:Name="PnlFlash" Spacing="12" IsVisible="False">
                         <StackPanel Spacing="4">
-                            <TextBlock Text="🔴 $port (閃爍點位):" FontWeight="SemiBold" Foreground="#DC2626" FontSize="12"/>
+                            <Grid ColumnDefinitions="*,Auto">
+                                <TextBlock Text="🔴 $port (閃爍點位):" FontWeight="SemiBold" Foreground="#DC2626" FontSize="12" VerticalAlignment="Center"/>
+                                <TextBox x:Name="TxtFilterFlashPort" Watermark="🔍 快速篩選..." Width="120" Height="24" FontSize="11" Padding="4,2"/>
+                            </Grid>
                             <ComboBox x:Name="CmbFlashPort" HorizontalAlignment="Stretch" BorderBrush="#DC2626" BorderThickness="1.5" CornerRadius="4"/>
                         </StackPanel>
                         <StackPanel Spacing="4">
@@ -56,7 +62,10 @@
                     <!-- 3. WaitPortOn / WaitPortOff 控制項 -->
                     <StackPanel x:Name="PnlWaitPort" Spacing="10" IsVisible="False">
                         <StackPanel Spacing="4">
-                            <TextBlock Text="🔴 $port (等待輸入點位):" FontWeight="SemiBold" Foreground="#DC2626" FontSize="12"/>
+                            <Grid ColumnDefinitions="*,Auto">
+                                <TextBlock Text="🔴 $port (等待輸入點位):" FontWeight="SemiBold" Foreground="#DC2626" FontSize="12" VerticalAlignment="Center"/>
+                                <TextBox x:Name="TxtFilterWaitPort" Watermark="🔍 快速篩選..." Width="120" Height="24" FontSize="11" Padding="4,2"/>
+                            </Grid>
                             <ComboBox x:Name="CmbWaitPort" HorizontalAlignment="Stretch" BorderBrush="#DC2626" BorderThickness="1.5" CornerRadius="4"/>
                         </StackPanel>
                         <Grid ColumnDefinitions="*,*">
