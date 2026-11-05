@@ -167,12 +167,22 @@ public partial class IoGuidanceDialog : Window
         _cmbShiftAmount = this.FindControl<ComboBox>("CmbShiftAmount");
 
         if (_btnCancel != null) _btnCancel.Click += (_, _) => Close(null);
-        if (_btnOk != null) _btnOk.Click += (_, _) => Close(_txtParamOut?.Text);
-        if (_btnApplyBig != null) _btnApplyBig.Click += (_, _) => Close(_txtParamOut?.Text);
+        if (_btnOk != null) _btnOk.Click += (_, _) => {
+            ApplyImmediateDefinitions();
+            Close(_txtParamOut?.Text);
+        };
+        if (_btnApplyBig != null) _btnApplyBig.Click += (_, _) => {
+            ApplyImmediateDefinitions();
+            Close(_txtParamOut?.Text);
+        };
 
         KeyDown += (s, e) =>
         {
-            if (e.Key == Key.Enter) Close(_txtParamOut?.Text);
+            if (e.Key == Key.Enter)
+            {
+                ApplyImmediateDefinitions();
+                Close(_txtParamOut?.Text);
+            }
             else if (e.Key == Key.Escape) Close(null);
         };
 
@@ -519,6 +529,30 @@ public partial class IoGuidanceDialog : Window
             string ports = _txtShiftPorts?.Text?.Trim() ?? "P0.0,P0.1,P0.2";
             string shift = _cmbShiftAmount?.SelectedItem?.ToString() ?? "1";
             _txtParamOut.Text = $"{ports},Shift={shift}";
+        }
+    }
+
+    private void ApplyImmediateDefinitions()
+    {
+        string action = _commandKey.Contains('@') ? _commandKey.Split('@', 2)[1] : _commandKey;
+        if (action.Equals("SetPortName", StringComparison.OrdinalIgnoreCase))
+        {
+            string port = _cmbRenamePort?.SelectedItem?.ToString() ?? "P0.0";
+            string newName = _txtNewPortName?.Text?.Trim() ?? "";
+            if (!string.IsNullOrEmpty(port) && !string.IsNullOrEmpty(newName))
+            {
+                _engines?.Io?.SetPortName(port, newName);
+            }
+        }
+        else if (action.Equals("AddVirtualIO", StringComparison.OrdinalIgnoreCase))
+        {
+            string port = _txtVirtualPortName?.Text?.Trim() ?? "";
+            string val = _cmbVirtualState?.SelectedItem?.ToString() ?? "ON";
+            if (!string.IsNullOrEmpty(port))
+            {
+                bool b = val.Equals("ON", StringComparison.OrdinalIgnoreCase) || val == "1";
+                _engines?.Io?.AddVirtualIO(port, b);
+            }
         }
     }
 }

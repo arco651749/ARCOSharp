@@ -294,6 +294,7 @@ public partial class TestThreadWindow : Window
 
         UpdateUndoRedoButtonState();
         UpdatePCPointer(1);
+        SyncIoDefinitionsFromRows();
     }
 
     public void SyncUIToProgram()
@@ -1042,19 +1043,36 @@ public partial class TestThreadWindow : Window
 
         if (row != null)
         {
-            string? selectedCmd = await ComSelectWindow.SelectCommandAsync(this, _vm?.Executor.Registry);
-            if (string.IsNullOrWhiteSpace(selectedCmd)) return;
-
-            PushUndoSnapshot();
-            row.Command = selectedCmd;
-            string? confirmedParam = await ParameterGuidanceManager.Instance.RequestGuidanceAsync(selectedCmd, row.Parameter, _vm?.Engines, this);
-            if (confirmedParam != null)
+            SyncIoDefinitionsFromRows();
+            bool wasTopmost = this.Topmost;
+            string? selectedCmd = null;
+            string? confirmedParam = null;
+            try
             {
-                row.Parameter = confirmedParam;
+                this.Topmost = false;
+                selectedCmd = await ComSelectWindow.SelectCommandAsync(this, _vm?.Executor.Registry);
+                if (string.IsNullOrWhiteSpace(selectedCmd)) return;
+
+                confirmedParam = await ParameterGuidanceManager.Instance.RequestGuidanceAsync(selectedCmd, row.Parameter, _vm?.Engines, this);
             }
-            SyncUIToProgram();
-            UpdateUndoRedoButtonState();
-            e.Handled = true;
+            finally
+            {
+                this.Topmost = wasTopmost;
+            }
+
+            if (!string.IsNullOrWhiteSpace(selectedCmd))
+            {
+                PushUndoSnapshot();
+                row.Command = selectedCmd;
+                if (confirmedParam != null)
+                {
+                    row.Parameter = confirmedParam;
+                }
+                SyncUIToProgram();
+                SyncIoDefinitionsFromRows();
+                UpdateUndoRedoButtonState();
+                e.Handled = true;
+            }
         }
     }
 
@@ -1068,16 +1086,39 @@ public partial class TestThreadWindow : Window
     {
         if (sender is Border border && border.DataContext is SequencerRowViewModel row)
         {
+            SyncIoDefinitionsFromRows();
             string targetCmd = !string.IsNullOrWhiteSpace(row.Command) ? row.Command : "System@Log Message";
-            string? updatedParam = await ParameterGuidanceManager.Instance.RequestGuidanceAsync(targetCmd, row.Parameter, _vm?.Engines, this);
+            bool wasTopmost = this.Topmost;
+            string? updatedParam = null;
+            try
+            {
+                this.Topmost = false;
+                updatedParam = await ParameterGuidanceManager.Instance.RequestGuidanceAsync(targetCmd, row.Parameter, _vm?.Engines, this);
+            }
+            finally
+            {
+                this.Topmost = wasTopmost;
+            }
+
             if (updatedParam != null)
             {
                 PushUndoSnapshot();
                 row.Parameter = updatedParam;
                 SyncUIToProgram();
+                SyncIoDefinitionsFromRows();
                 UpdateUndoRedoButtonState();
             }
             e.Handled = true;
+        }
+    }
+
+    private void SyncIoDefinitionsFromRows()
+    {
+        if (_vm?.Engines?.Io == null || _rows == null) return;
+        foreach (var r in _rows)
+        {
+            if (string.IsNullOrWhiteSpace(r.Command) || string.IsNullOrWhiteSpace(r.Parameter)) continue;
+            _vm.Engines.Io.ScanAndRegister(r.Command, r.Parameter);
         }
     }
 

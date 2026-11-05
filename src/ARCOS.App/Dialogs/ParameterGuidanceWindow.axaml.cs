@@ -330,6 +330,7 @@ public partial class ParameterGuidanceWindow : Window
     public static async Task<string?> ShowGuidanceAsync(Window owner, string commandKey, string currentParam, BasicEngines? engines = null)
     {
         var win = new ParameterGuidanceWindow(commandKey, currentParam, engines);
+        if (owner != null && owner.Topmost) win.Topmost = true;
         bool? ok = await win.ShowDialog<bool?>(owner);
         return (ok == true) ? win.ResultParameter : null;
     }

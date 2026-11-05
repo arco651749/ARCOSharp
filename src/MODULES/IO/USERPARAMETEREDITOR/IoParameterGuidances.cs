@@ -25,6 +25,7 @@ public abstract class BaseIoGuidance : IParameterGuidance
         var dialog = new IoGuidanceDialog(CommandKey, currentParam, livePorts, engines);
         if (owner is Window win)
         {
+            if (win.Topmost) dialog.Topmost = true;
             return await dialog.ShowDialog<string?>(win);
         }
         dialog.Show();

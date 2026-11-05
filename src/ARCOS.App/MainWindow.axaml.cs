@@ -69,11 +69,7 @@ public partial class MainWindow : Window
 
         // 4. 掛載 Sequencer Editor
         var seqEditor = this.FindControl<SequencerEditorControl>("SequencerEditor");
-        if (seqEditor != null)
-        {
-            seqEditor.AttachVM(_vm);
-            seqEditor.RequestOpenTestThread += (_, _) => ToggleTestThreadWindow();
-        }
+        seqEditor?.AttachVM(_vm);
 
         // 5. 初始化 Capture 頁面的無限點位虛擬化 IO 列表 (512 實體點 + 恆常虛擬 IO)
         InitializeIoChannelList();
@@ -90,6 +86,37 @@ public partial class MainWindow : Window
                     {
                         item.Name = alias;
                     }
+                }
+            });
+        };
+
+        // 即時監聽別名與虛擬點位綁定事件，確保 SETPORTNAME 時 CAPTURE 與主視窗 PORT LIST 100% 同步即時更新
+        _engines.Io.PortNameChanged += (port, alias) =>
+        {
+            Dispatcher.UIThread.Post(() =>
+            {
+                var item = _ioChannels.FirstOrDefault(x => string.Equals(x.Port, port, StringComparison.OrdinalIgnoreCase));
+                if (item != null)
+                {
+                    item.Name = alias;
+                }
+            });
+        };
+
+        _engines.Io.VirtualIoAdded += (name, val) =>
+        {
+            Dispatcher.UIThread.Post(() =>
+            {
+                var existing = _ioChannels.FirstOrDefault(x => string.Equals(x.Port, name, StringComparison.OrdinalIgnoreCase));
+                if (existing == null)
+                {
+                    _ioChannels.Add(new IoChannelViewModel
+                    {
+                        Port = name,
+                        Name = name,
+                        State = val,
+                        IsVisible = true
+                    });
                 }
             });
         };
@@ -125,10 +152,6 @@ public partial class MainWindow : Window
 
         // 註冊全域穿透式鍵盤快速鍵監聽 (Tunneling 策略：確保任何子控制項焦點下 Ctrl+T 均能全局喚醒 Test Thread Editor)
         this.AddHandler(InputElement.KeyDownEvent, MainWindow_KeyDown, RoutingStrategies.Tunnel);
-
-        // 綁定 User Tab SubPanel 上的 TestThread 按鈕
-        var btnMountTest = this.FindControl<Button>("BtnMountTestThread");
-        if (btnMountTest != null) btnMountTest.Click += (_, _) => ToggleTestThreadWindow();
 
         // 啟動內嵌 MCP 與本地自動化控制介面
         Mcp.ArcosMcpServer.AttachMainWindow(this);
@@ -1161,13 +1184,6 @@ public partial class MainWindow : Window
                 }
             });
         };
-
-        // 頂部 Test Thread Editor 按鈕綁定
-        var btnTestFromThreads = this.FindControl<Button>("BtnOpenTestThreadFromThreads");
-        if (btnTestFromThreads != null)
-        {
-            btnTestFromThreads.Click += (_, _) => ToggleTestThreadWindow();
-        }
 
         // SubThread 工具列與清單綁定
         var btnGetSubs = this.FindControl<Button>("BtnGetSubThreadList");

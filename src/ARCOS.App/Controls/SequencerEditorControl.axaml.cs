@@ -48,7 +48,6 @@ public partial class SequencerEditorControl : UserControl
     public ObservableCollection<SequencerRowViewModel> Rows => _rows;
     public int CurrentProgramNumber => _currentProgNo;
     public bool IsLocked => _isLocked;
-    public event EventHandler? RequestOpenTestThread;
 
     public SequencerEditorControl()
     {
@@ -229,6 +228,7 @@ public partial class SequencerEditorControl : UserControl
                 row.Command = selectedCmd;
                 row.Parameter = confirmedParam;
                 SyncUIToProgram();
+                SyncIoDefinitionsFromRows();
             }
         }
         finally
@@ -282,6 +282,7 @@ public partial class SequencerEditorControl : UserControl
                 PushUndoSnapshot();
                 row.Parameter = updatedParam;
                 SyncUIToProgram();
+                SyncIoDefinitionsFromRows();
             }
         }
         finally
@@ -716,16 +717,6 @@ public partial class SequencerEditorControl : UserControl
 
         var btnLoad = this.FindControl<Button>("BtnLoad");
         if (btnLoad != null) btnLoad.Click += BtnLoad_Click;
-
-        var btnOpenTestThread = this.FindControl<Button>("BtnOpenTestThread");
-        if (btnOpenTestThread != null)
-        {
-            btnOpenTestThread.Click += (_, _) =>
-            {
-                RequestOpenTestThread?.Invoke(this, EventArgs.Empty);
-                (this.VisualRoot as MainWindow)?.ToggleTestThreadWindow();
-            };
-        }
 
         var btnReadPro = this.FindControl<Button>("BtnReadPro");
         if (btnReadPro != null) btnReadPro.Click += BtnReadPro_Click;

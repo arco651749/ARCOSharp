@@ -42,6 +42,8 @@ public class IoEngine
     /// 當點位狀態實際改變 (old != new) 時觸發廣播：(Port, Alias, NewValue)
     /// </summary>
     public event Action<string, string, bool>? IoChanged;
+    public event Action<string, string>? PortNameChanged;
+    public event Action<string, bool>? VirtualIoAdded;
 
     public IoEngine()
     {
@@ -253,6 +255,7 @@ public class IoEngine
             _aliasToPhysical[alias] = port;
             _physicalToAlias[port] = alias;
         }
+        PortNameChanged?.Invoke(port, alias);
     }
 
     /// <summary>
@@ -273,6 +276,7 @@ public class IoEngine
                 IoChanged?.Invoke(key, string.Empty, initialValue);
             }
         }
+        VirtualIoAdded?.Invoke(key, initialValue);
     }
 
     /// <summary>
