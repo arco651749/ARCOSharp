@@ -315,8 +315,7 @@ public class MotionModuleHandler : IModuleHandler
             }
             else if (action.Equals("Home", StringComparison.OrdinalIgnoreCase))
             {
-                ctx.Engines.Io.SetPort($"{motor}#Busy?", true);
-                ctx.Engines.Io.SetPort($"{motor}#Homed?", false);
+                ticket.Wait(1000);
             }
         }
 

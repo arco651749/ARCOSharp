@@ -116,7 +116,7 @@
 
             <!-- ========================================================= -->
 
-            <TabItem Header="User Tab">
+            <TabItem x:Name="TabUser" Header="User Tab">
 
                 <Grid ColumnDefinitions="*,460" Margin="4">
 
@@ -253,6 +253,8 @@
                                                 <Button x:Name="BtnMountSystemPanel" Content="System" Height="28" Padding="6,0" FontSize="11" FontWeight="SemiBold" Background="#7C3AED" Foreground="White" CornerRadius="3"/>
 
                                                 <Button x:Name="BtnMountThreadPanel" Content="Thread" Height="28" Padding="6,0" FontSize="11" FontWeight="SemiBold" Background="#D97706" Foreground="White" CornerRadius="3"/>
+
+                                                <Button x:Name="BtnMountTestThread" Content="🧪 Test Thread" Height="28" Padding="6,0" FontSize="11" FontWeight="Bold" Background="#7C3AED" Foreground="White" CornerRadius="3" ToolTip.Tip="開啟/最小化 Test Thread Editor 獨立除錯視窗 (Ctrl+T)"/>
 
                                                 <Button x:Name="BtnMountCapturePanel" Content="Capture" Height="28" Padding="6,0" FontSize="11" FontWeight="SemiBold" Background="#2563EB" Foreground="White" CornerRadius="3"/>
 
@@ -1667,7 +1669,7 @@
 
                             <Border Grid.Row="0" Background="#0055AA" CornerRadius="5,5,0,0" Padding="8,5">
 
-                                <Grid ColumnDefinitions="*,Auto">
+                                <Grid ColumnDefinitions="*,Auto,Auto">
 
                                     <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
 
@@ -1681,7 +1683,16 @@
 
                                     </StackPanel>
 
-                                    <TextBlock Grid.Column="1" Text="Master Controller" FontSize="10" Foreground="#BAE6FD" VerticalAlignment="Center"/>
+                                    <Button x:Name="BtnOpenTestThreadFromThreads" Grid.Column="1" Height="22" Margin="6,0" Padding="8,0"
+                                            Background="#7C3AED" Foreground="White" FontWeight="Bold" FontSize="10.5" CornerRadius="3"
+                                            ToolTip.Tip="開啟/最小化 Test Thread Editor 獨立除錯視窗 (Ctrl+T)">
+                                        <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                                            <TextBlock Text="🧪" FontSize="10" VerticalAlignment="Center"/>
+                                            <TextBlock Text="Test Thread Editor" FontSize="10" FontWeight="Bold" VerticalAlignment="Center"/>
+                                        </StackPanel>
+                                    </Button>
+
+                                    <TextBlock Grid.Column="2" Text="Master Controller" FontSize="10" Foreground="#BAE6FD" VerticalAlignment="Center"/>
 
                                 </Grid>
 

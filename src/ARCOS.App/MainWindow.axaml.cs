@@ -69,7 +69,11 @@ public partial class MainWindow : Window
 
         // 4. 掛載 Sequencer Editor
         var seqEditor = this.FindControl<SequencerEditorControl>("SequencerEditor");
-        seqEditor?.AttachVM(_vm);
+        if (seqEditor != null)
+        {
+            seqEditor.AttachVM(_vm);
+            seqEditor.RequestOpenTestThread += (_, _) => ToggleTestThreadWindow();
+        }
 
         // 5. 初始化 Capture 頁面的無限點位虛擬化 IO 列表 (512 實體點 + 恆常虛擬 IO)
         InitializeIoChannelList();
@@ -119,6 +123,13 @@ public partial class MainWindow : Window
         // 初始系統就緒記錄 (不預載腳本，靜候使用者載入)
         _vm.MainThreads[0].Log("[INFO] ARCOSharp System Ready. Awaiting script load via READ .PRO or SYSTEM@ProgramLoad.");
 
+        // 註冊全域穿透式鍵盤快速鍵監聽 (Tunneling 策略：確保任何子控制項焦點下 Ctrl+T 均能全局喚醒 Test Thread Editor)
+        this.AddHandler(InputElement.KeyDownEvent, MainWindow_KeyDown, RoutingStrategies.Tunnel);
+
+        // 綁定 User Tab SubPanel 上的 TestThread 按鈕
+        var btnMountTest = this.FindControl<Button>("BtnMountTestThread");
+        if (btnMountTest != null) btnMountTest.Click += (_, _) => ToggleTestThreadWindow();
+
         // 啟動內嵌 MCP 與本地自動化控制介面
         Mcp.ArcosMcpServer.AttachMainWindow(this);
 
@@ -129,7 +140,6 @@ public partial class MainWindow : Window
             if (tab != null)
             {
                 tab.IsSelected = true;
-        this.KeyDown += MainWindow_KeyDown;
             }
         };
     }
@@ -1151,6 +1161,13 @@ public partial class MainWindow : Window
                 }
             });
         };
+
+        // 頂部 Test Thread Editor 按鈕綁定
+        var btnTestFromThreads = this.FindControl<Button>("BtnOpenTestThreadFromThreads");
+        if (btnTestFromThreads != null)
+        {
+            btnTestFromThreads.Click += (_, _) => ToggleTestThreadWindow();
+        }
 
         // SubThread 工具列與清單綁定
         var btnGetSubs = this.FindControl<Button>("BtnGetSubThreadList");

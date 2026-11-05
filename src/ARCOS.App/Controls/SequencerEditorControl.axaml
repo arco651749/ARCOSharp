@@ -40,7 +40,7 @@
         <!-- ========================================================= -->
         <Border Grid.Row="0" Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="0,0,0,1" Padding="4,4" Margin="0,0,0,2">
             <Grid RowDefinitions="Auto,Auto">
-                <Grid Grid.Row="0" ColumnDefinitions="*,Auto,115" Margin="0,0,0,3">
+                <Grid Grid.Row="0" ColumnDefinitions="*,Auto,115,Auto" Margin="0,0,0,3">
                     <!-- 腳本名稱 / 路徑顯示條 -->
                     <TextBox x:Name="TxtScriptTitle" Grid.Column="0" Watermark="(No Program Loaded - click READ .PRO)" 
                              FontSize="11" Height="26" VerticalContentAlignment="Center"
@@ -64,6 +64,15 @@
                     <ComboBox x:Name="ProgSelector" Grid.Column="2" Height="26" HorizontalAlignment="Stretch" 
                               Background="White" Foreground="#0284C7" FontWeight="Bold" FontSize="11"
                               BorderBrush="#0284C7" BorderThickness="1"/>
+                    <!-- Test Thread Editor 獨立調試視窗入口 -->
+                    <Button x:Name="BtnOpenTestThread" Grid.Column="3" Height="26" Margin="4,0,0,0" Padding="6,0"
+                            Background="#7C3AED" Foreground="White" FontWeight="Bold" FontSize="11" CornerRadius="3"
+                            ToolTip.Tip="開啟/最小化 Test Thread Editor 獨立除錯視窗 (Ctrl+T)">
+                        <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                            <TextBlock Text="🧪" FontSize="11" VerticalAlignment="Center"/>
+                            <TextBlock Text="Test Thread" FontSize="10" FontWeight="Bold" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
                 </Grid>
 
                 <!-- PRO & INIT 專用操作工具列 -->
