@@ -953,6 +953,7 @@ public partial class SequencerEditorControl : UserControl
         _vm.LoadProgram(_currentProgNo, prog);
         var ctx = _vm.MainThreads[_currentProgNo < 13 ? _currentProgNo : 0];
         ctx.Program = prog;
+        SyncIoDefinitionsFromRows();
     }
 
     public void UpdatePCPointer(int progIndex1Based)

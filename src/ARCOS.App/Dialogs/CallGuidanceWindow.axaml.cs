@@ -46,7 +46,7 @@ public partial class CallGuidanceWindow : Window
         Action<string>? onCommandUpdated = null)
     {
         var win = new CallGuidanceWindow();
-        if (owner != null && owner.Topmost) win.Topmost = true;
+        win.Topmost = true;
         win._parentOwner = owner;
         win._engines = engines;
         win._currentParam = currentParam ?? "";

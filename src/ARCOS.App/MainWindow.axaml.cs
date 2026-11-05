@@ -1231,9 +1231,9 @@ public partial class MainWindow : Window
                 int nextId = _vm.SubThreads.Count + 1;
                 string subName = $"DemoSub_{nextId}";
                 var demoProg = new ProgramTable { ProgramNumber = 90 + (nextId % 10), Name = subName };
-                demoProg.Add(CommandItem.Parse("Timer@Delay\t1200", 0));
+                demoProg.Add(CommandItem.Parse("System@Delay\t1.2", 0));
                 demoProg.Add(CommandItem.Parse("IO@Set\tDO0,1", 1));
-                demoProg.Add(CommandItem.Parse("Timer@Delay\t800", 2));
+                demoProg.Add(CommandItem.Parse("System@Delay\t0.8", 2));
                 demoProg.Add(CommandItem.Parse("IO@Set\tDO0,0", 3));
                 demoProg.Add(CommandItem.Parse("Thread@Stop\t", 4));
 

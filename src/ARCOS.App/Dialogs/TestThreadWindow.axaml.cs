@@ -307,6 +307,7 @@ public partial class TestThreadWindow : Window
             prog.Add(CommandItem.Parse($"{r.Command}\t{r.Parameter}", i));
         }
         _testContext.Program = prog;
+        SyncIoDefinitionsFromRows();
     }
 
     private void DrainPCPointer()
@@ -411,7 +412,7 @@ public partial class TestThreadWindow : Window
                 var grid = this.FindControl<DataGrid>("GridCommands");
                 int cur = grid?.SelectedIndex ?? (_rows.Count - 1);
                 int ins = cur >= 0 ? cur + 1 : _rows.Count;
-                _rows.Insert(ins, new SequencerRowViewModel { LineNumber = ins, Command = "Timer@Delay", Parameter = "100" });
+                _rows.Insert(ins, new SequencerRowViewModel { LineNumber = ins, Command = "System@Delay", Parameter = "0.1" });
                 for (int i = 0; i < _rows.Count; i++) _rows[i].LineNumber = i;
                 UpdateUndoRedoButtonState();
             };
@@ -774,7 +775,7 @@ public partial class TestThreadWindow : Window
             PushUndoSnapshot();
             var grid = this.FindControl<DataGrid>("GridCommands");
             int ins = _rows.Count;
-            var newRow = new SequencerRowViewModel { LineNumber = ins, Command = "Timer@Delay", Parameter = "100" };
+            var newRow = new SequencerRowViewModel { LineNumber = ins, Command = "System@Delay", Parameter = "0.1" };
             _rows.Add(newRow);
             for (int i = 0; i < _rows.Count; i++) _rows[i].LineNumber = i;
             UpdateUndoRedoButtonState();
@@ -1109,6 +1110,61 @@ public partial class TestThreadWindow : Window
                 UpdateUndoRedoButtonState();
             }
             e.Handled = true;
+        }
+    }
+
+    public async Task<string?> OpenParameterGuidanceForRowAsync(int rowIndex)
+    {
+        if (rowIndex < 0 || rowIndex >= _rows.Count) return null;
+        var row = _rows[rowIndex];
+        SyncIoDefinitionsFromRows();
+        string targetCmd = !string.IsNullOrWhiteSpace(row.Command) ? row.Command : "System@Delay";
+        bool wasTopmost = this.Topmost;
+        try
+        {
+            this.Topmost = false;
+            string? updatedParam = await ParameterGuidanceManager.Instance.RequestGuidanceAsync(targetCmd, row.Parameter, _vm?.Engines, this);
+            if (updatedParam != null)
+            {
+                PushUndoSnapshot();
+                row.Parameter = updatedParam;
+                SyncUIToProgram();
+                SyncIoDefinitionsFromRows();
+                UpdateUndoRedoButtonState();
+            }
+            return updatedParam;
+        }
+        finally
+        {
+            this.Topmost = wasTopmost;
+        }
+    }
+
+    public async Task<string?> OpenCommandSelectForRowAsync(int rowIndex)
+    {
+        if (rowIndex < 0 || rowIndex >= _rows.Count) return null;
+        var row = _rows[rowIndex];
+        SyncIoDefinitionsFromRows();
+        bool wasTopmost = this.Topmost;
+        string? selectedCmd = null;
+        try
+        {
+            this.Topmost = false;
+            selectedCmd = await ComSelectWindow.SelectCommandAsync(this, _vm?.Executor.Registry);
+            if (string.IsNullOrWhiteSpace(selectedCmd)) return null;
+
+            string? confirmedParam = await ParameterGuidanceManager.Instance.RequestGuidanceAsync(selectedCmd, row.Parameter, _vm?.Engines, this);
+            PushUndoSnapshot();
+            row.Command = selectedCmd;
+            if (confirmedParam != null) row.Parameter = confirmedParam;
+            SyncUIToProgram();
+            SyncIoDefinitionsFromRows();
+            UpdateUndoRedoButtonState();
+            return selectedCmd;
+        }
+        finally
+        {
+            this.Topmost = wasTopmost;
         }
     }
 

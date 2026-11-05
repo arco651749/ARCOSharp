@@ -978,6 +978,15 @@ public static class ArcosMcpServer
                     value = mainWin.Engines.Io.GetPort(port)
                 });
 
+            case "set_port_name":
+                string alias = args?["alias"]?.GetValue<string>() ?? "";
+                mainWin.Engines.Io.SetPortName(port, alias);
+                return JsonSerializer.Serialize(new { success = true, action = "set_port_name", port, alias });
+
+            case "add_virtual_io":
+                mainWin.Engines.Io.AddVirtualIO(port, val);
+                return JsonSerializer.Serialize(new { success = true, action = "add_virtual_io", name = port, value = val });
+
             case "force_update":
                 var drv = mainWin.DriverManager.GetDevice("IO", "StationIO");
                 var ticket = new DriverTicket("FORCE_UPDATE");
@@ -1056,6 +1065,22 @@ public static class ArcosMcpServer
             {
                 var btnStep = mainWin.TestThreadWindow.FindControl<Button>("BtnStep");
                 btnStep?.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            }
+        }
+        else if (action.Equals("open_guidance", StringComparison.OrdinalIgnoreCase))
+        {
+            int rowIdx = args?["rowIndex"]?.GetValue<int>() ?? 0;
+            if (mainWin.TestThreadWindow != null)
+            {
+                _ = mainWin.TestThreadWindow.OpenParameterGuidanceForRowAsync(rowIdx);
+            }
+        }
+        else if (action.Equals("open_com_select", StringComparison.OrdinalIgnoreCase))
+        {
+            int rowIdx = args?["rowIndex"]?.GetValue<int>() ?? 0;
+            if (mainWin.TestThreadWindow != null)
+            {
+                _ = mainWin.TestThreadWindow.OpenCommandSelectForRowAsync(rowIdx);
             }
         }
 

@@ -169,8 +169,10 @@ public sealed class ParameterGuidanceManager
     {
         try
         {
-            byte[] bytes = File.ReadAllBytes(dllPath);
-            var asm = System.Reflection.Assembly.Load(bytes);
+            string fullPath = Path.GetFullPath(dllPath);
+            var asm = System.Runtime.Loader.AssemblyLoadContext.Default.Assemblies
+                          .FirstOrDefault(a => !string.IsNullOrEmpty(a.Location) && string.Equals(a.Location, fullPath, StringComparison.OrdinalIgnoreCase))
+                      ?? System.Runtime.Loader.AssemblyLoadContext.Default.LoadFromAssemblyPath(fullPath);
             IParameterGuidance? fallback = null;
             foreach (var t in asm.GetTypes())
             {

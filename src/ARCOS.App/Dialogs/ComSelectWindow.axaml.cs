@@ -235,7 +235,7 @@ public partial class ComSelectWindow : Window
     public static async Task<string?> SelectCommandAsync(Window owner, ModuleRegistry? registry = null)
     {
         var win = registry != null ? new ComSelectWindow(registry) : new ComSelectWindow();
-        if (owner != null && owner.Topmost) win.Topmost = true;
+        win.Topmost = true;
         bool? ok = await win.ShowDialog<bool?>(owner);
         return (ok == true) ? win.SelectedCommand : null;
     }
