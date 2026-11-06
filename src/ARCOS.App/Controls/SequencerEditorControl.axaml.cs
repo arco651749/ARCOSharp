@@ -1013,6 +1013,7 @@ public partial class SequencerEditorControl : UserControl
 
         if (!ctx.IsRunning || ctx.ProgIndex > _rows.Count)
         {
+            ctx.IsRunning = false;
             UpdateMachineStatus("IDLE");
         }
     }
@@ -1040,6 +1041,7 @@ public partial class SequencerEditorControl : UserControl
 
         if (!ctx.IsRunning || ctx.ProgIndex > _rows.Count)
         {
+            ctx.IsRunning = false;
             _autoTimer.Stop();
             UpdateMachineStatus("IDLE");
             return;

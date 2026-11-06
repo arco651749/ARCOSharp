@@ -820,7 +820,8 @@ public static class ArcosMcpServer
     private static async Task<string> ToolSequencerActionAsync(MainWindow mainWin, JsonNode? args)
     {
         string action = args?["action"]?.GetValue<string>() ?? "";
-        int rowIndex = args?["rowIndex"]?.GetValue<int>() ?? 0;
+        int? targetRowIndex = args?["rowIndex"] != null ? args["rowIndex"]!.GetValue<int>() : null;
+        int rowIndex = targetRowIndex ?? 0;
         string? mode = args?["mode"]?.GetValue<string>();
         string? command = args?["command"]?.GetValue<string>();
         string? parameter = args?["parameter"]?.GetValue<string>();
@@ -892,7 +893,7 @@ public static class ArcosMcpServer
 
                 case "add_row":
                     seq.SetSupervisorMode(true);
-                    seq.TriggerAddRow(rowIndex, command ?? "IO@SetPort", parameter ?? "P0.0");
+                    seq.TriggerAddRow(targetRowIndex, command ?? "IO@SetPort", parameter ?? "P0.0");
                     return JsonSerializer.Serialize(new { success = true, rowCount = seq.Rows.Count });
 
                 case "delete_row":

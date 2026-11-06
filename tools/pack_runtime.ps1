@@ -36,7 +36,8 @@ New-Item -ItemType Directory -Path "$OutputDir\PICTURE\CAM1" -Force | Out-Null
 New-Item -ItemType Directory -Path "$OutputDir\PICTURE\CamTop" -Force | Out-Null
 New-Item -ItemType Directory -Path "$OutputDir\WAVEFORM" -Force | Out-Null
 New-Item -ItemType Directory -Path "$OutputDir\POINT&PATH" -Force | Out-Null
-New-Item -ItemType Directory -Path "$OutputDir\Python" -Force | Out-Null
+New-Item -ItemType Directory -Path "$OutputDir\Python" -Force | Out-Null
+
 New-Item -ItemType Directory -Path "$OutputDir\ExternalModules" -Force | Out-Null
 
 # 2. Publish ARCOS.App Host
@@ -149,23 +150,14 @@ $ioCommands = @(
     "Shift"
 )
 
-# 部署多合一 IO.csvi (優先使用 src\MODULES\IO\IO.csvi，絕不逆向覆寫 src 目錄)
-$srcIoRootCsvi = "$PSScriptRoot\..\src\MODULES\IO\IO.csvi"
-if (Test-Path -LiteralPath $srcIoRootCsvi) {
-    Copy-Item -LiteralPath $srcIoRootCsvi -Destination "$OutputDir\MODULES\IO\IO.csvi" -Force
-} else {
-    Copy-Item "$tempBuild\IO.Guidance.dll" "$OutputDir\MODULES\IO\IO.csvi" -Force
-}
+# 部署多合一 IO.csvi (使用甫建置之最新 IO.Guidance.dll)
+Copy-Item "$tempBuild\IO.Guidance.dll" "$OutputDir\MODULES\IO\IO.csvi" -Force
+Copy-Item "$tempBuild\IO.Guidance.dll" "$PSScriptRoot\..\src\MODULES\IO\IO.csvi" -Force
 
 foreach ($cmd in $ioCommands) {
-    $srcCmdCsvi = "$PSScriptRoot\..\src\MODULES\IO\$cmd.csvi"
-    if (Test-Path -LiteralPath $srcCmdCsvi) {
-        Copy-Item -LiteralPath $srcCmdCsvi -Destination "$OutputDir\MODULES\IO\$cmd.csvi" -Force
-        Copy-Item -LiteralPath $srcCmdCsvi -Destination "$OutputDir\MODULES\IO\io@$cmd.csvi" -Force
-    } else {
-        Copy-Item "$tempBuild\IO.Guidance.dll" "$OutputDir\MODULES\IO\$cmd.csvi" -Force
-        Copy-Item "$tempBuild\IO.Guidance.dll" "$OutputDir\MODULES\IO\io@$cmd.csvi" -Force
-    }
+    Copy-Item "$tempBuild\IO.Guidance.dll" "$OutputDir\MODULES\IO\$cmd.csvi" -Force
+    Copy-Item "$tempBuild\IO.Guidance.dll" "$OutputDir\MODULES\IO\io@$cmd.csvi" -Force
+    Copy-Item "$tempBuild\IO.Guidance.dll" "$PSScriptRoot\..\src\MODULES\IO\$cmd.csvi" -Force
 }
 
 # 部署 SYSTEM 模組 CSVI 虛擬儀表 (四位一體)
