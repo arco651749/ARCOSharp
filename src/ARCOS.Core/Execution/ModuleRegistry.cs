@@ -111,7 +111,10 @@ public sealed class ModuleRegistry
     {
         var registry = new ModuleRegistry();
 
-        // 1. 核心保留系統與內建流程處理器
+        // 僅註冊核心保留系統與內建流程處理器 (Basic Modules)
+        registry.RegisterHandler(new Handlers.SystemModuleHandler());
+        registry.RegisterHandler(new Handlers.ThreadModuleHandler());
+        registry.RegisterHandler(new Handlers.VariableModuleHandler());
         registry.RegisterHandler(new Handlers.UserModuleHandler());
         registry.RegisterHandler(new Handlers.CallModuleHandler());
         registry.RegisterHandler(new Handlers.MultiStationModuleHandler());
@@ -119,18 +122,8 @@ public sealed class ModuleRegistry
         registry.RegisterHandler(new Handlers.AiAgentModuleHandler());
         registry.RegisterHandler(new Handlers.PointPathModuleHandler());
 
-        // 2. 動態掃描並加載外部解耦模組 (IO, MOTION, CAPTURE, DAQ, SYSTEM, THREAD, VARIABLE)
-        registry.LoadExternalModules(modulesRootPath);
-
-        // 3. 內建回退安全防護 (若未經發行獨立運行單元測試，確保相容)
-        if (!registry.HasModule("IO")) registry.RegisterHandler(new Handlers.IoModuleHandler());
-        if (!registry.HasModule("Motion")) registry.RegisterHandler(new Handlers.MotionModuleHandler());
-        if (!registry.HasModule("Capture")) registry.RegisterHandler(new Handlers.CaptureModuleHandler());
-        if (!registry.HasModule("DAQ")) registry.RegisterHandler(new Handlers.DaqModuleHandler());
-        if (!registry.HasModule("System")) registry.RegisterHandler(new Handlers.SystemModuleHandler());
-        if (!registry.HasModule("Thread")) registry.RegisterHandler(new Handlers.ThreadModuleHandler());
-        if (!registry.HasModule("Variable")) registry.RegisterHandler(new Handlers.VariableModuleHandler());
-
+        // 嚴格規範：其餘擴充模組 (IO, Motion, Capture, DAQ, Python 等)
+        // 絕對不在啟動時預載入，必須待下達指令 (例如 System@IncludeModule 或首次調用該模組指令) 時才動態加載！
         return registry;
     }
 
@@ -180,11 +173,27 @@ public sealed class ModuleRegistry
             }
         }
 
-        // 若模組為 Python 且未找到外部獨立 DLL，使用 Core 內建保底實作
-        if (mod.Equals("Python", StringComparison.OrdinalIgnoreCase))
+        // 若未找到外部獨立 DLL，檢查是否有內建模組實作保底 (如純測試或未獨立發布環境)
+        if (!HasModule(mod))
         {
-            RegisterHandler(new Handlers.PythonModuleHandler());
-            return true;
+            switch (mod.ToUpperInvariant())
+            {
+                case "IO":
+                    RegisterHandler(new Handlers.IoModuleHandler());
+                    return true;
+                case "MOTION":
+                    RegisterHandler(new Handlers.MotionModuleHandler());
+                    return true;
+                case "CAPTURE":
+                    RegisterHandler(new Handlers.CaptureModuleHandler());
+                    return true;
+                case "DAQ":
+                    RegisterHandler(new Handlers.DaqModuleHandler());
+                    return true;
+                case "PYTHON":
+                    RegisterHandler(new Handlers.PythonModuleHandler());
+                    return true;
+            }
         }
 
         return HasModule(mod);
@@ -193,7 +202,15 @@ public sealed class ModuleRegistry
     public IModuleHandler? GetHandler(string moduleName)
     {
         if (string.IsNullOrWhiteSpace(moduleName)) return null;
-        _handlers.TryGetValue(moduleName.Trim(), out var handler);
+        string mod = moduleName.Trim();
+        if (!_handlers.TryGetValue(mod, out var handler))
+        {
+            // 下指令時才載入該模組 (隨選隨載 On-Demand Lazy Loading)
+            if (LoadModuleByName(mod))
+            {
+                _handlers.TryGetValue(mod, out handler);
+            }
+        }
         return handler;
     }
 
@@ -220,6 +237,12 @@ public sealed class ModuleRegistry
 
         if (string.IsNullOrWhiteSpace(moduleFilter) || moduleFilter == "*")
         {
+            // 若以 *@getCMD 查詢全指令，隨選載入可用模組
+            foreach (var mod in new[] { "IO", "Motion", "Capture", "DAQ", "Python" })
+            {
+                GetHandler(mod);
+            }
+
             foreach (var kvp in _handlers.OrderBy(k => k.Key))
             {
                 foreach (var cmd in kvp.Value.GetSupportedCommands())
@@ -228,11 +251,15 @@ public sealed class ModuleRegistry
                 }
             }
         }
-        else if (_handlers.TryGetValue(moduleFilter.Trim(), out var handler))
+        else
         {
-            foreach (var cmd in handler.GetSupportedCommands())
+            var handler = GetHandler(moduleFilter.Trim());
+            if (handler != null)
             {
-                result.Add($"{handler.ModuleName}@{cmd}");
+                foreach (var cmd in handler.GetSupportedCommands())
+                {
+                    result.Add($"{handler.ModuleName}@{cmd}");
+                }
             }
         }
 
