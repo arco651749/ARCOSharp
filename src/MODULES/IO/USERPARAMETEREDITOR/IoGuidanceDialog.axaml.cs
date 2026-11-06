@@ -32,6 +32,7 @@ public partial class IoGuidanceDialog : Window
     private StackPanel? _pnlAddIODriver;
     private StackPanel? _pnlDeviceOnly;
     private StackPanel? _pnlShift;
+    private Button? _btnOpenDriverWizard;
 
     // 1. SetPort / ClrPort 控制項
     private ComboBox? _cmbSetPortName;
@@ -120,6 +121,7 @@ public partial class IoGuidanceDialog : Window
         _btnApplyBig = this.FindControl<Button>("BtnApplyBig");
         _btnOk = this.FindControl<Button>("BtnOk");
         _btnCancel = this.FindControl<Button>("BtnCancel");
+        _btnOpenDriverWizard = this.FindControl<Button>("BtnOpenDriverWizard");
 
         _pnlSetClrPort = this.FindControl<StackPanel>("PnlSetClrPort");
         _pnlFlash = this.FindControl<StackPanel>("PnlFlash");
@@ -167,6 +169,7 @@ public partial class IoGuidanceDialog : Window
         _cmbShiftAmount = this.FindControl<ComboBox>("CmbShiftAmount");
 
         if (_btnCancel != null) _btnCancel.Click += (_, _) => Close(null);
+        if (_btnOpenDriverWizard != null) _btnOpenDriverWizard.Click += async (_, _) => await LaunchSelectedDriverWizardAsync();
         if (_btnOk != null) _btnOk.Click += (_, _) => {
             ApplyImmediateDefinitions();
             Close(_txtParamOut?.Text);
@@ -321,7 +324,17 @@ public partial class IoGuidanceDialog : Window
 
         if (_cmbVirtualState != null) { _cmbVirtualState.ItemsSource = new[] { "ON", "OFF" }; _cmbVirtualState.SelectedIndex = 0; }
 
-        if (_cmbDriverType != null) { _cmbDriverType.ItemsSource = new[] { "MockIO", "AdvantechIO", "ADLINK8164" }; _cmbDriverType.SelectedIndex = 0; }
+        var drvLoader = new DriverLoader();
+        var availableDrivers = drvLoader.GetAvailableDrivers("IO");
+        if (availableDrivers != null && availableDrivers.Count > 0)
+        {
+            if (_cmbDriverType != null) { _cmbDriverType.ItemsSource = availableDrivers; _cmbDriverType.SelectedIndex = 0; }
+        }
+        else if (_cmbDriverType != null)
+        {
+            _cmbDriverType.ItemsSource = new[] { "MockIO", "AdvantechIO", "ADLINK8164" };
+            _cmbDriverType.SelectedIndex = 0;
+        }
 
         // 動態取得目前已註冊之 IO 驅動名稱 (例如: IO1, IO2)
         var devNames = _engines?.Io?.GetRegisteredDrivers();
@@ -529,6 +542,36 @@ public partial class IoGuidanceDialog : Window
             string ports = _txtShiftPorts?.Text?.Trim() ?? "P0.0,P0.1,P0.2";
             string shift = _cmbShiftAmount?.SelectedItem?.ToString() ?? "1";
             _txtParamOut.Text = $"{ports},Shift={shift}";
+        }
+    }
+
+    private async Task LaunchSelectedDriverWizardAsync()
+    {
+        string driverType = _cmbDriverType?.SelectedItem?.ToString() ?? "MockIO";
+        string devName = _txtDriverDeviceName?.Text?.Trim() ?? "IO1";
+        string currentParams = _txtDriverParams?.Text?.Trim() ?? "";
+
+        var loader = new DriverLoader();
+        var driver = loader.LoadDriver("IO", driverType);
+        if (driver != null)
+        {
+            driver.Init(devName, currentParams, _engines ?? new BasicEngines());
+            string? resultParam = await driver.ShowGuidanceDialogAsync(currentParams, _engines ?? new BasicEngines(), this);
+            if (!string.IsNullOrWhiteSpace(resultParam))
+            {
+                // 解析返回之參數，若帶有 "IO1," 前綴則分別更新設備名與配置參數
+                var parts = resultParam.Split(',', 2);
+                if (parts.Length >= 2 && !parts[0].Contains('='))
+                {
+                    if (_txtDriverDeviceName != null) _txtDriverDeviceName.Text = parts[0].Trim();
+                    if (_txtDriverParams != null) _txtDriverParams.Text = parts[1].Trim();
+                }
+                else
+                {
+                    if (_txtDriverParams != null) _txtDriverParams.Text = resultParam.Trim();
+                }
+                UpdatePreview();
+            }
         }
     }
 

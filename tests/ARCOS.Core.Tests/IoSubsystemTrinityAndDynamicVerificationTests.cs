@@ -247,6 +247,14 @@ public class IoSubsystemTrinityAndDynamicVerificationTests
         setPortGuidance.Execute(engines, "P0.5");
         Assert.True(ioEngine.GetPort("P0.5"));
 
+        // 4. 驗證 MockIoGuidance 實作 IParameterGuidance 且具備專屬 CommandKey 與前面板控制項
+        var mockIoGuidance = new MockIoGuidance();
+        Assert.Equal("IO@AddIODriver::MockIO", mockIoGuidance.CommandKey);
+        Assert.NotNull(mockIoGuidance.GetFrontPanelControl());
+
+        // 5. 驗證 MockIoGuidanceDialog 型別與繼承結構 (在無 Headless 視窗環境下安全檢查)
+        Assert.True(typeof(Window).IsAssignableFrom(typeof(MockIoGuidanceDialog)));
+
         driver.Shutdown();
     }
 

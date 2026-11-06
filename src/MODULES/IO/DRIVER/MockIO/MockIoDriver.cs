@@ -111,6 +111,19 @@ public class MockIoDriver : IDriver
         return new MockIoView(this);
     }
 
+    public async Task<string?> ShowGuidanceDialogAsync(string currentParam, BasicEngines engines, object? owner = null)
+    {
+        _engines = engines;
+        var winOwner = owner as Avalonia.Controls.Window;
+        var dlg = new MockIoGuidanceDialog(this, currentParam);
+        if (winOwner != null)
+        {
+            return await dlg.ShowDialog<string?>(winOwner);
+        }
+        dlg.Show();
+        return null;
+    }
+
     private async Task WorkerLoop(CancellationToken token)
     {
         while (!token.IsCancellationRequested)

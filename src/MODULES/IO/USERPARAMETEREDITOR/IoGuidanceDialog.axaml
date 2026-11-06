@@ -143,7 +143,10 @@
                             </StackPanel>
                         </Grid>
                         <StackPanel Spacing="4">
-                            <TextBlock Text="🟢 Driver Parameters (配置參數，如 OutStart=P0.0,OutPorts=8):" FontWeight="SemiBold" Foreground="#16A34A" FontSize="12"/>
+                            <Grid ColumnDefinitions="*,Auto">
+                                <TextBlock Grid.Column="0" Text="🟢 Driver Parameters (配置參數):" FontWeight="SemiBold" Foreground="#16A34A" FontSize="12" VerticalAlignment="Center"/>
+                                <Button Grid.Column="1" x:Name="BtnOpenDriverWizard" Content="⚙️ 開啟驅動導引精靈 (Wizard)..." Background="#0E639C" Foreground="White" FontWeight="Bold" FontSize="11" Padding="8,3" CornerRadius="4"/>
+                            </Grid>
                             <TextBox x:Name="TxtDriverParams" CornerRadius="4" BorderBrush="#16A34A" BorderThickness="1.5"/>
                         </StackPanel>
                     </StackPanel>
