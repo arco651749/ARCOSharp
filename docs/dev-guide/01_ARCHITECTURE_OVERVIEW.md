@@ -213,7 +213,35 @@ flowchart TD
 
 ---
 
-## 5. 執行期實體目錄拓撲 (Runtime Deployment Topology)
+## 6. CSVI 3.0 大一統三元架構 (The Grand Unified Trinity Architecture)
+
+在 **ARCOSharp** 的核心哲學中，**每一個 `.csvi` 套件在本質上都是平等的，且在架構上皆嚴格遵循「三元一體」的統一實作規範**：
+
+```
+┌────────────────────────────────────────────────────────────────────────┐
+│                   CSVI 3.0 虛擬儀表 (4-in-1 組件封裝)                  │
+├────────────────────┬────────────────────┬──────────────────────────────┤
+│ 1. C# 核心代碼     │ 2. UI 監控前面板   │ 3. 參數導引視窗              │
+│ (Core Logic CS)    │ (FrontPanel HMI)   │ (Parameter Guidance UI)      │
+├────────────────────┼────────────────────┼──────────────────────────────┤
+│ • 業務邏輯 / 驅動  │ • 即時監控 / 儀表  │ • 參數引導精靈 / 對話框      │
+│ • 後端資料計算     │ • 嵌入視窗或獨立運行│ • 視覺化選單與語法即時預覽   │
+│ • 引擎雙向資料同步 │ • 手動操作與點檢   │ • 一鍵生成參數回填排程器     │
+└────────────────────┴────────────────────┴──────────────────────────────┘
+```
+
+### 三大應用情境之「使用時機」與「槽位對照矩陣」
+
+雖然所有 CSVI 都包含這三個維度，但根據其在系統中扮演的角色，**ARCOSharp 在執行時期調用與掛載這三者的時機各有不同**：
+
+| CSVI 應用類型 | 1. C# 代碼 (CS Logic) | 2. UI 前面板 (FrontPanel) | 3. 參數導引 UI (Guidance) |
+|---|---|---|---|
+| **指令型 CSVI**<br>(Command / Module)<br>例: `IO.csvi`, `System.csvi` | **【調用時機】指令直譯執行**<br>實作 `IModuleHandler.Execute()`，於排程器執行至該指令時運算業務邏輯。 | **【調用時機】SubPanel 切換**<br>實作監控儀表板，於點擊主視窗右側 SubPanel 分頁時嵌入展示全域點位/狀態。 | **【調用時機】編輯器指令雙擊**<br>實作 `IParameterGuidance`，在 Sequencer 雙擊指令或點選小燈泡時彈窗引導設定。 |
+| **驅動型 CSVI**<br>(Driver)<br>例: `MockIO.csvi`, `MockMotion.csvi` | **【調用時機】AddDriver 指令下達**<br>實作 `IDriver`，於腳本執行 `IO@AddIODriver` 時實例化，背景週期搬運硬體點位。 | **【調用時機】Driver 面板切換**<br>實作 `CreateDriverView()`，由 SubPanel 嵌入或由 Standalone EXE 獨立開啟進行硬體點檢。 | **【調用時機】AddDriver 參數設定**<br>實作於 View 的第二分頁或 Guidance，在配置設備時引導挑選 COM/IP/點位區間。 |
+| **使用者面板 CSVI**<br>(User Panel)<br>例: `UserPanel.csvi` | **【調用時機】HMI 後端邏輯運作**<br>負責計數統計、工單追蹤、調用 SubThread 腳本與配方管理。 | **【調用時機】UserPanelOpen 指令**<br>實作機台操作員專屬的主畫面，下達 `System@UserPanelOpen` 時嵌入主畫面中央畫布。 | **【調用時機】UserPanelCMD 設定**<br>在設定按鈕綁定（`UIBinding`）、Tip strip 或切換屬性時彈窗引導設定。 |
+| **單檔擴充 CSVI**<br>(External CSVI)<br>例: `ExternalModules/*.csvi` | **【調用時機】Call@ 指令下達**<br>實作 `ICallCommand.Execute()`，於主腳本執行 `Call@mycsvi` 時隨選執行自訂演算法。 | **【調用時機】演算法自訂監控**<br>提供演算法輸入/輸出結果之專屬調試圖表視圖。 | **【調用時機】Call 指令精靈**<br>在排程器設定 `Call` 參數時提供自訂輸入介面。 |
+
+---
 
 系統編譯或經由 `tools/pack_runtime.ps1` 打包發布後，目錄結構如下：
 

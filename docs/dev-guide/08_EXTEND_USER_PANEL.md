@@ -62,7 +62,23 @@ public void RefreshFromEngines(BasicEngines engines);
 
 ---
 
-## 3. 從 0 到 1 自製面板完整範例
+## 3. User Panel 的三位一體組成
+
+如同所有 CSVI 套件，`UserPanel.csvi` 同樣封裝了完整的三元組件：
+1. **C# 業務邏輯 (`UserPanelViewModel.cs` / Code-Behind)**：
+   - 負責後端統計、良率運算、配方儲存與資料庫通訊。
+   - 透過 `Init(BasicEngines engines)` 接收系統子引擎，監聽 `engines.Io.IoChanged`，或直接呼叫 `engines.Variable.Set(...)`。
+   - 支援藉由觸發系統 Hook 或發送事件啟動指定的 `.init` 獨立 SubThread 背景腳本。
+2. **UI 主操作介面 (`UserPanelView.axaml`)**：
+   - 提供現場作業員使用之大按鈕（啟動、暫停、復歸）、生產數據卡片（總數、良率、Cycle Time）、設備指示燈與狀態文字。
+   - 於執行 `System@UserPanelOpen::UserPanel.csvi` 時，動態載入並嵌入至主視窗中央畫布 `UserFrontPanelContainer`。
+3. **參數導引與控制項綁定精靈 (UIBinding Wizard)**：
+   - 對應指令 `System@UserPanelCMD::UIBinding, <ControlLabel>, <Function>, [Params]` 與 `System@UserPanelOpen` 的參數設定。
+   - 引導工程師視覺化設定控制項屬性、按鈕動作（`Switch when press` / `Switch when release`）、點位連動（`IOSwitch`, `IOShow`）與腳本觸發關聯（`OnOff`, `Trigger`, `TabChange`）。
+
+---
+
+## 4. 從 0 到 1 自製面板完整範例
 
 ### 步驟 1：建立專案 `CustomHmiPanel.csproj`
 ```xml
