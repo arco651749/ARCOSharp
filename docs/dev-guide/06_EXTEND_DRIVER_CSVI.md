@@ -1,170 +1,346 @@
-# 06. 硬體驅動與 Driver CSVI 設計 (Extend Driver CSVI)
+# 06. 硬體驅動與 Driver CSVI 設計指南 (Extend Driver CSVI)
 
-ARCOSharp 採用 **Directory-Per-Driver 目錄隔離** 與 **DriverTicket 票據通訊架構**。硬體驅動程式完全獨立於核心排程器，可在不重新編譯主程式的情況下抽換與擴充。
+在 **ARCOSharp** 架構中，**Driver CSVI** 是整個工控系統對接底層實體硬體（PLC、軸卡、視覺相機、DAQ 擷取卡、儀表等）的核心橋樑。
 
----
-
-## 1. 驅動程式拓撲結構 (Directory-Per-Driver)
-
-每個硬體驅動程式必須封裝於獨立的子目錄中，置於對應模組之 `DRIVER/` 路徑下：
-
-```
-MODULES/IO/DRIVER/Advantech_PCI1750/
-├── Advantech_PCI1750.csvi          # 4-in-1 虛擬儀器封裝包 (首選載入)
-├── Advantech_PCI1750.Driver.dll    # 實作 IDriver 之主要組件
-├── Advantech_PCI1750.Driver.pdb
-├── Advantech_PCI1750.Driver.deps.json
-└── Advantech_PCI1750.Driver.runtimeconfig.json
-```
+本手冊詳盡剖析 **Driver CSVI** 的標準規格、真實介面契約、雙模執行架構、四大硬體類別之標準 Ticket 指令協定，以及完整的二次開發實作範本。
 
 ---
 
-## 2. IDriver 介面契約規範
+## 1. 核心定位：什麼是 Driver CSVI？
 
-所有驅動程式必須實作 `ARCOS.Core.Drivers.IDriver`：
+Driver CSVI 既是一個**可熱抽換的外掛組件**，也是一個**具備自我除錯能力的獨立測試工具**。其核心職責包含：
+1. **硬體搬運工 (Hardware Transporter)**：在背景執行緒中持續將實體硬體狀態批次搬入/搬出 `BasicEngines`（如 `IoEngine.SetBatch` / `GetBatch`、`PointEngine`、`ImageEngine`、`DaqEngine`）。
+2. **通訊票據處理 (DriverTicket Dispatcher)**：接收來自模組處理器（`IModuleHandler`）派發的弱耦合信號票據（`DriverTicket`），執行硬體動作並將結果非阻塞塞回私有信號通道。
+3. **狀態旗標自動回寫 (Virtual IO & Flag Synchronization)**：將硬體就緒、忙碌、警報與完成旗標（如 `$(Device)#Busy?`、`$(Device)#Done?`、`$(Device)#OK?`）即時同步至虛擬 IO，供排程器腳本條件等待。
+4. **專屬除錯 HMI 前面板 (`CreateDriverView`)**：提供 Avalonia XAML 視覺介面，既可嵌入主程式右側 `SubPanel`，亦可在未開啟主程式時單獨作為桌面工具執行。
+
+---
+
+## 2. 雙模架構 (Dual-Mode Execution)
+
+所有 Driver CSVI 專案檔預設輸出為 **`WinExe`** 而非純類別庫：
+
+```xml
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <OutputType>WinExe</OutputType>
+    <AssemblyName>MockIO.Driver</AssemblyName>
+    <RootNamespace>ARCOS.Driver.MockIO</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="11.0.10" />
+    <PackageReference Include="Avalonia.Desktop" Version="11.0.10" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="11.0.10" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\..\ARCOS.Core\ARCOS.Core.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="CSVI.Manifest.json" LogicalName="CSVI.Manifest.json" />
+    <EmbeddedResource Include="CSVI.Source.Bundle" LogicalName="CSVI.Source.Bundle" />
+  </ItemGroup>
+</Project>
+```
+
+### 雙模運行情境：
+- **模式 A：宿主掛載模式 (ARCO Host Plugin)**  
+  ARCOSharp 主程式透過 `PluginLoadManager` 將 `.csvi` 或 `.Driver.dll` 動態以記憶體串流載入可收集上下文（`CollectiblePluginContext`），在 Windows 下 0 鎖檔，反射實例化 `IDriver`。
+- **模式 B：獨立除錯模式 (Standalone Test Tool)**  
+  工程師在現場無需開啟主程式，直接雙擊 `MockIO.Driver.exe`。其內建的 `Program.cs` 會啟動 `StandaloneApp`，彈出完整的驅動除錯視窗，可直接驗證 COM Port 通訊、手動撥動點位或觀察相機影像。
+
+---
+
+## 3. IDriver 介面契約規範
+
+所有驅動程式必須實作 [`ARCOS.Core.Drivers.IDriver`](file:///d:/AntiGravity/ARCOSharp/src/ARCOS.Core/Drivers/IDriver.cs)：
 
 ```csharp
 namespace ARCOS.Core.Drivers;
 
 public interface IDriver : IDisposable
 {
-    // 驅動程式型號名稱 (如 "Advantech_PCI1750", "MockIO")
-    string DriverName { get; }
+    /// <summary>
+    /// 機台內此設備實例名稱 (例如 "IO1", "StationIO", "RobotGantry", "CamTop")
+    /// 由下達指令時傳入 (如 IO@AddIODriver::StationIO, MockIO)
+    /// </summary>
+    string DeviceName { get; }
 
-    // 硬體所屬模組類別 ("IO", "Motion", "Capture", "DAQ")
+    /// <summary>
+    /// 驅動類別 ("IO", "Motion", "Capture", "DAQ", "Custom")
+    /// </summary>
     string Category { get; }
 
-    // 開機或熱載入時初始化，系統在此注入 BasicEngines 實例
-    bool Initialize(BasicEngines engines);
+    /// <summary>
+    /// 硬體驅動型態名稱 (例如 "MockIO", "MockMotion", "ADLINK8164", "HikCamera")
+    /// </summary>
+    string DriverType { get; }
 
-    // 處理同步或非同步硬體通訊票據
-    void ExecuteTicket(DriverTicket ticket);
+    /// <summary>
+    /// 初始化驅動並注入第一階段 BasicEngines 與指令參數字串
+    /// </summary>
+    /// <param name="deviceName">設備識別名</param>
+    /// <param name="param">指令傳入之設定字串 (如 Device=COM1,Baud=9600,OutStart=P0.0)</param>
+    /// <param name="engines">核心 8 大引擎參照</param>
+    void Init(string deviceName, string param, BasicEngines engines);
 
-    // 機台關機或切換型號時的資源釋放
-    void Shutdown();
+    /// <summary>
+    /// 發送私有信號通訊票券至 Driver 內部工作佇列 (非阻塞)
+    /// </summary>
+    void PostTicket(DriverTicket ticket);
 
-    // 建立驅動專屬的即時監控 UI 視圖 (回傳 Avalonia Control 或 null)
+    /// <summary>
+    /// 建立該 Driver 的 Avalonia 前面板調試視圖 (UserControl)
+    /// 供主視窗 ContentControl 嵌入顯示或 StandaloneApp 展示
+    /// </summary>
     object? CreateDriverView();
+
+    /// <summary>
+    /// 停止驅動並釋放硬體連線、取消背景執行緒
+    /// </summary>
+    void Shutdown();
 }
 ```
 
 ---
 
-## 3. DriverTicket 票據通訊機制
+## 4. DriverTicket 通訊票券與非阻塞佇列架構
 
-上層模組（如 `IoModuleHandler`）與底層 Driver 之間**絕不進行強型別直接呼叫**，一律透過 `DriverTicket` 進行弱耦合資料交換：
+驅動程式內部採用 **`Channel<DriverTicket>`** 或 **`ConcurrentQueue<DriverTicket>`** 作為生產者-消費者佇列，配合背景 `WorkerLoop` 進行非同步處理：
 
 ```mermaid
 sequenceDiagram
-    participant Handler as IoModuleHandler
-    participant DrvMgr as DriverManager
-    participant Driver as MockIO Driver
-    participant Engines as BasicEngines
+    participant Caller as VM Thread / Handler
+    participant Driver as IDriver Instance
+    participant Queue as Channel<DriverTicket>
+    participant Worker as Background WorkerLoop
+    participant HW as Physical Hardware / Engines
 
-    Handler->>DrvMgr: GetDevice("IO", "StationIO")
-    DrvMgr-->>Handler: 回傳 IDriver 實例
-    
-    Handler->>Handler: new DriverTicket("FORCE_UPDATE")
-    Handler->>Driver: ExecuteTicket(ticket)
-    activate Driver
-    Driver->>Engines: 直接批次搬運硬體點位至 IoEngine
-    Driver->>Driver: ticket.Status = DriverTicketStatus.Completed
-    Driver-->>Handler: 票據執行完畢
-    deactivate Driver
+    Caller->>Driver: PostTicket(ticket)
+    Driver->>Queue: TryWrite(ticket)
+    Note over Caller: 呼叫端立即返回，或 await ticket.Task 等待結果
+    Worker->>Queue: ReadAsync(token)
+    Worker->>HW: 讀取/寫入硬體通訊暫存器
+    HW-->>Worker: 通訊完成
+    Worker->>ticket: ticket.SetCompleted(DriverResponse.Ok())
+    Note over Caller: ticket.Task 完成，通知等待者
 ```
 
-### DriverTicket 常用命令慣例
-- **`FORCE_UPDATE`**：要求 Driver 立即對硬體進行一次完整讀取/寫入刷新。
-- **`SET_OUTPUT`**：帶有參數 `Channel=0`, `Value=1`。
-- **`READ_INPUT`**：要求 Driver 將讀取之狀態寫入 `ticket.Result`。
+### DriverTicket 核心結構：
+- `Command`：指令名稱（如 `"FORCE_UPDATE"`, `"Home"`, `"Snap"`, `"Start"`）。
+- `Parameter`：參數字串（如 `"Index=0,Value=1"`, `"X=100,Y=200"`）。
+- `SetCompleted(DriverResponse.Ok(payload))`：通知成功並回傳酬載。
+- `SetFailed(string errorCode, string message)`：通知失敗並夾帶錯誤碼。
 
 ---
 
-## 4. 什麼是 CSVI (4-in-1 虛擬儀表封裝)？
+## 5. 四大硬體類別標準設計規範與 Ticket 協議
 
-副檔名 `.csvi` 是 ARCOS 自創的標準組件封裝格式。**其本質為一個標準的 .NET 8 動態連結庫 (DLL)**，內部透過嵌入式資源封裝了四種核心資產（4-in-1）：
+### 5.1 IO 驅動程式規範 (Category: `"IO"`)
+- **啟動指令**：`IO@AddIODriver::$deviceName, $driverType, $param`
+- **參數慣例**：`Device=COM1, OutStart=P0.0, OutPorts=16, InStart=P1.0, InPorts=16, Interval=25`
+- **核心職責**：
+  1. 背景每 `IntervalMs` (通常 25ms) 透過 `IoEngine.GetBatch(OutStart, OutPorts)` 讀回輸出狀態並送至實體輸出點。
+  2. 讀取實體硬體輸入暫存器，透過 `IoEngine.SetBatch(InStart, inBits)` 寫入系統。
+  3. 監聽 `_engines.Io.IoChanged`，若手動於 UI 點選修改 InStart 範圍內的點位，即時更新驅動快取。
+- **標準 Ticket 命令**：
+  - `FORCE_UPDATE` / `UPDATE`：立即強制執行一次雙向批次更新。
+  - `SET_INPUT`：手動模擬輸入點狀態（`Index=0, Value=true`）。
 
-```
-[Target.csvi 檔案內部結構]
-├── .NET 8 PE 執行檔二進位代碼 (IL Bytecode)
-├── 內嵌資源 "CSVI.Manifest.json"   # 版本、作者、雜湊、相依性
-├── 內嵌資源 "CSVI.RuntimeXaml.*"   # Avalonia XAML 視覺介面定義
-└── 內嵌資源 "CSVI.Source.Bundle"   # 明文或 AES-256 加密之 .cs/.axaml 原始碼
-```
+### 5.2 Motion 運動控制驅動規範 (Category: `"Motion"`)
+- **啟動指令**：`Motion@AddMotion::$deviceName, $driverType, $param`
+- **標準 16 大 TestCMD 指令協議**：
+  1. `Home`：軸復歸原點，完成後置 `IsHomed = true`。
+  2. `Go`：以絕對座標移動（`X=10, Y=20, Z=0`）。
+  3. `GoPoint`：移至特定點位名稱（如 `P_PICK`），或具體座標。
+  4. `ClearPath`：清空軌跡佇列。
+  5. `AddPath`：將點位壓入 `PathQueue`。
+  6. `RunPath`：連續執行佇列中的平滑路徑。
+  7. `Stop`：平滑停止。
+  8. `GetPos`：回傳 `CurrentPos` 座標物件。
+  9. `GetState`：回傳 `IsBusy`, `IsHomed`, `IsAlarm` 狀態字典。
+  10. `SetTool`：設定工具手座標偏置。
+  11. `ExtraCMD`：發送軸卡專屬的原生指令。
+  12. `SetDO`：設定軸卡自帶之數位輸出（`Index=0, Value=1`）。
+  13. `GetDI`：讀取軸卡自帶之數位輸入。
+  14. `GetDO`：讀取軸卡自帶之數位輸出目前狀態。
+  15. `Close`：關閉通訊。
+  16. `UpdateInfo`：強制更新狀態。
+- **重要設計細節：Inf 軸屏蔽比對 (Inf Axis Mask)**  
+  若傳入的座標值為 `double.PositiveInfinity`，表示該軸保持現狀不運動，驅動必須保留 `CurrentPos` 原值，不得歸零！
+- **虛擬 IO 旗標回寫規範**：
+  每次運動狀態改變時，驅動必須自動寫入：
+  - `_engines.Io.SetPort($"{DeviceName}#Busy?", IsBusy)`
+  - `_engines.Io.SetPort($"{DeviceName}#Done?", !IsBusy)`
+  - `_engines.Io.SetPort($"{DeviceName}#Homed?", IsHomed)`
+  - `_engines.Io.SetPort($"{DeviceName}#Alarm?", IsAlarm)`
+  - `_engines.Point.SetPoint($"{DeviceName}_CurPos", CurrentPos)`
+  - `_engines.Point.SetPoint($"{DeviceName}_ToGo", ToGoPos)`
 
-### CSVI 三種封裝模式 (`CsviPackagingMode`)
-1. **`PortableOpen` (開放攜帶)**：原始碼以 UTF-8 壓縮打包在組件內部。在現場可隨時透過 CsviStudio 一鍵解出並除錯。
-2. **`PasswordLocked` (密碼保護)**：原始碼以 AES-256-GCM 加密，需輸入金鑰才可查看或逆向還原。
-3. **`StrippedRelease` (純執行剝離)**：完全移除原始碼資源（0 bytes），僅保留編譯後的二進位執行碼。
+### 5.3 Capture 視覺相機驅動規範 (Category: `"Capture"`)
+- **啟動指令**：`Capture@AddCam::$deviceName, $driverType, $param`
+- **參數慣例**：`Width=640, Height=480, Exposure=20, File=sample.png`
+- **標準 Ticket 命令**：
+  - `Snap`：單張拍照取像。取像完成後將 OpenCV `Mat` 物件送入 `_engines.Image.SetSingleImage(DeviceName, mat)`，並將 `$(DeviceName)#OK?` 設為 `true`。
+  - `Trigger`：飛拍連續觸發。將畫面壓入指定影像佇列 `_engines.Image.AppendImage(arrayName, mat)`，並將 `$(DeviceName)#OK?` 設為 `true`。
+  - `Config`：調整曝光時間、增益、ROI 等參數。
+  - `Live`：啟動/停止連續串流預覽。
+
+### 5.4 DAQ 資料擷取驅動規範 (Category: `"DAQ"`)
+- **啟動指令**：`DAQ@AddDAQ::$deviceName, $driverType, $param`
+- **參數慣例**：`Rate=1000, Count=500, Channels=1, Wave=Sin`
+- **標準 Ticket 命令**：
+  - `Start`：開始背景連續高速取樣。
+  - `Stop`：停止取樣。
+  - `Sample` / `AnalogInWaveForm`：取樣一段波形數據，直接呼叫 `_engines.Daq.PushWaveform(DeviceName, double[])`。
+  - `AnalogIn`：單點電壓即時讀取。
+  - `AnalogOut`：類比電壓輸出。
 
 ---
 
-## 5. 撰寫一個新驅動程式完整範例
+## 6. CSVI 套件 4-in-1 內部封裝規格
+
+透過 CsviStudio 或打包腳本產生的 `<DriverName>.csvi` 實體檔案，內部必須包含：
+
+```
+[<DriverName>.csvi 內部資源]
+├── .NET 8 PE IL 二進位組件 (包含 IDriver 與 Avalonia View 實作)
+├── CSVI.Manifest.json
+│   ├── "Module": "IO" | "Motion" | "Capture" | "DAQ"
+│   ├── "CommandKey": "<DriverType>"
+│   └── "ComponentType": 1 (代表 Driver)
+├── CSVI.RuntimeXaml.<ViewName>.axaml (可選：熱替換 XAML 介面)
+└── CSVI.Source.Bundle (AES 或明文壓縮之 .cs 與 .axaml 原始程式碼)
+```
+
+---
+
+## 7. 完整自訂驅動程式範例 (CustomIoDriver)
+
+以下為符合全部工業級標準的完整 Driver CSVI 實作程式碼：
 
 ```csharp
+using System.Threading.Channels;
+using Avalonia.Controls;
+using ARCOS.Core.Common;
 using ARCOS.Core.Drivers;
 
 namespace ARCOS.Driver.CustomIo;
 
 public class CustomIoDriver : IDriver
 {
-    public string DriverName => "CustomIoDriver";
-    public string Category => "IO";
     private BasicEngines? _engines;
+    private readonly Channel<DriverTicket> _ticketQueue = Channel.CreateUnbounded<DriverTicket>();
+    private CancellationTokenSource? _cts;
+    private Task? _workerTask;
 
-    public bool Initialize(BasicEngines engines)
+    public string DeviceName { get; private set; } = string.Empty;
+    public string Category => "IO";
+    public string DriverType => "CustomIO";
+
+    public string OutStart { get; private set; } = "P0.0";
+    public int OutPorts { get; private set; } = 16;
+    public string InStart { get; private set; } = "P1.0";
+    public int InPorts { get; private set; } = 16;
+    public int IntervalMs { get; private set; } = 25;
+
+    public void Init(string deviceName, string param, BasicEngines engines)
     {
+        DeviceName = deviceName;
         _engines = engines;
-        // 初始化實體硬體通訊 (如開啟 COM Port / Socket)
-        return true;
+
+        // 1. 解析指令傳入參數
+        var args = ArgParaHelper.ParseKeyValueArgs(param, out _);
+        if (args.TryGetValue("OutStart", out var os)) OutStart = os;
+        if (args.TryGetValue("OutPorts", out var op) && int.TryParse(op, out int oCount)) OutPorts = oCount;
+        if (args.TryGetValue("InStart", out var @is)) InStart = @is;
+        if (args.TryGetValue("InPorts", out var ip) && int.TryParse(ip, out int iCount)) InPorts = iCount;
+        if (args.TryGetValue("Interval", out var iv) && int.TryParse(iv, out int interval)) IntervalMs = interval;
+
+        // 2. 啟動背景搬運與 Ticket 處理迴圈
+        _cts = new CancellationTokenSource();
+        _workerTask = Task.Run(() => WorkerLoop(_cts.Token));
     }
 
-    public void ExecuteTicket(DriverTicket ticket)
+    public void PostTicket(DriverTicket ticket)
     {
-        try
+        _ticketQueue.Writer.TryWrite(ticket);
+    }
+
+    public object? CreateDriverView()
+    {
+        // 回傳自訂 Avalonia UserControl 前面板視圖
+        return new CustomIoView(this);
+    }
+
+    private async Task WorkerLoop(CancellationToken token)
+    {
+        while (!token.IsCancellationRequested)
         {
-            switch (ticket.Command.ToUpperInvariant())
+            try
             {
-                case "FORCE_UPDATE":
-                    // 模擬自硬體暫存器批次讀取 16 個點位並同步至 IoEngine
-                    for (int i = 0; i < 16; i++)
-                    {
-                        bool bitVal = ReadHardwareBit(i);
-                        _engines?.Io.SetPort($"P0.{i}", bitVal);
-                    }
-                    ticket.Status = DriverTicketStatus.Completed;
-                    break;
+                // 1. 處理佇列中的 Ticket
+                while (_ticketQueue.Reader.TryRead(out var ticket))
+                {
+                    ExecuteTicket(ticket);
+                }
 
-                case "WRITE_BIT":
-                    string port = ticket.Parameters["Port"];
-                    bool val = ticket.Parameters["Value"] == "1";
-                    WriteHardwareBit(port, val);
-                    ticket.Status = DriverTicketStatus.Completed;
-                    break;
+                // 2. 雙向批次搬運 (讀硬體輸入寫入 IoEngine，從 IoEngine 讀輸出寫入硬體)
+                if (_engines != null)
+                {
+                    bool[] hardwareInputs = ReadFromHardware(InPorts);
+                    _engines.Io.SetBatch(InStart, hardwareInputs.AsSpan());
 
-                default:
-                    ticket.Status = DriverTicketStatus.Failed;
-                    ticket.ErrorMessage = $"Unsupported command '{ticket.Command}'";
-                    break;
+                    bool[] targetOutputs = _engines.Io.GetBatch(OutStart, OutPorts);
+                    WriteToHardware(targetOutputs);
+                }
+
+                await Task.Delay(IntervalMs, token);
+            }
+            catch (OperationCanceledException)
+            {
+                break;
+            }
+            catch (Exception ex)
+            {
+                // 容錯防禦日誌
             }
         }
-        catch (Exception ex)
-        {
-            ticket.Status = DriverTicketStatus.Failed;
-            ticket.ErrorMessage = ex.Message;
-        }
     }
 
-    public object? CreateDriverView() => null; // 無專屬 View
+    private void ExecuteTicket(DriverTicket ticket)
+    {
+        switch (ticket.Command.ToUpperInvariant())
+        {
+            case "FORCE_UPDATE":
+                if (_engines != null)
+                {
+                    bool[] inputs = ReadFromHardware(InPorts);
+                    _engines.Io.SetBatch(InStart, inputs.AsSpan());
+                    bool[] outputs = _engines.Io.GetBatch(OutStart, OutPorts);
+                    WriteToHardware(outputs);
+                }
+                ticket.SetCompleted();
+                break;
+
+            default:
+                ticket.SetCompleted(DriverResponse.Ok());
+                break;
+        }
+    }
 
     public void Shutdown()
     {
-        // 關閉硬體通訊連線
+        _cts?.Cancel();
     }
 
-    public void Dispose() => Shutdown();
+    public void Dispose()
+    {
+        Shutdown();
+        _cts?.Dispose();
+    }
 
-    private bool ReadHardwareBit(int pin) => false;
-    private void WriteHardwareBit(string port, bool state) { }
+    private bool[] ReadFromHardware(int count) => new bool[count];
+    private void WriteToHardware(bool[] outputs) { }
 }
 ```

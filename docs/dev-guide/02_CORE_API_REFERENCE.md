@@ -352,11 +352,12 @@ public class DriverTicket
 ```csharp
 public interface IDriver : IDisposable
 {
-    string DriverName { get; }
+    string DeviceName { get; }
     string Category { get; }
-    bool Initialize(BasicEngines engines);
-    void ExecuteTicket(DriverTicket ticket);
+    string DriverType { get; }
+    void Init(string deviceName, string param, BasicEngines engines);
     void Shutdown();
+    void PostTicket(DriverTicket ticket);
     object? CreateDriverView(); // 回傳 Avalonia Control 或 null
 }
 ```

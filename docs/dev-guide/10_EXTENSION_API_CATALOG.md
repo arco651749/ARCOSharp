@@ -105,22 +105,23 @@
 
 ```csharp
 // 發送端 (Handler)：
-var ticket = new DriverTicket("MOVE_ABS", new Dictionary<string, string> {
-    { "Axis", "1" },
-    { "Target", "150.5" }
-});
-driver.ExecuteTicket(ticket);
-if (ticket.IsSuccess) {
+var ticket = new DriverTicket("GoPoint", "P_PICK");
+driver.PostTicket(ticket);
+var response = ticket.Wait(3000); // 支援非同步 await ticket.Task 或同步限時等待
+if (response.Success) {
     // 成功
 }
 
 // 接收端 (Driver)：
-public void ExecuteTicket(DriverTicket ticket) {
-    if (ticket.Command == "MOVE_ABS") {
-        int axis = int.Parse(ticket.Parameters["Axis"]);
-        double target = double.Parse(ticket.Parameters["Target"]);
-        // 執行驅動硬體動作...
-        ticket.Status = DriverTicketStatus.Completed;
+public void PostTicket(DriverTicket ticket) {
+    _ticketQueue.Writer.TryWrite(ticket);
+}
+
+// Driver 背景 WorkerLoop 處理：
+private void ExecuteCase(DriverTicket ticket) {
+    if (ticket.Command == "GoPoint") {
+        // 執行軸卡運動...
+        ticket.SetCompleted(); // 或 ticket.SetCompleted(DriverResponse.Ok(payload))
     }
 }
 ```
