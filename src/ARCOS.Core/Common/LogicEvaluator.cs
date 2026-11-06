@@ -56,6 +56,53 @@ public class LogicEvaluator
         return parser.Parse();
     }
 
+    /// <summary>
+    /// 檢驗邏輯表達式語法是否合法，並回傳錯誤訊息
+    /// </summary>
+    public static (bool IsValid, string? ErrorMessage) ValidateSyntax(string? logicExpr)
+    {
+        if (string.IsNullOrWhiteSpace(logicExpr))
+            return (true, null);
+
+        string expr = logicExpr.Trim();
+
+        // 1. 括號平衡檢查
+        int balance = 0;
+        foreach (char c in expr)
+        {
+            if (c == '(') balance++;
+            else if (c == ')')
+            {
+                balance--;
+                if (balance < 0) return (false, "括號不匹配：有多餘的右括號 ')'");
+            }
+        }
+        if (balance > 0) return (false, "括號不匹配：缺少右括號 ')'");
+
+        // 2. 特殊關鍵字檢查
+        if (expr.StartsWith("EXIST ", StringComparison.OrdinalIgnoreCase) ||
+            expr.StartsWith("NULL ", StringComparison.OrdinalIgnoreCase))
+        {
+            int spaceIdx = expr.IndexOf(' ');
+            string target = expr.Substring(spaceIdx + 1).Trim();
+            if (string.IsNullOrWhiteSpace(target))
+                return (false, "語法錯誤：關鍵字後缺少目標變數名稱");
+            return (true, null);
+        }
+
+        // 3. 語法樹剖析測試
+        try
+        {
+            var parser = new ExpressionParser(expr, _ => true);
+            parser.Parse();
+            return (true, null);
+        }
+        catch (Exception ex)
+        {
+            return (false, ex.Message);
+        }
+    }
+
     private bool ResolveToken(string rawToken, string section)
     {
         string token = rawToken.Trim();
@@ -101,6 +148,53 @@ public class LogicEvaluator
     private bool TryEvaluateComparison(string token, string section, out bool result)
     {
         result = false;
+
+        // 0. 陣列/變數空值判定 ==[] 或 !=[] (如 Var == [] 或 Var != [])
+        if (token.Contains("==[]") || token.Contains("== []"))
+        {
+            int idx = token.IndexOf("==", StringComparison.Ordinal);
+            string leftStr = token.Substring(0, idx).Trim();
+            string val = ResolveValue(leftStr, section);
+            result = IsEmptyArrayOrValue(val);
+            return true;
+        }
+        if (token.Contains("!=[]") || token.Contains("!= []"))
+        {
+            int idx = token.IndexOf("!=", StringComparison.Ordinal);
+            string leftStr = token.Substring(0, idx).Trim();
+            string val = ResolveValue(leftStr, section);
+            result = !IsEmptyArrayOrValue(val);
+            return true;
+        }
+
+        // 1. 區間判定：</> (區間外) 與 <> (區間內)
+        if (token.Contains("</>"))
+        {
+            int idx = token.IndexOf("</>", StringComparison.Ordinal);
+            string leftStr = token.Substring(0, idx).Trim();
+            string rightStr = token.Substring(idx + 3).Trim();
+            string leftVal = ResolveValue(leftStr, section);
+            if (TryParseRange(rightStr, out double min, out double max) &&
+                double.TryParse(leftVal, NumberStyles.Any, CultureInfo.InvariantCulture, out double num))
+            {
+                result = num < min || num > max;
+                return true;
+            }
+        }
+        if (token.Contains("<>"))
+        {
+            int idx = token.IndexOf("<>", StringComparison.Ordinal);
+            string leftStr = token.Substring(0, idx).Trim();
+            string rightStr = token.Substring(idx + 2).Trim();
+            string leftVal = ResolveValue(leftStr, section);
+            if (TryParseRange(rightStr, out double min, out double max) &&
+                double.TryParse(leftVal, NumberStyles.Any, CultureInfo.InvariantCulture, out double num))
+            {
+                result = num >= min && num <= max;
+                return true;
+            }
+        }
+
         string[] ops = new[] { "==", "!=", ">=", "<=", ">", "<" };
 
         foreach (var op in ops)
@@ -166,6 +260,30 @@ public class LogicEvaluator
         }
     }
 
+    private static bool IsEmptyArrayOrValue(string val)
+    {
+        if (string.IsNullOrWhiteSpace(val)) return true;
+        string trimmed = val.Trim();
+        if (trimmed == "[]") return true;
+        if (trimmed.StartsWith('[') && trimmed.EndsWith(']'))
+        {
+            string inner = trimmed.Substring(1, trimmed.Length - 2).Trim();
+            if (string.IsNullOrEmpty(inner) || inner.All(c => c == ';' || char.IsWhiteSpace(c)))
+                return true;
+        }
+        return false;
+    }
+
+    private static bool TryParseRange(string rangeStr, out double min, out double max)
+    {
+        min = 0; max = 0;
+        if (string.IsNullOrWhiteSpace(rangeStr)) return false;
+        string[] parts = rangeStr.Split('~');
+        if (parts.Length != 2) return false;
+        return double.TryParse(parts[0].Trim(), NumberStyles.Any, CultureInfo.InvariantCulture, out min) &&
+               double.TryParse(parts[1].Trim(), NumberStyles.Any, CultureInfo.InvariantCulture, out max);
+    }
+
     private class ExpressionParser
     {
         private readonly string _text;
@@ -181,6 +299,11 @@ public class LogicEvaluator
         public bool Parse()
         {
             bool val = ParseOr();
+            SkipWhitespace();
+            if (_pos < _text.Length)
+            {
+                throw new FormatException($"語法錯誤：未預期的字符 '{_text[_pos]}' 位於第 {_pos + 1} 個字元處");
+            }
             return val;
         }
 
@@ -261,6 +384,10 @@ public class LogicEvaluator
                 _pos++;
             }
             string token = _text.Substring(start, _pos - start).Trim();
+            if (string.IsNullOrEmpty(token))
+            {
+                throw new FormatException("語法錯誤：運算元缺失，運算子兩側需有合法的表達式");
+            }
             return _resolver(token);
         }
 

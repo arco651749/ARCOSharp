@@ -87,7 +87,10 @@
                     <!-- 4. CheckLogicOn / CheckLogicOff 控制項 -->
                     <StackPanel x:Name="PnlCheckLogic" Spacing="10" IsVisible="False">
                         <StackPanel Spacing="4">
-                            <TextBlock Text="🔴 $logic (布林表達式，如 P0.0|P0.1 或 P0.0&amp;P0.1):" FontWeight="SemiBold" Foreground="#DC2626" FontSize="12"/>
+                            <Grid ColumnDefinitions="*,Auto">
+                                <TextBlock Text="🔴 $logic (布林表達式，如 P0.0|P0.1 或 P0.0&amp;P0.1):" FontWeight="SemiBold" Foreground="#DC2626" FontSize="12" VerticalAlignment="Center"/>
+                                <Button x:Name="BtnOpenLogicEditor" Content="🧩 邏輯編輯器..." FontSize="11" Padding="8,3" Background="#EEF2FF" Foreground="#4F46E5" BorderBrush="#C7D2FE" BorderThickness="1" CornerRadius="4" FontWeight="SemiBold" Cursor="Hand"/>
+                            </Grid>
                             <TextBox x:Name="TxtLogicExpr" CornerRadius="4" BorderBrush="#DC2626" BorderThickness="1.5"/>
                         </StackPanel>
                         <Grid ColumnDefinitions="*,*">
@@ -125,7 +128,10 @@
                             <TextBox x:Name="TxtVirtualPortName" CornerRadius="4" BorderBrush="#DC2626" BorderThickness="1.5"/>
                         </StackPanel>
                         <StackPanel Spacing="4">
-                            <TextBlock Text="🔵 Initial Value (初始狀態):" FontWeight="SemiBold" Foreground="#2563EB" FontSize="12"/>
+                            <Grid ColumnDefinitions="*,Auto">
+                                <TextBlock Text="🔵 Initial Value (初始狀態):" FontWeight="SemiBold" Foreground="#2563EB" FontSize="12" VerticalAlignment="Center"/>
+                                <Button x:Name="BtnOpenVirtualLogicEditor" Content="🧩 邏輯編輯器..." FontSize="11" Padding="8,3" Background="#EEF2FF" Foreground="#4F46E5" BorderBrush="#C7D2FE" BorderThickness="1" CornerRadius="4" FontWeight="SemiBold" Cursor="Hand"/>
+                            </Grid>
                             <ComboBox x:Name="CmbVirtualState" HorizontalAlignment="Stretch" BorderBrush="#2563EB" BorderThickness="1.5" CornerRadius="4"/>
                         </StackPanel>
                     </StackPanel>

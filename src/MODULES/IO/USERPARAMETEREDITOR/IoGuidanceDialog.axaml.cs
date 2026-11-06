@@ -33,6 +33,8 @@ public partial class IoGuidanceDialog : Window
     private StackPanel? _pnlDeviceOnly;
     private StackPanel? _pnlShift;
     private Button? _btnOpenDriverWizard;
+    private Button? _btnOpenLogicEditor;
+    private Button? _btnOpenVirtualLogicEditor;
 
     // 1. SetPort / ClrPort 控制項
     private ComboBox? _cmbSetPortName;
@@ -122,6 +124,8 @@ public partial class IoGuidanceDialog : Window
         _btnOk = this.FindControl<Button>("BtnOk");
         _btnCancel = this.FindControl<Button>("BtnCancel");
         _btnOpenDriverWizard = this.FindControl<Button>("BtnOpenDriverWizard");
+        _btnOpenLogicEditor = this.FindControl<Button>("BtnOpenLogicEditor");
+        _btnOpenVirtualLogicEditor = this.FindControl<Button>("BtnOpenVirtualLogicEditor");
 
         _pnlSetClrPort = this.FindControl<StackPanel>("PnlSetClrPort");
         _pnlFlash = this.FindControl<StackPanel>("PnlFlash");
@@ -170,6 +174,36 @@ public partial class IoGuidanceDialog : Window
 
         if (_btnCancel != null) _btnCancel.Click += (_, _) => Close(null);
         if (_btnOpenDriverWizard != null) _btnOpenDriverWizard.Click += async (_, _) => await LaunchSelectedDriverWizardAsync();
+        if (_btnOpenLogicEditor != null)
+        {
+            _btnOpenLogicEditor.Click += async (_, _) =>
+            {
+                var dlg = new LogicEditorDialog(_txtLogicExpr?.Text ?? string.Empty, _engines);
+                var result = await dlg.ShowDialog<string?>(this);
+                if (!string.IsNullOrEmpty(result) && _txtLogicExpr != null)
+                {
+                    _txtLogicExpr.Text = result;
+                    UpdatePreview();
+                }
+            };
+        }
+        if (_btnOpenVirtualLogicEditor != null)
+        {
+            _btnOpenVirtualLogicEditor.Click += async (_, _) =>
+            {
+                string current = _cmbVirtualState?.SelectedItem?.ToString() ?? string.Empty;
+                var dlg = new LogicEditorDialog(current, _engines);
+                var result = await dlg.ShowDialog<string?>(this);
+                if (!string.IsNullOrEmpty(result) && _cmbVirtualState != null)
+                {
+                    var list = (_cmbVirtualState.ItemsSource as IEnumerable<string>)?.ToList() ?? new List<string>();
+                    if (!list.Contains(result)) list.Insert(0, result);
+                    _cmbVirtualState.ItemsSource = list;
+                    _cmbVirtualState.SelectedItem = result;
+                    UpdatePreview();
+                }
+            };
+        }
         if (_btnOk != null) _btnOk.Click += (_, _) => {
             ApplyImmediateDefinitions();
             Close(_txtParamOut?.Text);
