@@ -144,6 +144,9 @@ public class DriverManager : IDisposable
     private readonly ConcurrentDictionary<(string Category, string DeviceName), IDriver> _devices =
         new(new CategoryDeviceEqualityComparer());
 
+    private readonly ConcurrentDictionary<(string Category, string DeviceName), (string DriverType, string Param, BasicEngines Engines)> _deviceConfigs =
+        new(new CategoryDeviceEqualityComparer());
+
     private readonly ConcurrentDictionary<string, Func<IDriver>> _factories =
         new(StringComparer.OrdinalIgnoreCase);
 
@@ -233,6 +236,7 @@ public class DriverManager : IDisposable
 
         driver.Init(key.Item2, param, engines);
         _devices[key] = driver;
+        _deviceConfigs[key] = (driverType, param, engines);
         DeviceAdded?.Invoke(key.Item1, key.Item2, driver);
         return driver;
     }
@@ -243,6 +247,19 @@ public class DriverManager : IDisposable
     public IDriver ReloadDevice(string category, string deviceName, string driverType, string param, BasicEngines engines)
     {
         return AddDevice(category, deviceName, driverType, param, engines);
+    }
+
+    /// <summary>
+    /// 動態熱重載指定設備的驅動 (自動依先前配置重新載入並初始化)
+    /// </summary>
+    public IDriver? ReloadDevice(string category, string deviceName)
+    {
+        var key = (category.Trim(), deviceName.Trim());
+        if (_deviceConfigs.TryGetValue(key, out var cfg))
+        {
+            return AddDevice(category, deviceName, cfg.DriverType, cfg.Param, cfg.Engines);
+        }
+        return null;
     }
 
     /// <summary>
@@ -266,6 +283,7 @@ public class DriverManager : IDisposable
     public bool RemoveDevice(string category, string deviceName)
     {
         var key = (category.Trim(), deviceName.Trim());
+        _deviceConfigs.TryRemove(key, out _);
         if (_devices.TryRemove(key, out var driver))
         {
             driver.Shutdown();
