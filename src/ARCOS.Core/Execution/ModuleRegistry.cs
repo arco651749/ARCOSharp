@@ -84,7 +84,9 @@ public sealed class ModuleRegistry
     {
         try
         {
-            var asm = Assembly.LoadFrom(dllPath);
+            var asm = ARCOS.Core.Common.PluginLoadManager.LoadOrReloadAssembly(dllPath, out _);
+            if (asm == null) return;
+
             var handlerTypes = asm.GetExportedTypes()
                 .Where(t => typeof(IModuleHandler).IsAssignableFrom(t) && !t.IsAbstract && !t.IsInterface);
 

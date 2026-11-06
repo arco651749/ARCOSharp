@@ -65,8 +65,9 @@ public class DriverLoader
 
         try
         {
-            byte[] bytes = File.ReadAllBytes(foundPath);
-            var assembly = Assembly.Load(bytes);
+            var assembly = ARCOS.Core.Common.PluginLoadManager.LoadOrReloadAssembly(foundPath, out _);
+            if (assembly == null) return null;
+
             var driverTypeInfo = assembly.GetExportedTypes()
                 .FirstOrDefault(t => typeof(IDriver).IsAssignableFrom(t) && !t.IsAbstract && !t.IsInterface);
 
@@ -234,6 +235,14 @@ public class DriverManager : IDisposable
         _devices[key] = driver;
         DeviceAdded?.Invoke(key.Item1, key.Item2, driver);
         return driver;
+    }
+
+    /// <summary>
+    /// 動態熱重載指定設備的驅動 (觸發 Shutdown、釋放舊上下文、從磁碟重新載入最新組件並重新 Init)
+    /// </summary>
+    public IDriver ReloadDevice(string category, string deviceName, string driverType, string param, BasicEngines engines)
+    {
+        return AddDevice(category, deviceName, driverType, param, engines);
     }
 
     /// <summary>

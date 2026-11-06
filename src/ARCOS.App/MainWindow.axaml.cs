@@ -35,6 +35,7 @@ public partial class MainWindow : Window
     private readonly DispatcherTimer _uiTimer;
     private readonly ObservableCollection<IoChannelViewModel> _ioChannels = new();
     private object? _defaultSubPanelContent;
+    private ARCOS.Core.Csvi.CsviPackage? _activeUserPanelPackage;
     private object? _cachedIoFrontPanel;
 
     public BasicEngines Engines => _engines;
@@ -470,6 +471,11 @@ public partial class MainWindow : Window
         Action<int> switchSubPanel = (idx) =>
         {
             if (container == null) return;
+            if (_activeUserPanelPackage != null)
+            {
+                try { _activeUserPanelPackage.Unload(); } catch { }
+                _activeUserPanelPackage = null;
+            }
             switch (idx)
             {
                 case 0: // Default Station HMI
@@ -1088,7 +1094,20 @@ public partial class MainWindow : Window
             var container = this.FindControl<ContentControl>("UserFrontPanelContainer");
             if (container == null) return false;
 
+            if (_activeUserPanelPackage != null)
+            {
+                try
+                {
+                    if (container.Content is IDisposable d) d.Dispose();
+                    container.Content = null;
+                    _activeUserPanelPackage.Unload();
+                }
+                catch { }
+                _activeUserPanelPackage = null;
+            }
+
             var pkg = ARCOS.Core.Csvi.CsviPackage.Load(resolved);
+            _activeUserPanelPackage = pkg;
             object? panel = null;
 
             string cmdKey = !string.IsNullOrEmpty(pkg.Manifest.CommandKey) ? pkg.Manifest.CommandKey : System.IO.Path.GetFileNameWithoutExtension(resolved);

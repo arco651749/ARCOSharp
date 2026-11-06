@@ -170,9 +170,8 @@ public sealed class ParameterGuidanceManager
         try
         {
             string fullPath = Path.GetFullPath(dllPath);
-            var asm = System.Runtime.Loader.AssemblyLoadContext.Default.Assemblies
-                          .FirstOrDefault(a => !string.IsNullOrEmpty(a.Location) && string.Equals(a.Location, fullPath, StringComparison.OrdinalIgnoreCase))
-                      ?? System.Runtime.Loader.AssemblyLoadContext.Default.LoadFromAssemblyPath(fullPath);
+            var asm = ARCOS.Core.Common.PluginLoadManager.LoadOrReloadAssembly(fullPath, out _);
+            if (asm == null) return null;
             IParameterGuidance? fallback = null;
             foreach (var t in asm.GetTypes())
             {

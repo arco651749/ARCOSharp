@@ -18,8 +18,6 @@ public class CallModuleHandler : IModuleHandler
 {
     public string ModuleName => "Call";
 
-    // 快取已載入之 Assembly (路徑 -> (LastWriteTime, Assembly))
-    private static readonly ConcurrentDictionary<string, (DateTime LastWrite, Assembly Asm)> AssemblyCache = new(StringComparer.OrdinalIgnoreCase);
 
     public IReadOnlyList<string> GetSupportedCommands()
     {
@@ -136,27 +134,12 @@ public class CallModuleHandler : IModuleHandler
 
     private static Assembly? LoadOrGetAssembly(string fullPath)
     {
-        try
+        var asm = PluginLoadManager.LoadOrReloadAssembly(fullPath, out bool reloaded);
+        if (reloaded)
         {
-            var fileInfo = new FileInfo(fullPath);
-            var lastWrite = fileInfo.LastWriteTimeUtc;
-
-            if (AssemblyCache.TryGetValue(fullPath, out var cached) && cached.LastWrite == lastWrite)
-            {
-                return cached.Asm;
-            }
-
-            // 使用 ReadAllBytes 避免檔案鎖定 (支援熱覆蓋抽換 CSVI)
-            byte[] bytes = File.ReadAllBytes(fullPath);
-            var asm = Assembly.Load(bytes);
-            AssemblyCache[fullPath] = (lastWrite, asm);
-            return asm;
+            Debug.WriteLine($"[Call Module] Hot-reloaded assembly from '{fullPath}' into Collectible ALC.");
         }
-        catch (Exception ex)
-        {
-            Debug.WriteLine($"[Call Module] Failed to load assembly from '{fullPath}': {ex.Message}");
-            return null;
-        }
+        return asm;
     }
 
     private static void AssignReturnValue(object? result, IReadOnlyList<string> posArgs, Dictionary<string, string> parsed, ExecutionContext ctx)

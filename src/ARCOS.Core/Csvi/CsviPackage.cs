@@ -1,6 +1,7 @@
 using System.IO;
 using System.Reflection;
 using System.Text.Json;
+using ARCOS.Core.Common;
 
 namespace ARCOS.Core.Csvi;
 
@@ -14,15 +15,28 @@ public class CsviPackage
     public Dictionary<string, string> EmbeddedRuntimeXaml { get; set; } = new();
     public byte[] AssemblyRawBytes { get; set; } = Array.Empty<byte>();
     public Assembly? LoadedAssembly { get; set; }
+    public CollectiblePluginContext? Context { get; set; }
     public bool HasSourceBundleResource { get; set; }
 
-    public static CsviPackage LoadFromBytes(byte[] csviBytes, string? password = null, bool unpackSources = true)
+    /// <summary>
+    /// 卸載此套件所屬之 Collectible Assembly 上下文，釋放記憶體
+    /// </summary>
+    public void Unload()
+    {
+        Context?.Unload();
+        Context = null;
+        LoadedAssembly = null;
+    }
+
+    public static CsviPackage LoadFromBytes(byte[] csviBytes, string? password = null, bool unpackSources = true, CollectiblePluginContext? customContext = null, byte[]? pdbBytes = null)
     {
         var package = new CsviPackage
         {
             AssemblyRawBytes = csviBytes
         };
-        var asm = Assembly.Load(csviBytes);
+        var context = customContext ?? new CollectiblePluginContext($"CsviPackage_{Guid.NewGuid():N}");
+        var asm = context.LoadAssemblyBytes(csviBytes, pdbBytes);
+        package.Context = context;
         package.LoadedAssembly = asm;
 
         // 載入 Assembly 檢查 ManifestResource
@@ -76,6 +90,16 @@ public class CsviPackage
     public static CsviPackage LoadFromFile(string filePath, string? password = null, bool unpackSources = true)
     {
         byte[] bytes = File.ReadAllBytes(filePath);
-        return LoadFromBytes(bytes, password, unpackSources);
+        string? dir = Path.GetDirectoryName(Path.GetFullPath(filePath));
+        var context = new CollectiblePluginContext($"Csvi_{Path.GetFileNameWithoutExtension(filePath)}_{Guid.NewGuid():N}", dir);
+        
+        byte[]? pdbBytes = null;
+        string pdbPath = Path.ChangeExtension(filePath, ".pdb");
+        if (File.Exists(pdbPath))
+        {
+            try { pdbBytes = File.ReadAllBytes(pdbPath); } catch { }
+        }
+
+        return LoadFromBytes(bytes, password, unpackSources, context, pdbBytes);
     }
 }

@@ -563,7 +563,7 @@ public class IoSetPortGuidance : IParameterGuidance, IModuleHandler
     {
         try
         {
-            var asm = Assembly.Load(assemblyBytes);
+            var asm = ARCOS.Core.Common.PluginLoadManager.LoadFromBytes($"CsviStudioPreview_{commandKey ?? "Control"}", assemblyBytes);
             var engines = new BasicEngines();
 
             // 1. 檢查是否為 IDriver (例如 MockIO.csvi)

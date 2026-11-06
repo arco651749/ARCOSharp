@@ -134,20 +134,22 @@ public sealed class IoModuleHandler : ARCOS.Core.Execution.Handlers.IoModuleHand
         {
             try
             {
-                byte[] bytes = File.ReadAllBytes(filePath);
-                var asm = Assembly.Load(bytes);
-                foreach (var t in asm.GetExportedTypes())
+                var asm = PluginLoadManager.LoadOrReloadAssembly(filePath, out _);
+                if (asm != null)
                 {
-                    if (typeof(IParameterGuidance).IsAssignableFrom(t) && !t.IsAbstract && !t.IsInterface)
+                    foreach (var t in asm.GetExportedTypes())
                     {
-                        if (Activator.CreateInstance(t) is IParameterGuidance g && !string.IsNullOrEmpty(g.CommandKey))
+                        if (typeof(IParameterGuidance).IsAssignableFrom(t) && !t.IsAbstract && !t.IsInterface)
                         {
-                            string cmd = g.CommandKey;
-                            if (cmd.StartsWith("IO@", StringComparison.OrdinalIgnoreCase))
+                            if (Activator.CreateInstance(t) is IParameterGuidance g && !string.IsNullOrEmpty(g.CommandKey))
                             {
-                                cmd = cmd.Substring(3);
+                                string cmd = g.CommandKey;
+                                if (cmd.StartsWith("IO@", StringComparison.OrdinalIgnoreCase))
+                                {
+                                    cmd = cmd.Substring(3);
+                                }
+                                targetSet.Add(cmd);
                             }
-                            targetSet.Add(cmd);
                         }
                     }
                 }
@@ -298,8 +300,8 @@ public sealed class IoModuleHandler : ARCOS.Core.Execution.Handlers.IoModuleHand
     {
         try
         {
-            byte[] bytes = File.ReadAllBytes(dllPath);
-            var asm = Assembly.Load(bytes);
+            var asm = PluginLoadManager.LoadOrReloadAssembly(dllPath, out _);
+            if (asm == null) return null;
             string expectedKey = $"IO@{action}";
 
             foreach (var type in asm.GetExportedTypes())

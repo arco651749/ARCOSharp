@@ -282,8 +282,8 @@ public partial class CallGuidanceWindow : Window
         try
         {
             if (!File.Exists(csviPath)) return null;
-            byte[] bytes = File.ReadAllBytes(csviPath);
-            var asm = Assembly.Load(bytes);
+            var asm = ARCOS.Core.Common.PluginLoadManager.LoadOrReloadAssembly(csviPath, out _);
+            if (asm == null) return null;
 
             foreach (var t in asm.GetTypes())
             {
