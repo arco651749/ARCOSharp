@@ -16,7 +16,49 @@ Driver CSVI 既是一個**可熱抽換的外掛組件**，也是一個**具備�
 
 ---
 
-## 2. 雙模架構 (Dual-Mode Execution)
+## 2. Driver CSVI 三位一體設計架構 (The Trinity Architecture)
+
+一個合規且完整的 **Driver CSVI** 在架構上必須同時具備**三大核心維度（三位一體）**：
+
+```
+┌────────────────────────────────────────────────────────┐
+│            Driver CSVI (4-in-1 虛擬儀表封裝)           │
+├───────────────────┬───────────────────┬────────────────┤
+│ 1. C# 驅動代碼    │ 2. UI 監控前面板   │ 3. 導引視窗    │
+│ (Core Logic)      │ (FrontPanel HMI)  │ (Param Wizard) │
+├───────────────────┼───────────────────┼────────────────┤
+│ • 實作 IDriver    │ • Avalonia View   │ • 參數引導精靈 │
+│ • 實體通訊協議    │ • 點位 LED 指示燈 │ • COM / IP 選單│
+│ • WorkerLoop 佇列 │ • 手動開關測試點位│ • 點位區間試算 │
+│ • 引擎雙向批次搬運│ • 嵌入 SubPanel   │ • 即時指令生成 │
+│ • 虛擬旗標回寫    │ • 心跳與刷新監控  │ • 一鍵測試套用 │
+└───────────────────┴───────────────────┴────────────────┘
+```
+
+### 維度一：C# 核心代碼 (Core Hardware Driver Code)
+- **實體通訊對接**：撰寫 RS-232 / RS-485 SerialPort、Modbus RTU/TCP、TCP/IP Socket、軸卡 DLL 或 OpenCV 相機 SDK 的實體收發邏輯。
+- **背景非同步搬運**：透過 `Channel<DriverTicket>` 接收指令票據，在背景 `WorkerLoop` 進行非阻塞處理。
+- **引擎資料同步**：週期性（如 25ms）將實體硬體狀態批次搬入 `IoEngine`、`PointEngine`、`ImageEngine`、`DaqEngine`。
+- **虛擬點位旗標**：自動更新 `$(Device)#Busy?`、`$(Device)#Done?`、`$(Device)#OK?`。
+
+### 維度二：UI 即時監控前面板 (Front Panel HMI)
+- 實作於 `<DriverType>View.axaml` 的第一分頁：**`🎛️ 驅動前面板 HMI (Front Panel)`**。
+- **主機台掛載**：主程式透過 `driver.CreateDriverView()` 取得該 UserControl，嵌入至主畫面右側 `SubPanel` 面板中。
+- **雙向互動與除錯**：
+  - **輸出觀察**：以綠/紅 LED 顯示目前實體點位狀態（如 DO 點位、馬達目前座標 `CurrentPos`、相機 Viewfinder、DAQ 實時波形）。
+  - **手動測試**：提供 Toggle 開關讓工程師能直接在 UI 手動撥動點位或點擊 Jog 按鈕，直連實體硬體進行調機測試。
+  - **狀態監控**：即時顯示通訊 Bus、掃描頻率（如 40Hz / 25ms）、心跳燈號與手動刷新按鈕。
+
+### 維度三：導引視窗與參數精靈 (Parameter Guidance & Wizard)
+- 實作於 `<DriverType>View.axaml` 的第二分頁：**`⚙️ 參數導引與連線精靈 (Parameter Wizard)`**，或實作 `IParameterGuidance`。
+- **排程器參數設定**：當工程師在排程器編輯 `IO@AddIODriver`、`Motion@AddMotion`、`Capture@AddCam`、`DAQ@AddDAQ` 時，提供視覺化視窗引導輸入，徹底免除人工死背語法或打錯逗號：
+  1. **通訊介面選單**：圖形化選擇 COM Port（下拉選單自動列舉本機可用 Serial 埠）、Baud Rate、或 TCP IP/Port。
+  2. **點位映射計算器**：輸入起始點（如 `p0.0`）與點數（如 `32`），精靈自動計算並顯示區間徽章（如 `👉 區間: P0.0 ~ P3.7 (32 點)`），防止多個硬體點位重疊衝突。
+  3. **即時指令預覽 (Live Command Generator)**：隨時在下方文字框產生標準語法：
+     `IO@AddIODriver::IO1, MockIO, Device=com1, OutStart=p0.0, OutPorts=32, InputStart=p4.0, InPorts=32, Interval=25`
+  4. **一鍵測試與套用**：點擊「套用」立即以新參數嘗試初始化驅動並驗證硬體通訊，確認正常後直接帶回排程器！
+
+---
 
 所有 Driver CSVI 專案檔預設輸出為 **`WinExe`** 而非純類別庫：
 
