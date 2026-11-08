@@ -344,14 +344,8 @@ public partial class TestThreadWindow : Window
         {
             btnStep.Click += (_, _) =>
             {
-                if (_vm == null || _testContext == null) return;
-                SyncUIToProgram();
-                bool wasRunning = _testContext.IsRunning;
-                _testContext.IsRunning = true;
-                _vm.Executor.ExecuteStep(_testContext);
-                _testContext.IsRunning = wasRunning;
-                UpdatePCPointer(_testContext.ProgIndex);
-                DrainPCPointer();
+                ClearRangeSelection();
+                StepOnce();
             };
         }
 
@@ -360,6 +354,7 @@ public partial class TestThreadWindow : Window
         var btnAuto = this.FindControl<Button>("BtnAuto");
         Action toggleAuto = () =>
         {
+            ClearRangeSelection();
             if (_autoTimer.IsEnabled)
             {
                 _autoTimer.Stop();
@@ -392,6 +387,7 @@ public partial class TestThreadWindow : Window
         {
             btnReset.Click += (_, _) =>
             {
+                ClearRangeSelection();
                 _autoTimer.Stop();
                 _testContext.IsRunning = false;
                 _testContext.ProgIndex = 1;
@@ -408,6 +404,7 @@ public partial class TestThreadWindow : Window
         {
             btnAdd.Click += (_, _) =>
             {
+                ClearRangeSelection();
                 PushUndoSnapshot();
                 var grid = this.FindControl<DataGrid>("GridCommands");
                 int cur = grid?.SelectedIndex ?? (_rows.Count - 1);
@@ -423,6 +420,7 @@ public partial class TestThreadWindow : Window
         var btnMinus = this.FindControl<Button>("BtnMinusLine");
         Action delRow = () =>
         {
+            ClearRangeSelection();
             var grid = this.FindControl<DataGrid>("GridCommands");
             if (grid?.SelectedItem is SequencerRowViewModel row)
             {
@@ -448,13 +446,12 @@ public partial class TestThreadWindow : Window
         {
             btnJump.Click += (_, _) =>
             {
+                ClearRangeSelection();
                 var grid = this.FindControl<DataGrid>("GridCommands");
                 int sel = grid?.SelectedIndex ?? -1;
                 if (sel >= 0)
                 {
-                    _testContext.ProgIndex = sel + 1;
-                    UpdatePCPointer(sel + 1);
-                    DrainPCPointer();
+                    JumpToRow(sel);
                 }
             };
         }
@@ -727,16 +724,49 @@ public partial class TestThreadWindow : Window
     // =========================================================
     private int? _anchorStartLine = null;
 
+    public void ClearRangeSelection()
+    {
+        _anchorStartLine = null;
+        foreach (var r in _rows)
+        {
+            if (r.IsRangeSelected)
+                r.IsRangeSelected = false;
+        }
+    }
+
+    public void JumpToRow(int lineNumber)
+    {
+        if (lineNumber < 0 || lineNumber >= _rows.Count) return;
+        if (_testContext == null) return;
+        _testContext.ProgIndex = lineNumber + 1;
+        _testContext.State.Reset();
+        UpdatePCPointer(_testContext.ProgIndex);
+        DrainPCPointer();
+
+        var grid = this.FindControl<DataGrid>("GridCommands");
+        if (grid != null && lineNumber < _rows.Count)
+        {
+            grid.SelectedIndex = lineNumber;
+        }
+    }
+
+    public void StepOnce()
+    {
+        if (_vm == null || _testContext == null) return;
+        SyncUIToProgram();
+        bool wasRunning = _testContext.IsRunning;
+        _testContext.IsRunning = true;
+        _vm.Executor.ExecuteStep(_testContext);
+        _testContext.IsRunning = wasRunning;
+        UpdatePCPointer(_testContext.ProgIndex);
+        DrainPCPointer();
+    }
+
     private void OnGlobalSelectionChanged(object? activeEditor)
     {
         if (activeEditor != this)
         {
-            _anchorStartLine = null;
-            foreach (var r in _rows)
-            {
-                if (r.IsRangeSelected)
-                    r.IsRangeSelected = false;
-            }
+            ClearRangeSelection();
         }
     }
 
@@ -759,6 +789,12 @@ public partial class TestThreadWindow : Window
 
         // 2. 排除點擊在表頭、滾動條、縮放或按鈕控制項上的情況
         if (IsInIgnoredGridArea(visual)) return;
+
+        // 若有待命中的 Shift 第一下選取，點擊空白處時取消選取
+        if (_anchorStartLine != null)
+        {
+            ClearRangeSelection();
+        }
 
         // 3. Ctrl + 點擊：原有之複製插入貼上
         if (e.KeyModifiers == KeyModifiers.Control)
@@ -815,22 +851,28 @@ public partial class TestThreadWindow : Window
 
         var km = e.KeyModifiers;
 
-        // 1. Shift + 滑鼠左鍵 (兩次點擊選取範圍，寫入全域選擇區)
+        // 1. Shift + 滑鼠左鍵 (選取與 Jump 狀態機)
         if (km == KeyModifiers.Shift)
         {
+            // 若為雙擊 (ClickCount >= 2)，交由 DoubleTapped / Shift+DoubleClick 邏輯處理，不作為範圍選取的第二擊
+            if (e.ClickCount >= 2) return false;
+
             e.Handled = true;
             if (row == null) return true;
 
             if (_anchorStartLine == null)
             {
+                // 首次 Shift+點擊：選取該行，並同時 JUMP 到該行
                 _anchorStartLine = row.LineNumber;
                 foreach (var r in _rows)
                 {
                     r.IsRangeSelected = (r.LineNumber == _anchorStartLine.Value);
                 }
+                JumpToRow(row.LineNumber);
             }
             else
             {
+                // 接續 Shift+點擊：形成區域選取 [start, end]
                 int start = Math.Min(_anchorStartLine.Value, row.LineNumber);
                 int end = Math.Max(_anchorStartLine.Value, row.LineNumber);
 
@@ -848,6 +890,12 @@ public partial class TestThreadWindow : Window
                 _anchorStartLine = null;
             }
             return true;
+        }
+
+        // 若不是 Shift 點擊，但先前有第一下 Shift 點擊待命中，取消該選取行為
+        if (_anchorStartLine != null)
+        {
+            ClearRangeSelection();
         }
 
         // 2. Ctrl + Alt + 滑鼠左鍵 (本地搬移)
@@ -1077,24 +1125,50 @@ public partial class TestThreadWindow : Window
         }
     }
 
+    private DateTime _lastShiftDoubleStepTime = DateTime.MinValue;
+
     private void OnParameterCellPointerPressed(object? sender, PointerPressedEventArgs e)
     {
         var row = (sender as Control)?.DataContext as SequencerRowViewModel;
+        var props = e.GetCurrentPoint(this).Properties;
+        if (props.IsLeftButtonPressed && e.KeyModifiers.HasFlag(KeyModifiers.Shift) && e.ClickCount >= 2 && row != null)
+        {
+            e.Handled = true;
+            _lastShiftDoubleStepTime = DateTime.UtcNow;
+            ClearRangeSelection();
+            JumpToRow(row.LineNumber);
+            StepOnce();
+            return;
+        }
+
         if (HandleShortcutPointerAction(row, e)) return;
     }
 
     private async void OnParameterCellDoubleTapped(object? sender, TappedEventArgs e)
     {
-        if (sender is Border border && border.DataContext is SequencerRowViewModel row)
+        if (e.KeyModifiers.HasFlag(KeyModifiers.Shift) || (DateTime.UtcNow - _lastShiftDoubleStepTime).TotalMilliseconds < 500)
+        {
+            e.Handled = true;
+            if (sender is Border border && border.DataContext is SequencerRowViewModel row && (DateTime.UtcNow - _lastShiftDoubleStepTime).TotalMilliseconds >= 500)
+            {
+                _lastShiftDoubleStepTime = DateTime.UtcNow;
+                ClearRangeSelection();
+                JumpToRow(row.LineNumber);
+                StepOnce();
+            }
+            return;
+        }
+
+        if (sender is Border b && b.DataContext is SequencerRowViewModel r)
         {
             SyncIoDefinitionsFromRows();
-            string targetCmd = !string.IsNullOrWhiteSpace(row.Command) ? row.Command : "System@Log Message";
+            string targetCmd = !string.IsNullOrWhiteSpace(r.Command) ? r.Command : "System@Log Message";
             bool wasTopmost = this.Topmost;
             string? updatedParam = null;
             try
             {
                 this.Topmost = false;
-                updatedParam = await ParameterGuidanceManager.Instance.RequestGuidanceAsync(targetCmd, row.Parameter, _vm?.Engines, this);
+                updatedParam = await ParameterGuidanceManager.Instance.RequestGuidanceAsync(targetCmd, r.Parameter, _vm?.Engines, this);
             }
             finally
             {
@@ -1104,7 +1178,7 @@ public partial class TestThreadWindow : Window
             if (updatedParam != null)
             {
                 PushUndoSnapshot();
-                row.Parameter = updatedParam;
+                r.Parameter = updatedParam;
                 SyncUIToProgram();
                 SyncIoDefinitionsFromRows();
                 UpdateUndoRedoButtonState();
@@ -1257,6 +1331,21 @@ public partial class TestThreadWindow : Window
 
     private void OnWindowKeyDown(object? sender, KeyEventArgs e)
     {
+        if (e.Key != Key.LeftShift && e.Key != Key.RightShift)
+        {
+            if (_anchorStartLine != null)
+            {
+                ClearRangeSelection();
+            }
+        }
+
+        if (e.Key == Key.Escape)
+        {
+            ClearRangeSelection();
+            e.Handled = true;
+            return;
+        }
+
         if (e.KeyModifiers.HasFlag(KeyModifiers.Control))
         {
             if (e.Key == Key.Z)

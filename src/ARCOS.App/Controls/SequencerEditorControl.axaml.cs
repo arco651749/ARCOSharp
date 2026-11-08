@@ -237,15 +237,41 @@ public partial class SequencerEditorControl : UserControl
         }
     }
 
+    private DateTime _lastShiftDoubleStepTime = DateTime.MinValue;
+
     private async void OnParameterCellDoubleTapped(object? sender, TappedEventArgs e)
     {
         e.Handled = true;
+        if (e.KeyModifiers.HasFlag(KeyModifiers.Shift) || (DateTime.UtcNow - _lastShiftDoubleStepTime).TotalMilliseconds < 500)
+        {
+            var row = (sender as Control)?.DataContext as SequencerRowViewModel;
+            if (row != null && (DateTime.UtcNow - _lastShiftDoubleStepTime).TotalMilliseconds >= 500)
+            {
+                _lastShiftDoubleStepTime = DateTime.UtcNow;
+                ClearRangeSelection();
+                JumpToRow(row.LineNumber);
+                StepOnce();
+            }
+            return;
+        }
+
         await OpenParameterGuidance(sender);
     }
 
     private void OnParameterCellPointerPressed(object? sender, PointerPressedEventArgs e)
     {
         var row = (sender as Control)?.DataContext as SequencerRowViewModel;
+        var props = e.GetCurrentPoint(this).Properties;
+        if (props.IsLeftButtonPressed && e.KeyModifiers.HasFlag(KeyModifiers.Shift) && e.ClickCount >= 2 && row != null)
+        {
+            e.Handled = true;
+            _lastShiftDoubleStepTime = DateTime.UtcNow;
+            ClearRangeSelection();
+            JumpToRow(row.LineNumber);
+            StepOnce();
+            return;
+        }
+
         if (HandleShortcutPointerAction(row, e)) return;
         // 注意：雙擊開啟導引視窗已由 OnParameterCellDoubleTapped 專責處理，此處切勿重複調用，避免同時開啟兩個視窗重疊
     }
@@ -296,16 +322,64 @@ public partial class SequencerEditorControl : UserControl
     // =========================================================
     private int? _anchorStartLine = null;
 
+    public void ClearRangeSelection()
+    {
+        _anchorStartLine = null;
+        foreach (var r in _rows)
+        {
+            if (r.IsRangeSelected)
+                r.IsRangeSelected = false;
+        }
+    }
+
+    public void JumpToRow(int lineNumber)
+    {
+        if (lineNumber < 0 || lineNumber >= _rows.Count) return;
+        if (_vm == null) return;
+
+        var ctx = GetActiveContext();
+        ctx.ProgIndex = lineNumber + 1;
+        ctx.State.Reset();
+        UpdatePCPointer(ctx.ProgIndex);
+        DrainPCPointer();
+        ctx.Log($"[PC JUMP] PC pointer jumped to Line {lineNumber}: {(_rows.Count > lineNumber ? _rows[lineNumber].Command : "")}");
+
+        var grid = this.FindControl<DataGrid>("GridCommands");
+        if (grid != null && lineNumber < _rows.Count)
+        {
+            grid.SelectedIndex = lineNumber;
+        }
+    }
+
+    public void StepOnce()
+    {
+        if (_vm == null) return;
+        SyncUIToProgram();
+
+        var ctx = GetActiveContext();
+        if (!ctx.IsRunning)
+        {
+            int startIdx = (ctx.ProgIndex >= 1 && ctx.ProgIndex <= _rows.Count) ? ctx.ProgIndex : 1;
+            _vm.StartThread(ctx.ThreadId, _currentProgNo, startIdx);
+        }
+
+        UpdateMachineStatus("RUNNING");
+        _vm.Executor.ExecuteStep(ctx);
+        UpdatePCPointer(ctx.ProgIndex);
+        DrainPCPointer();
+
+        if (!ctx.IsRunning || ctx.ProgIndex > _rows.Count)
+        {
+            ctx.IsRunning = false;
+            UpdateMachineStatus("IDLE");
+        }
+    }
+
     private void OnGlobalSelectionChanged(object? activeEditor)
     {
         if (activeEditor != this)
         {
-            _anchorStartLine = null;
-            foreach (var r in _rows)
-            {
-                if (r.IsRangeSelected)
-                    r.IsRangeSelected = false;
-            }
+            ClearRangeSelection();
         }
     }
 
@@ -328,6 +402,12 @@ public partial class SequencerEditorControl : UserControl
 
         // 2. 排除點擊在表頭、滾動條、縮放或按鈕控制項上的情況
         if (IsInIgnoredGridArea(visual)) return;
+
+        // 若有待命中的 Shift 第一下選取，點擊空白處時取消選取
+        if (_anchorStartLine != null)
+        {
+            ClearRangeSelection();
+        }
 
         // 3. Ctrl + 點擊：原有之複製插入貼上
         if (e.KeyModifiers == KeyModifiers.Control)
@@ -374,22 +454,28 @@ public partial class SequencerEditorControl : UserControl
 
         var km = e.KeyModifiers;
 
-        // 1. Shift + 滑鼠左鍵 (兩次點擊選取範圍，寫入全域選擇區)
+        // 1. Shift + 滑鼠左鍵 (選取與 Jump 狀態機)
         if (km == KeyModifiers.Shift)
         {
+            // 若為雙擊 (ClickCount >= 2)，交由 DoubleTapped / Shift+DoubleClick 邏輯處理，不作為範圍選取的第二擊
+            if (e.ClickCount >= 2) return false;
+
             e.Handled = true;
             if (row == null) return true;
 
             if (_anchorStartLine == null)
             {
+                // 首次 Shift+點擊：選取該行，並同時 JUMP 到該行
                 _anchorStartLine = row.LineNumber;
                 foreach (var r in _rows)
                 {
                     r.IsRangeSelected = (r.LineNumber == _anchorStartLine.Value);
                 }
+                JumpToRow(row.LineNumber);
             }
             else
             {
+                // 接續 Shift+點擊：形成區域選取 [start, end]
                 int start = Math.Min(_anchorStartLine.Value, row.LineNumber);
                 int end = Math.Max(_anchorStartLine.Value, row.LineNumber);
 
@@ -407,6 +493,12 @@ public partial class SequencerEditorControl : UserControl
                 _anchorStartLine = null;
             }
             return true;
+        }
+
+        // 若不是 Shift 點擊，但先前有第一下 Shift 點擊待命中，取消該選取行為
+        if (_anchorStartLine != null)
+        {
+            ClearRangeSelection();
         }
 
         // 2. Ctrl + Alt + 滑鼠左鍵 (本地搬移)
@@ -996,30 +1088,13 @@ public partial class SequencerEditorControl : UserControl
 
     private void BtnStep_Click(object? sender, RoutedEventArgs e)
     {
-        if (_vm == null) return;
-        SyncUIToProgram();
-
-        var ctx = GetActiveContext();
-        if (!ctx.IsRunning)
-        {
-            int startIdx = (ctx.ProgIndex >= 1 && ctx.ProgIndex <= _rows.Count) ? ctx.ProgIndex : 1;
-            _vm.StartThread(ctx.ThreadId, _currentProgNo, startIdx);
-        }
-
-        UpdateMachineStatus("RUNNING");
-        _vm.Executor.ExecuteStep(ctx);
-        UpdatePCPointer(ctx.ProgIndex);
-        DrainPCPointer();
-
-        if (!ctx.IsRunning || ctx.ProgIndex > _rows.Count)
-        {
-            ctx.IsRunning = false;
-            UpdateMachineStatus("IDLE");
-        }
+        ClearRangeSelection();
+        StepOnce();
     }
 
     private void BtnAuto_Click(object? sender, RoutedEventArgs e)
     {
+        ClearRangeSelection();
         if (_vm == null) return;
         SyncUIToProgram();
 
@@ -1061,6 +1136,7 @@ public partial class SequencerEditorControl : UserControl
 
     private void BtnReset_Click(object? sender, RoutedEventArgs e)
     {
+        ClearRangeSelection();
         _autoTimer.Stop();
         if (_vm != null)
         {
@@ -1076,20 +1152,17 @@ public partial class SequencerEditorControl : UserControl
 
     private void BtnJump_Click(object? sender, RoutedEventArgs e)
     {
+        ClearRangeSelection();
         var grid = this.FindControl<DataGrid>("GridCommands");
-        if (grid?.SelectedItem is SequencerRowViewModel row && _vm != null)
+        if (grid?.SelectedItem is SequencerRowViewModel row)
         {
-            var ctx = GetActiveContext();
-            ctx.ProgIndex = row.LineNumber + 1;
-            ctx.State.Reset();
-            UpdatePCPointer(ctx.ProgIndex);
-            DrainPCPointer();
-            ctx.Log($"[PC JUMP] PC pointer jumped to Line {row.LineNumber}: {row.Command}");
+            JumpToRow(row.LineNumber);
         }
     }
 
     private void BtnAdd_Click(object? sender, RoutedEventArgs e)
     {
+        ClearRangeSelection();
         PushUndoSnapshot();
         var grid = this.FindControl<DataGrid>("GridCommands");
         int insertIndex = (grid?.SelectedIndex ?? -1) + 1;
@@ -1109,6 +1182,7 @@ public partial class SequencerEditorControl : UserControl
 
     private void BtnDelete_Click(object? sender, RoutedEventArgs e)
     {
+        ClearRangeSelection();
         if (_rows.Count == 0) return;
         var grid = this.FindControl<DataGrid>("GridCommands");
         if (grid?.SelectedItem is SequencerRowViewModel row)
@@ -1313,6 +1387,21 @@ public partial class SequencerEditorControl : UserControl
 
     private void OnSequencerKeyDown(object? sender, KeyEventArgs e)
     {
+        if (e.Key != Key.LeftShift && e.Key != Key.RightShift)
+        {
+            if (_anchorStartLine != null)
+            {
+                ClearRangeSelection();
+            }
+        }
+
+        if (e.Key == Key.Escape)
+        {
+            ClearRangeSelection();
+            e.Handled = true;
+            return;
+        }
+
         if (e.KeyModifiers.HasFlag(KeyModifiers.Control))
         {
             if (e.Key == Key.Z)

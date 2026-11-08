@@ -31,6 +31,9 @@ public sealed class SequencerRowViewModel : INotifyPropertyChanged
             {
                 PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsRangeSelectedAndNotPC)));
                 PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsDefaultState)));
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(CellBackground)));
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(CellBorderBrush)));
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(CellBorderThickness)));
             }
         }
     }
@@ -45,13 +48,36 @@ public sealed class SequencerRowViewModel : INotifyPropertyChanged
                 PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsRangeSelectedAndNotPC)));
                 PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsDefaultState)));
                 PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(CellBackground)));
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(CellBorderBrush)));
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(CellBorderThickness)));
             }
         }
     }
 
     public bool IsRangeSelectedAndNotPC => _isRangeSelected && !_isCurrentPC;
     public bool IsDefaultState => !_isCurrentPC && !_isRangeSelected;
-    public string CellBackground => _isRangeSelected ? "#E0F2FE" : "Transparent";
+    
+    public string CellBackground
+    {
+        get
+        {
+            if (_isCurrentPC) return "#FFE4E6";
+            if (_isRangeSelected) return "#E0F2FE";
+            return "Transparent";
+        }
+    }
+
+    public string CellBorderBrush
+    {
+        get
+        {
+            if (_isCurrentPC) return "#EF4444";
+            if (_isRangeSelected) return "#BAE6FD";
+            return "Transparent";
+        }
+    }
+
+    public string CellBorderThickness => _isCurrentPC ? "1.5" : (_isRangeSelected ? "1" : "0");
 
     public string Command
     {

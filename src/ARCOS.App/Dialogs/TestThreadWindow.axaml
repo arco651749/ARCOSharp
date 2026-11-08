@@ -123,10 +123,10 @@
                                        Background="{Binding CellBackground}"
                                        PointerPressed="OnCellPointerPressed">
                                     <Border IsVisible="{Binding IsCurrentPC}" 
-                                            Background="#FFE4E6" BorderBrush="#FDA4AF" BorderThickness="1" 
+                                            Background="#FFE4E6" BorderBrush="#EF4444" BorderThickness="1.5" 
                                             CornerRadius="2" Margin="1,0">
                                         <TextBlock Text="{Binding LineNumber}" FontWeight="Black" FontSize="10"
-                                                   Foreground="#9F1239" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                   Foreground="#DC2626" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                     </Border>
                                     <Border IsVisible="{Binding IsRangeSelectedAndNotPC}" 
                                             Background="#BAE6FD" BorderBrush="#0284C7" BorderThickness="1" 
@@ -147,7 +147,11 @@
                     <DataGridTemplateColumn Header="Command" Width="150">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate>
-                                <Border Background="{Binding CellBackground}" Padding="4,0" Cursor="Hand"
+                                <Border Background="{Binding CellBackground}" 
+                                        BorderBrush="{Binding CellBorderBrush}" 
+                                        BorderThickness="{Binding CellBorderThickness}" 
+                                        CornerRadius="2" Margin="1,0"
+                                        Padding="4,0" Cursor="Hand"
                                         PointerPressed="OnCommandCellPointerPressed">
                                     <TextBlock Text="{Binding Command}" 
                                                Foreground="#003399" FontWeight="SemiBold" FontSize="11"
@@ -161,7 +165,11 @@
                     <DataGridTemplateColumn Header="Parameters" Width="*">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate>
-                                <Border Background="{Binding CellBackground}" Padding="4,0" Cursor="Hand"
+                                <Border Background="{Binding CellBackground}" 
+                                        BorderBrush="{Binding CellBorderBrush}" 
+                                        BorderThickness="{Binding CellBorderThickness}" 
+                                        CornerRadius="2" Margin="1,0"
+                                        Padding="4,0" Cursor="Hand"
                                         DoubleTapped="OnParameterCellDoubleTapped"
                                         PointerPressed="OnParameterCellPointerPressed">
                                     <TextBlock Text="{Binding Parameter}" 
