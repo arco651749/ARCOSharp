@@ -80,7 +80,35 @@ ARCOSharp 的本質是一套專注於工業級自動化機台的高吞吐、低�
 
 ---
 
-## 3. 標準程式碼範例與實作模式 (Best Practice Code Patterns)
+## 4. 必要自動更新 UI 之三大工程紀律 (Three Engineering Disciplines for Auto-Updating UI)
+
+針對少數使用者**當前視線可見且確有監控必要之自動更新 UI**（例如：機台運轉紅綠 LED 指示燈、當前可見的 7 軸同動 DRO 座標、可見的 Cycle Time 計時等），必須嚴格遵守以下三大工程紀律：
+
+### 🕒 紀律一：頻率嚴格壓低，1 秒 5 ~ 10 次已足夠 (Low Frequency 5~10 Hz)
+* **人類視覺極限**：人眼視覺暫留約 100ms，對機台監控而言，**1 秒更新 5~10 次（間隔 100ms ~ 200ms，建議 150ms / 約 6.7 Hz）** 已完全能提供即時平滑的視覺反饋。
+* **嚴禁超頻更新**：嚴禁將 UI 定時器設為 10ms、20ms 或 50ms。盲目提高刷新率只會造成 UI 執行緒不斷搶奪 CPU、引發重排（Measure/Arrange）與電氣噪訊，對操作員毫無附加價值。
+
+### 📨 紀律二：非阻塞 NOTIFY 機制，只更新最後一個值 (Non-Blocking Conflated Notify / Last-Value-Wins)
+* **絕不阻斷程式執行**：UI 更新行程必須採用非同步 Notification（Notify）或低頻 Pull 方式進行，嚴禁任何會造成後端等待的同步調用。
+* **合併覆蓋，只留最新值 (Conflation / Coalescing)**：
+  - NOTIFY 的核心價值在於**「只更新最後一個值（Last-Value-Wins）」**。
+  - 當後端在 100ms 內高頻變更了 1,000 次（例如高速運動脈波、連續 IO 翻轉、密集打卡），後端**絕不要將 1,000 筆中間狀態依序發送至 UI 訊息佇列**。
+  - UI 只需要在下一次繪製週期讀取當下的「最後最新數值」，中間 999 筆視覺過渡值直接自動被吞沒合併，徹底杜絕訊息堆疊與 UI 卡死。
+
+### 📉 紀律三：UI 更新行程之優先權恆為全系統最低 (Lowest Priority)
+* **核心業務享有絕對優先調度**：直譯執行緒（VM）、硬體驅動通訊（`DriverTicket`）、即時邏輯判斷與運動控制擁有最高 CPU 優先權。
+* **背景優先級調度**：所有調度至 UI 執行緒的委派任務或定時器，必須明確指定最低優先權：
+  ```csharp
+  // Avalonia Dispatcher 最低背景優先權調度
+  Dispatcher.UIThread.Post(action, DispatcherPriority.Background);
+  // 定時器亦必須以 Background 優先權運作
+  _uiTimer = new DispatcherTimer(TimeSpan.FromMilliseconds(150), DispatcherPriority.Background, UiTimer_Tick);
+  ```
+  這保證了唯有當 CPU 處理完所有實體控制、通訊與演算法後，有餘裕時才順便繪製 UI，絕不反客為主！
+
+---
+
+## 5. 標準程式碼範例與實作模式 (Best Practice Code Patterns)
 
 ### ✅ 模式 1：UI 定時器之 Active 守衛模式 (Active Guard Pattern)
 
@@ -163,18 +191,19 @@ public void Record(string recordName, string message)
 
 ---
 
-## 4. Code Review 檢核清單 (Pull Request & Development Checklist)
+## 6. Code Review 檢核清單 (Pull Request & Development Checklist)
 
 在提交任何 ARCOSharp 程式碼變更前，必須自檢以下項目：
 
 - [ ] **無熱路徑 UI 調用**：`ARCOS.Core` 下所有程式碼（直譯器、Handler、子引擎）完全無 `Avalonia` 命名空間引用，不發起任何 UI Thread 調用。
 - [ ] **非 Active 不更新**：所有 UI 更新定時器或事件處理常式，均具備 `IsVisible` 與 `ActiveTab` 守衛檢查。
-- [ ] **無高頻動態記憶體配置**：高頻日誌與記錄使用預分配環狀緩衝區，禁止在高頻路徑使用 `List.Add` 或字串累加。
+- [ ] **低頻與背景優先級**：自動更新定時器頻率限制於 5~10 Hz（100~200ms），調度一律指定 `DispatcherPriority.Background`。
+- [ ] **按需拉取與無高頻動態記憶體配置**：高頻日誌與記錄使用預分配環狀緩衝區，七大資訊清單（Record/Var/Point/Cam/Motion/Daq/Wf）一律採使用者點擊按需拉取快照。
 - [ ] **異常降級保護**：即使 UI 發生例外或重繪延遲，背景腳本執行緒與硬體通訊完全不受干擾、繼續全速執行。
 
 ---
 
-## 5. 詳細技術白皮書與章節目錄
+## 7. 詳細技術白皮書與章節目錄
 
 進一步的架構細節與各子系統規格，請參閱 `docs/dev-guide/` 目錄下各專題文檔：
 

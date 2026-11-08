@@ -290,7 +290,7 @@ public partial class MainWindow : Window
 
         // 7. UI 定時刷新計時器 (50ms，驅動即時狀態更新)
 
-        _uiTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(50) };
+        _uiTimer = new DispatcherTimer(DispatcherPriority.Background) { Interval = TimeSpan.FromMilliseconds(150) };
 
         _uiTimer.Tick += UiTimer_Tick;
 
@@ -332,7 +332,7 @@ public partial class MainWindow : Window
 
                 }
 
-            });
+            }, DispatcherPriority.Background);
 
         };
 
