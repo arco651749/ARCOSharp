@@ -53,8 +53,10 @@ System@LogRecordCycleTime::TEST,Elapsed:;
         var (ctx, executor, engines) = CreateHarness(script);
         RunToEnd(ctx, executor);
 
-        double elapsed = engines.Timer.GetRecordElapsedSeconds("TEST");
-        Assert.True(elapsed >= 0.04);
+        double elapsedTimer = engines.Timer.GetRecordElapsedSeconds("TEST");
+        double elapsedRecord = engines.Record.GetRecordElapsedSeconds("TEST");
+        Assert.True(elapsedRecord >= 0.04);
+        Assert.True(elapsedTimer >= 0.04);
         Assert.Contains(ctx.SysLogEntries, l => l.Contains("Elapsed:"));
     }
 

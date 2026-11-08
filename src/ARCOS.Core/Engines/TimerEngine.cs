@@ -69,15 +69,23 @@ public class TimerEngine
     /// </summary>
     public int GetCount(string counterName) => _counterEngine.GetCount(counterName);
 
-    /// <summary>
-    /// 記錄自定義訊息至檔案或特定紀錄器 (對應 System@Record)
-    /// 若 message 為 "Start" 則標記起跑時間點
-    /// </summary>
+    private RecordEngine? _recordEngine;
+
+    public void AttachRecordEngine(RecordEngine recordEngine)
+    {
+        _recordEngine = recordEngine;
+    }
+
+    [Obsolete("Record functionality has been decoupled into RecordEngine. Use BasicEngines.Record instead.")]
     public void Record(string recordName, string message)
     {
+        if (_recordEngine != null)
+        {
+            _recordEngine.Record(recordName, message);
+            return;
+        }
         if (string.IsNullOrWhiteSpace(recordName)) return;
         long nowTicks = Stopwatch.GetTimestamp();
-
         var entry = _records.GetOrAdd(recordName, _ => (nowTicks, new List<string>()));
         if (string.Equals(message, "Start", StringComparison.OrdinalIgnoreCase))
         {
@@ -92,11 +100,13 @@ public class TimerEngine
         }
     }
 
-    /// <summary>
-    /// 計算並取得指定 Record 的 Cycle Time 耗時秒數 (對應 System@LogRecordCycleTime)
-    /// </summary>
+    [Obsolete("Record functionality has been decoupled into RecordEngine. Use BasicEngines.Record instead.")]
     public double GetRecordElapsedSeconds(string recordName)
     {
+        if (_recordEngine != null)
+        {
+            return _recordEngine.GetRecordElapsedSeconds(recordName);
+        }
         if (string.IsNullOrWhiteSpace(recordName)) return 0.0;
         if (_records.TryGetValue(recordName, out var entry))
         {
