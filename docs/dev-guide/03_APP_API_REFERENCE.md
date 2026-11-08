@@ -1,5 +1,9 @@
 # 03. ARCOS.App API 與 UI 規範 (App API Reference)
 
+> [!IMPORTANT]
+> **【UI 開發最高準則】程式執行速度優先，非 Active UI 絕對禁止更新**  
+> 任何 UI 元件與定時器必須遵循 [DEV-GUIDE.md](../../DEV-GUIDE.md) 規範：未被選中之分頁、隱藏之面板與失去焦點之視窗，禁止發起任何 DOM 遍歷、資料格式化或屬性更新，所有資料採切換分頁時按需拉取（Lazy Catch-Up）。
+
 本文檔詳述展示層 **`ARCOS.App`** 的元件結構、Public API、參數導引視窗動態解析順序、編輯器操作快捷鍵，以及內建 **ArcosMcpServer** 自動化介面。
 
 ---

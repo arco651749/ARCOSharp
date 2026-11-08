@@ -1,5 +1,9 @@
 # 01. ARCOSharp 整體架構總覽 (Architecture Overview)
 
+> [!IMPORTANT]
+> **【系統最高架構準則】程式執行速度為唯一第一指標，UI 延遲更新、非 Active 絕對不更新**  
+> 核心調度（VM / Executor / Engines / Drivers）全速運轉，與 UI 完全解耦。UI 僅為次要觀察者，凡非當前 Active 之畫面嚴禁更新（詳細規範詳見 [DEV-GUIDE.md](../../DEV-GUIDE.md)）。
+
 本文檔全面剖析 **ARCOSharp** 自動化控制系統的軟體分層、啟動生命週期、指令執行狀態機、並發執行緒模型與部署拓撲。
 
 ---
