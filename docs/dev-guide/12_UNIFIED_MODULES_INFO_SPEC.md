@@ -99,7 +99,11 @@ ARCOSharp 的核心哲學是 **「一切皆模組（Everything is a Module / CSV
 
 ### 4.2 模組清單開機預載與動態擴充
 系統開機時，`Modules Info` 左側清單預載以下 9 大模組：
-1. **`SYSTEM`**（核心日誌與資源統計）
+1. **`SYSTEM`**（核心日誌與 RecordS 生產記錄儀表）：
+   - **完全解耦 TimerEngine**：`Record` 職責為履歷與日誌打卡，與負責逾時防護之 `TimerEngine` 徹底權責分離，獨立建立 `RecordEngine`。
+   - **統一資料結構**：系統全域 Log 與週期打卡（`Record`）本質皆為 `Timestamp + Message`，預設常駐 `SYSTEMLOG` 通道，支援使用者自訂打卡（如 `cycletime`）。
+   - **2000 槽位固定環狀緩衝區 (Ring Buffer)**：預先配置 2000 筆槽位，寫入複雜度 $O(1)$，絕不使用動態拼接（`+=`）或無上限記憶體 Append，徹底避免長期運行之記憶體膨脹與 GC 停頓。
+   - **1:1 原版工控介面還原**：左側 `[Get RecordS]` 按鈕與通道清單；右側頂部呈現 `RecordIndex` 與 `Capability: 2000`，搭配立體凹槽（Sunken Inset）高精度時間戳與訊息雙欄表格。
 2. **`THREAD`**（13 主執行緒 PC 矩陣與微步監視）
 3. **`VARIABLE`**（全域/局部變數線上查詢與修改）
 4. **`POINT&PATH`**（6 軸 DRO 與教導點位資料庫）

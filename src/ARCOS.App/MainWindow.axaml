@@ -873,7 +873,7 @@
                     <!-- 右側統一 SubPanel (一級模組面板容器) -->
                     <Border Grid.Column="1" Background="#FFFFFF" BorderBrush="#CBD5E1" BorderThickness="1" CornerRadius="6" Padding="6">
                         <Grid x:Name="ModulesSubPanelHost">
-                            <!-- 1. SYSTEM 面板 -->
+                            <!-- 1. SYSTEM 面板 (RecordS 統一環狀生產記錄與日誌台) -->
                             <Grid x:Name="PnlModuleSystem" RowDefinitions="Auto,*" Margin="6" IsVisible="True">
                                 <Border Grid.Row="0" Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="6" Padding="12,8" Margin="0,0,0,8">
                                     <Grid ColumnDefinitions="*,Auto,Auto,Auto">
@@ -884,7 +884,7 @@
                                                     <TextBlock Text="ONLINE / HEALTHY" FontSize="9" FontWeight="Bold" Foreground="White"/>
                                                 </Border>
                                             </StackPanel>
-                                            <TextBlock Text="系統執行日誌、Cycle Time、執行緒調度與健康監控" FontSize="11" Foreground="#64748B" Margin="0,2,0,0"/>
+                                            <TextBlock Text="系統執行日誌、Cycle Time、生產週期打卡與健康監控" FontSize="11" Foreground="#64748B" Margin="0,2,0,0"/>
                                         </StackPanel>
                                         <Border Grid.Column="1" Background="White" BorderBrush="#CBD5E1" BorderThickness="1" Padding="12,4" Margin="6,0" CornerRadius="4">
                                             <StackPanel>
@@ -898,12 +898,73 @@
                                                 <TextBlock x:Name="TxtSystemCycleTime" Text="0.00 s" FontSize="14" FontWeight="Black" Foreground="#F59E0B" HorizontalAlignment="Center"/>
                                             </StackPanel>
                                         </Border>
-                                        <Button x:Name="BtnClearSystemLog" Grid.Column="3" Content="Clear Log" Height="28" Padding="10,0" Margin="6,0,0,0" Background="#F1F5F9" Foreground="#475569" FontSize="11" FontWeight="SemiBold" CornerRadius="4"/>
+                                        <Button x:Name="BtnClearSystemLog" Grid.Column="3" Content="🧹 Clear (CLEAR)" Height="28" Padding="10,0" Margin="6,0,0,0" Background="#F1F5F9" Foreground="#475569" FontSize="11" FontWeight="SemiBold" CornerRadius="4"/>
                                     </Grid>
                                 </Border>
-                                <Border Grid.Row="1" Background="#0F172A" BorderBrush="#334155" BorderThickness="1" CornerRadius="6" Padding="8">
-                                    <TextBox x:Name="TxtSystemLogs" AcceptsReturn="True" IsReadOnly="True" Background="Transparent" Foreground="#F8FAFC" FontFamily="Consolas" FontSize="11" BorderThickness="0"/>
-                                </Border>
+                                <!-- 2000 槽位 RecordS 核心工作區 (左欄 Channels 清單，右欄 2000 槽位雙欄事件表) -->
+                                <Grid Grid.Row="1" ColumnDefinitions="190,*" Margin="0">
+                                    <!-- 左欄：[Get RecordS] 按鈐與 Record 通道清單 -->
+                                    <Border Grid.Column="0" Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="6" Padding="6" Margin="0,0,6,0">
+                                        <Grid RowDefinitions="Auto,*">
+                                            <Button x:Name="BtnGetRecords" Grid.Row="0" Content="Get RecordS" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" Height="28" FontWeight="Bold" FontSize="11" Background="#E2E8F0" Foreground="#1E293B" CornerRadius="4" Margin="0,0,0,6"/>
+                                            <ListBox x:Name="LstRecordChannels" Grid.Row="1" Background="White" BorderBrush="#CBD5E1" BorderThickness="1" CornerRadius="4"/>
+                                        </Grid>
+                                    </Border>
+                                    <!-- 右欄：RecordS 儀表 (RecordIndex / Capability) 與 2000 筆事件流水帳 -->
+                                    <Border Grid.Column="1" Background="White" BorderBrush="#CBD5E1" BorderThickness="1" CornerRadius="6" Padding="8">
+                                        <Grid RowDefinitions="Auto,Auto,*">
+                                            <!-- 頂部指標列 -->
+                                            <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto,Auto,Auto,Auto" Margin="0,0,0,6">
+                                                <TextBlock Grid.Column="0" Text="RecordS" FontWeight="Bold" FontSize="12" Foreground="#1E293B" VerticalAlignment="Center"/>
+                                                <TextBlock Grid.Column="2" Text="RecordIndex" FontSize="11" FontWeight="SemiBold" Foreground="#64748B" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                                <Border Grid.Column="3" Width="70" Height="24" Background="#F1F5F9" BorderBrush="#CBD5E1" BorderThickness="1" CornerRadius="3" Margin="0,0,12,0">
+                                                    <TextBlock x:Name="TxtRecordIndex" Text="0" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="6,0" FontWeight="Bold" FontSize="11" FontFamily="Consolas" Foreground="#0284C7"/>
+                                                </Border>
+                                                <TextBlock Grid.Column="4" Text="Capability" FontSize="11" FontWeight="SemiBold" Foreground="#64748B" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                                <Border Grid.Column="5" Width="70" Height="24" Background="#F1F5F9" BorderBrush="#CBD5E1" BorderThickness="1" CornerRadius="3">
+                                                    <TextBlock x:Name="TxtRecordCapability" Text="2000" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="6,0" FontWeight="Bold" FontSize="11" FontFamily="Consolas" Foreground="#475569"/>
+                                                </Border>
+                                            </Grid>
+                                            <!-- 表頭列 -->
+                                            <Grid Grid.Row="1" ColumnDefinitions="130,*" Background="#F1F5F9" Margin="0,0,0,4">
+                                                <Border Grid.Column="0" Padding="6,4" BorderBrush="#CBD5E1" BorderThickness="0,0,1,0">
+                                                    <TextBlock Text="TIMESTAMP" FontWeight="Bold" FontSize="10" Foreground="#475569"/>
+                                                </Border>
+                                                <Border Grid.Column="1" Padding="8,4">
+                                                    <TextBlock Text="MESSAGE / RECORD DATA" FontWeight="Bold" FontSize="10" Foreground="#475569"/>
+                                                </Border>
+                                            </Grid>
+                                            <!-- 2000 槽位虛擬化事件表格 (Sunken Inset 工控立體質感) -->
+                                            <ListBox x:Name="LstRecordEntries" Grid.Row="2" Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="4" Padding="2">
+                                                <ListBox.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <Grid ColumnDefinitions="124,*" Margin="0,1">
+                                                            <Border Grid.Column="0" Background="#EEF2F6" BorderBrush="#CBD5E1" BorderThickness="1" CornerRadius="2" Padding="6,2" Margin="0,0,4,0">
+                                                                <TextBlock Text="{Binding Timestamp}" FontFamily="Consolas" FontSize="11" Foreground="#0284C7" FontWeight="SemiBold"/>
+                                                            </Border>
+                                                            <Border Grid.Column="1" Background="#FFFFFF" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="2" Padding="8,2">
+                                                                <TextBlock Text="{Binding Message}" FontFamily="Consolas" FontSize="11" Foreground="#0F172A" TextWrapping="Wrap"/>
+                                                            </Border>
+                                                        </Grid>
+                                                    </DataTemplate>
+                                                </ListBox.ItemTemplate>
+                                                <ListBox.Styles>
+                                                    <Style Selector="ListBoxItem">
+                                                        <Setter Property="Padding" Value="0"/>
+                                                        <Setter Property="MinHeight" Value="24"/>
+                                                        <Setter Property="Margin" Value="0,1"/>
+                                                    </Style>
+                                                    <Style Selector="ListBoxItem:selected /template/ ContentPresenter">
+                                                        <Setter Property="Background" Value="#E0F2FE"/>
+                                                    </Style>
+                                                    <Style Selector="ListBoxItem:pointerover /template/ ContentPresenter">
+                                                        <Setter Property="Background" Value="#F1F5F9"/>
+                                                    </Style>
+                                                </ListBox.Styles>
+                                            </ListBox>
+                                        </Grid>
+                                    </Border>
+                                </Grid>
                             </Grid>
 
                             <!-- 2. THREAD 面板 (原 Threads Tab 內容) -->

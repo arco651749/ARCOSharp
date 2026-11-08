@@ -67,6 +67,7 @@ public class SystemModuleHandler : IModuleHandler
         if (action.Equals("Clear Message", StringComparison.OrdinalIgnoreCase))
         {
             ctx.SysLogEntries.Clear();
+            ctx.Engines.Record.Record("SYSTEMLOG", "CLEAR");
             return CommandResult.Done();
         }
 
@@ -101,7 +102,7 @@ public class SystemModuleHandler : IModuleHandler
             var parts = filteredParam.Split(',', 2, StringSplitOptions.TrimEntries);
             string recName = parts[0];
             string msg = parts.Length > 1 ? parts[1] : "";
-            ctx.Engines.Timer.Record(recName, msg);
+            ctx.Engines.Record.Record(recName, msg);
             return CommandResult.Done();
         }
 
@@ -110,7 +111,7 @@ public class SystemModuleHandler : IModuleHandler
             var parts = filteredParam.Split(',', 2, StringSplitOptions.TrimEntries);
             string recName = parts[0];
             string prefix = parts.Length > 1 ? parts[1] : $"CycleTime [{recName}]:";
-            double sec = ctx.Engines.Timer.GetRecordElapsedSeconds(recName);
+            double sec = ctx.Engines.Record.GetRecordElapsedSeconds(recName);
             ctx.Log($"{prefix} {sec:F3}s");
             return CommandResult.Done();
         }

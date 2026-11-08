@@ -791,15 +791,54 @@ public partial class MainWindow : Window
 
     private void BindSystemModule()
     {
+        var btnGetRecords = this.FindControl<Button>("BtnGetRecords");
+        var lstChannels = this.FindControl<ListBox>("LstRecordChannels");
+        var lstEntries = this.FindControl<ListBox>("LstRecordEntries");
+        var txtIndex = this.FindControl<TextBlock>("TxtRecordIndex");
+        var txtCap = this.FindControl<TextBlock>("TxtRecordCapability");
         var btnClear = this.FindControl<Button>("BtnClearSystemLog");
+
+        Action refreshChannels = () =>
+        {
+            var names = _engines.Record.GetAllRecordNames();
+            string? prev = lstChannels?.SelectedItem as string;
+            if (lstChannels != null)
+            {
+                lstChannels.ItemsSource = names;
+                if (!string.IsNullOrEmpty(prev) && names.Contains(prev))
+                    lstChannels.SelectedItem = prev;
+                else if (names.Count > 0)
+                    lstChannels.SelectedIndex = 0;
+            }
+        };
+
+        Action updateSelectedChannel = () =>
+        {
+            string? chName = lstChannels?.SelectedItem as string ?? "SYSTEMLOG";
+            var ch = _engines.Record.GetOrCreateChannel(chName);
+            if (lstEntries != null)
+            {
+                lstEntries.ItemsSource = ch.Entries;
+            }
+            if (txtIndex != null) txtIndex.Text = ch.Index.ToString();
+            if (txtCap != null) txtCap.Text = ch.Capacity.ToString();
+        };
+
+        if (btnGetRecords != null) btnGetRecords.Click += (_, _) => refreshChannels();
+        if (lstChannels != null) lstChannels.SelectionChanged += (_, _) => updateSelectedChannel();
+
         if (btnClear != null)
         {
             btnClear.Click += (_, _) =>
             {
-                var txtLogs = this.FindControl<TextBox>("TxtSystemLogs");
-                if (txtLogs != null) txtLogs.Text = "";
+                string? chName = lstChannels?.SelectedItem as string ?? "SYSTEMLOG";
+                var ch = _engines.Record.GetOrCreateChannel(chName);
+                ch.Clear();
+                updateSelectedChannel();
             };
         }
+
+        refreshChannels();
     }
 
     private static readonly System.Text.RegularExpressions.Regex XClassRegex = new(@"\bx:Class\s*=\s*""[^""]*""", System.Text.RegularExpressions.RegexOptions.Compiled);
@@ -1816,6 +1855,13 @@ public partial class MainWindow : Window
         if (txtSysCycle != null)
         {
             txtSysCycle.Text = $"{_systemCycleTime:F2} s";
+        }
+        var lstRecCh = this.FindControl<ListBox>("LstRecordChannels");
+        var txtRecIdx = this.FindControl<TextBlock>("TxtRecordIndex");
+        if (lstRecCh?.SelectedItem is string curRecCh && txtRecIdx != null)
+        {
+            var ch = _engines.Record.GetChannel(curRecCh);
+            if (ch != null) txtRecIdx.Text = ch.Index.ToString();
         }
     }
 

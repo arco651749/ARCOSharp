@@ -81,11 +81,12 @@ public sealed class ExecutionContext
         SysLogEntries.Add(entry);
         OnLog?.Invoke(entry, isError);
 
-        // 同步寫入系統日誌旗標與 TimerEngine 日誌
+        // 同步寫入系統日誌旗標與 RecordEngine SYSTEMLOG 通道
         if (isError)
         {
             Engines.Io.SetPort("System#Error?", true);
         }
+        Engines.Record.Record("SYSTEMLOG", $"[Thread {ThreadId}:{ThreadName}] {(isError ? "[ERROR] " : "")}{message}");
 
         try
         {
