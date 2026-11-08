@@ -19,6 +19,7 @@
 | **09** | [架構瓶頸分析與審查報告 (Architecture Review)](./09_ARCHITECTURE_REVIEW.md) | 現行架構弱點診斷（耦合性、記憶體洩漏、安全性、併發鎖定）與重構指引 |
 | **10** | [擴充者可用 API 總目錄 (Extension API Catalog)](./10_EXTENSION_API_CATALOG.md) | **【必讀】** 擴充者能調用的所有 Public API、子引擎、上下文與事件速查矩陣 |
 | **11** | [複合邏輯表達式編輯器使用指南 (Logic Editor Guide)](./11_LOGIC_EDITOR_GUIDE.md) | `$logic` 編輯器使用時機、運算子體系（IO/Variable/區間/空值）、操作方法與二次開發調用 |
+| **12** | [統一模組中心與兩層式 SubPanel 規格書 (Unified Modules Info Spec)](./12_UNIFIED_MODULES_INFO_SPEC.md) | 底部 5 大分頁收納、左側動態模組清單、兩層式 SubPanel 路由與動態擴充 |
 
 ---
 

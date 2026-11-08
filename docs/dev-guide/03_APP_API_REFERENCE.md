@@ -176,3 +176,17 @@ def call_mcp(tool_name, arguments):
 # 範例：切換 TestThread 視窗並開啟第 0 列參數導引
 print(call_mcp("arcos_test_thread", {"action": "open_guidance", "rowIndex": 0}))
 ```
+
+---
+
+## 6. 統一模組中心 (Modules Info) 與兩層式 SubPanel 路由架構
+
+為了達成機台介面極致模組化並解決底部分頁過度膨脹問題，`ARCOS.App` 實施 **統一模組導航與兩層式 SubPanel 體系**：
+1. **底部分頁瘦身**：原底部 `IMAQ Array`、`Point&Path`、`Threads`、`Parameter&Variable`、`WaveForm` 5 個獨立分頁正式收納入 `Modules Info`。
+2. **左側動態清單 (LstLoadedModules)**：呈現開機預載（`SYSTEM`, `THREAD`, `VARIABLE`, `IMAQ`, `POINT&PATH`, `IO`, `MOTION`, `DAQ`）與 `System@IncludeModule` 動態引入之所有模組。
+3. **兩層式 SubPanel (Two-Tier Routing)**：
+   - **第一層**：點擊模組載入對應 `MODULES/<Name>/<Name>.csvi` 的 FrontPanel。
+   - **第二層**：硬體多裝置模組（如 IO、Motion）在模組視圖內列出 Devices，點擊特定 Device 載入專屬 `IDriver.CreateDriverView()`。
+
+> 完整設計規範、版面拓撲圖與調用循序圖，請詳閱：[12. 統一模組中心與兩層式 SubPanel 規格書](./12_UNIFIED_MODULES_INFO_SPEC.md)。
+

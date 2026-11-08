@@ -11,6 +11,7 @@
 ```
 MODULES/DEMO/
 ├── DEMO.Module.dll             # 核心指令直譯組件 (實作 IModuleHandler)
+├── DEMO.csvi                   # 模組專屬前面板視圖 (選取 Modules Info 清單時掛載於一級 SubPanel)
 ├── Init.csvi                   # 模組初始化自解壓虛擬儀表 (System@IncludeModule 探測目標)
 ├── DRIVER/                     # 專屬硬體驅動隔離目錄
 │   └── MockDemoDriver/
@@ -19,6 +20,10 @@ MODULES/DEMO/
 └── USERPARAMETEREDITOR/        # 參數導引對話框插件
     └── DoAction.Guidance.dll   # 實作 IParameterGuidance
 ```
+
+> [!NOTE]
+> 關於模組前面板 `DEMO.csvi` 如何於「統一模組中心 (Modules Info)」中呈現，以及如何實現下轄多裝置驅動的「兩層式 SubPanel 路由」，請參閱：[12. 統一模組中心與兩層式 SubPanel 規格書](./12_UNIFIED_MODULES_INFO_SPEC.md)。
+
 
 ---
 
