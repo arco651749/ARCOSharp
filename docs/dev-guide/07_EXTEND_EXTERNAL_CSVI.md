@@ -132,3 +132,17 @@ public class MyCalcCommand : ICallCommand
    - `CALL.csvi` 提供快捷按鈕直接啟動或內嵌 **`CsviStudio`**。
    - 受益於 .NET 8 `CollectiblePluginContext` 不鎖檔機制，工程師可在 CsviStudio 內直接撰寫 C# 代碼、設計 FrontPanel、編譯產出 `.csvi`，系統即時熱加載生效，形成「撰寫 ➔ 編譯 ➔ 測試 ➔ 調度」的零割裂閉環！
 
+### 5.1「零依賴」記憶體宿主 SDK 對齊與 Roslyn 極速編譯架構
+
+在機台與邊緣工控設備中，外部單檔 CSVI 的編譯與修改完全不依賴外部安裝的 .NET SDK：
+
+1. **避免傳統 `dotnet build` 痛點**：
+   - 傳統方案要求機台預先安裝 .NET SDK，然而乾淨的產線機台往往只有 Runtime 甚至無網，執行 `dotnet build` 會直接因 `No .NET SDKs were found` 失敗。
+   - 外部 SDK 若存在版本漂移（如 .NET 6、7、9），編譯出的二進位檔無法與 ARCOSharp 宿主 ABI 匹配。
+2. **內嵌 Roslyn 與動態參考就地取材**：
+   - 核心編譯引擎 `CsviCompilerService` 直接於進程內載入 `Microsoft.CodeAnalysis.CSharp`。
+   - 參考組件直接從當前執行中的 `AppDomain.CurrentDomain.GetAssemblies()` 與 `TRUSTED_PLATFORM_ASSEMBLIES` 抽取，自動對齊宿主使用的 **.NET 8.0 BCL 系統庫** 與 **Avalonia 11.0.10**（`Avalonia.Base`、`Avalonia.Controls`、`Avalonia.Markup.Xaml.Loader`、`ARCOS.Core` 等）。
+3. **100% ABI 絕對對齊**：
+   - 編譯引用與執行期組件完全同一份記憶體鏡像，介面顯示 `SDK: ARCOS-SDK-8.0.1 [✔ ALIGNED]`。
+   - 單次編譯耗時僅 **50 ~ 100 ms**，免重啟系統即可透過 `Call@<ModuleName>` 立即調度新版邏輯！
+

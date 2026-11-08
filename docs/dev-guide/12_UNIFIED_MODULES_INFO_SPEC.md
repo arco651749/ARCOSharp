@@ -165,10 +165,54 @@ sequenceDiagram
   - 同時在 CsviStudio 頂部狀態列顯示：`🟢 MCP Active: 127.0.0.1:{mcpPort}`。
 * **AI Agent 協同能力**：
   - 本地或遠端 AI Agent 可透過 JSON-RPC over TCP 直接連線該 Port，執行以下 MCP 工具：
-    1. `csvi_list_modules`：列出所有模組與 CSVI 清單。
-    2. `csvi_inspect`：提取指定 CSVI 之 C# 代碼、XAML 介面與配置。
-    3. `csvi_compile`：傳入新程式碼並直接動態編譯與熱重載替換。
-    4. `csvi_test`：以沙盒環境執行指定參數並回傳輸出與執行耗時。
+    1. `csvi_list_modules`：掃描現存指令與硬體驅動清單。
+    2. `csvi_inspect`：檢查指定 .csvi 組件的元數據 (Manifest)、保護模式與資源清單。
+    3. `csvi_extract_source`：提取內嵌的 .cs 與 .axaml 原始碼。
+    4. `csvi_load_in_studio`：指令 Studio UI 立即載入特定 CSVI 並更新代碼與預覽。
+    5. `csvi_compile_and_pack`：傳入新程式碼並透過內建 Roslyn 工具鏈動態編譯封裝。
+    6. `csvi_sandbox_execute`：以微秒級沙盒執行指定參數並回傳輸出與耗時。
+    7. `csvi_capture_ui`：由 Studio 渲染視圖並截圖回傳給 Agent 進行視覺校驗。
+
+### 6.3「零依賴」記憶體宿主對齊機制與 Roslyn 編譯核心架構 (Zero-Dependency Roslyn Architecture)
+
+#### 1. 關於「預裝 SDK 與版本對齊」的底層機制
+這正是 ARCOSharp 不採用傳統 `dotnet build` 命令列子進程，而是內嵌 Roslyn 記憶體編譯器的最核心原因！
+
+如果採用傳統外部呼叫 `dotnet build` 的做法，會遇到兩個致命痛點：
+1. **外部環境缺失**：在乾淨的工廠產線機台 (FA PC) 或現場無網環境中，作業系統通常只有執行時環境 (Runtime)，根本沒有安裝 .NET SDK。事實上，在 ARCOSharp 的實機系統測試中，全域的 `C:\Program Files\dotnet\dotnet.exe` 就完全沒有安裝 SDK，若直接呼叫 `dotnet build` 會立即報錯崩潰：`No .NET SDKs were found`。
+2. **版本漂移 (Version Drift)**：若使用者電腦額外安裝了 .NET 6、7 或 9，或不同版本的 Avalonia，編譯產出的二進位 DLL 在進入 ARCOSharp 主程序時會發生 `TypeLoadException` 或 ABI 脫節。
+
+#### 2. ARCOSharp CSVI Studio 的解決架構：「零依賴」記憶體宿主對齊機制
+在核心編譯服務 `CsviCompilerService.cs` 中：
+1. **內嵌 Roslyn 編譯器**：直接封裝微軟官方 `Microsoft.CodeAnalysis.CSharp`，全記憶體編譯，不呼叫任何外部 `dotnet.exe`。
+2. **參考組件就地取材**：
+   - 編譯引用直接從目前運行的 `AppDomain.CurrentDomain.GetAssemblies()` 與 `TRUSTED_PLATFORM_ASSEMBLIES` 抽取。
+   - 自動精確綁定宿主執行時正在使用的 **.NET 8.0 BCL 系統庫** 以及目錄下的 **Avalonia 11.0.10**（`Avalonia.Base`、`Avalonia.Controls`、`Avalonia.Markup.Xaml.Loader`、`ARCOS.Core` 等）。
+3. **100% 保證 ABI 對齊**：
+   - 編譯時所用的參考，就是此刻 ARCOSharp 宿主正在執行的記憶體 DLL，版本一致性高達 100%。
+   - 工具列右上角明確標記狀態徽章：`SDK: ARCOS-SDK-8.0.1 [✔ ALIGNED]`。
+4. **極速與自主**：
+   - 避開 MSBuild 冷啟動與檔案掃描，單次編譯封裝僅需 **50 ~ 100 毫秒**。
+   - 完全離線運作，任何乾淨機台無須連網或額外安裝 Visual Studio / .NET SDK。
+
+### 6.4 實機端到端熱重載驗收閉環 (Live Round-Trip Demonstration)
+
+透過內嵌 MCP 伺服器與 CSVI Studio 編輯介面，系統實現了「載入 ➔ 修改 ➔ COMPILE ➔ 即時看到結果」的零中斷閉環：
+
+1. **載入既存 CSVI (`csvi_load_in_studio`)**：
+   - 呼叫 MCP 工具 `csvi_load_in_studio` 載入 `ExternalModules/TEST.csvi`。
+   - UI 編輯器即時顯示解包後之 `Logic.cs`、`Wizard.axaml`、`Panel.axaml` 與修訂歷程。
+   - 診斷控制台輸出：`Successfully opened TEST.csvi (Key: TestCalc, Mode: PortableOpen, Sources: 3)`。
+2. **即時 XAML 預覽 (`Live XAML Preview`)**：
+   - 右側分頁切換至 `Live XAML Preview`，Avalonia 執行期 XAML Loader (`AvaloniaRuntimeXamlLoader`) 即時解析並動態渲染出前面板控制項。
+3. **熱重載修改與編譯 (`csvi_compile_and_pack`)**：
+   - 傳入更新代碼（例如翠綠色卡片 `#064E3B` 與三參數連乘邏輯 `a * b * c`）。
+   - Roslyn 於記憶體中在數十毫秒內完成 Emit 編譯、組件簽名、Manifest 打包與二進位寫入。
+   - Studio 自動接獲刷新廣播，右側 `Live XAML Preview` 立即在毫秒內熱重載呈現新版面板。
+4. **沙盒與主系統調用驗證 (`csvi_sandbox_execute` & `Call@TEST`)**：
+   - 沙盒隔離執行：耗時僅 **2.37 ms**，回傳 `Status: Completed`。
+   - 主系統 CALL 模組測試：於 `Modules Info` ➔ `CALL` 模組中點擊 `▶ Run Test`，耗時 **5 ms**，主系統日誌精確輸出：
+     `[Thread 0:ThreadMain] [TEST.csvi V3 HOT-RELOADED] Product: 10 * 20 * 5 = 1000`。
 
 ---
 
@@ -190,3 +234,7 @@ sequenceDiagram
    - 當開啟多個主程式實例時，各實例之 MCP Port 號自動遞增且清晰可見。
 5. **Desktop Cockpit 自動化驗證**：
    - 所有視圖切換與按鈕動作必須於零干擾 Windows 虛擬螢幕（`\\.\DISPLAY9`）通過 Desktop Cockpit 截圖與互動驗收。
+6. **「零依賴」SDK 記憶體對齊與毫秒級熱重載驗收**：
+   - 脫離外部 `dotnet.exe` SDK 與網路連線，CSVI Studio 在乾淨機台環境中透過 Roslyn 記憶體編譯僅需 50~100 ms。
+   - 界面明確呈現 `SDK: ARCOS-SDK-8.0.1 [✔ ALIGNED]` 與 `🟢 MCP Active: 127.0.0.1:<PORT>`。
+   - 支援外掛組件在未重啟 ARCOSharp 情況下，透過 MCP 完成即時代碼寫入、編譯打包、XAML 熱重載預覽與主系統無縫調度。

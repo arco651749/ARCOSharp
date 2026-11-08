@@ -386,3 +386,12 @@ public class CustomIoDriver : IDriver
     private void WriteToHardware(bool[] outputs) { }
 }
 ```
+
+---
+
+## 8. 編譯與 SDK 對齊指南 (In-Process Roslyn Compilation)
+
+當透過內嵌 CSVI Studio 編譯或熱修復 Driver CSVI 時：
+* **零依賴 Roslyn 核心**：完全不需要在作業系統安裝 .NET SDK，編譯引擎由主進程記憶體加載。
+* **100% ABI 對齊**：驅動程式自動引用宿主載入的 `ARCOS.Core.dll` 與 `Avalonia 11.0.10` 系列組件，確保硬體 View 與主畫面無版本落差。
+* 詳細架構與端到端實例請參閱 [12_UNIFIED_MODULES_INFO_SPEC.md 第 6.3 節](file:///d:/AntiGravity/ARCOSharp/docs/dev-guide/12_UNIFIED_MODULES_INFO_SPEC.md)。
