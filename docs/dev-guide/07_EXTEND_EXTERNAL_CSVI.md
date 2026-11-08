@@ -123,11 +123,11 @@ public class MyCalcCommand : ICallCommand
 在主系統的「統一模組中心 (Modules Info)」中，所有外部單檔 CSVI 均由 **`CALL` 模組** 進行生命週期管理與監控：
 
 1. **命名正交對稱**：原 `ExternalModule` 正式統一更名為 **`CALL`**，與排程器指令前綴 `Call@` 達成 100% 領域語言對齊。
-2. **專屬前面板 `CALL.csvi`**：
-   - 點擊 `Modules Info` 中的 `CALL`，即載入 `CALL.csvi` 面板。
+2. **專屬除錯整合台與雙 UI 視圖**：
+   - 點擊 `Modules Info` 中的 `CALL`，即載入單檔外掛管理與單元除錯介面。
    - 介面自動條列 `ExternalModules/` 目錄下的所有已編譯 `.csvi` 檔案。
-   - 即時顯示各小程式的調用統計、耗時微秒（Latency）、回傳數值與最新例外。
-   - 提供互動式除錯面板（Interactive Test Harness），可手動輸入參數測試執行。
+   - **雙視圖預覽 (Dual-View)**：右側提供 `🖥️ FrontPanel (執行時前面板)` 與 `⚙️ Parameter Wizard (參數導引精靈)` 雙分頁，直接解析並即時渲染選中 CSVI 內嵌之 `Panel.axaml` 與 `Wizard.axaml`。
+   - **互動式除錯面板 (Interactive Test Harness)**：支援手動輸入參數或一鍵從導引精靈帶入參數，執行後於下方終端日誌即時輸出耗時微秒（Latency）、回傳狀態與日誌。
 3. **無縫串接 CsviStudio**：
    - `CALL.csvi` 提供快捷按鈕直接啟動或內嵌 **`CsviStudio`**。
    - 受益於 .NET 8 `CollectiblePluginContext` 不鎖檔機制，工程師可在 CsviStudio 內直接撰寫 C# 代碼、設計 FrontPanel、編譯產出 `.csvi`，系統即時熱加載生效，形成「撰寫 ➔ 編譯 ➔ 測試 ➔ 調度」的零割裂閉環！

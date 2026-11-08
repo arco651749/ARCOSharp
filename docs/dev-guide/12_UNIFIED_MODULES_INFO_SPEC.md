@@ -111,6 +111,22 @@ ARCOSharp 的核心哲學是 **「一切皆模組（Everything is a Module / CSV
 
 當腳本執行 `System@IncludeModule <ModuleName>`（如 `PYTHON`）時，清單即時動態追加新項目。
 
+### 4.3 CALL 模組雙 UI 視圖與整合除錯台規範 (CALL Module Dual-View & Test Harness)
+CALL 模組不僅是外部 CSVI 小程式的調度宿主，更是工程師除錯單檔外掛的**一站式單元測試台 (Runtime Integration Testbench)**。為徹底杜絕傳統僅依靠黑漆漆終端印出日誌的「盲測」弊端，CALL 模組右側全面支援 CSVI「三位一體」架構中的雙重 UI 即時呈現：
+
+1. **中欄 (Middle Column) 外掛清單**：
+   - 條列 `ExternalModules/*.csvi` 所有已編譯組件。
+   - 具備 `Refresh CSVI List` 與快捷跳轉 `🛠 Open CsviStudio` 編輯器按鈕。
+2. **右欄頂部 (Top Test Bar) 互動測試工具列**：
+   - 即時狀態列：`SELECTED CALL CSVI`、`LAST EXEC DURATION`、`STATUS / RETURN`。
+   - 輸入測試參數 (`TxtCallTestArgs`)、執行模式 (`Debug` / `Runtime &` / `Reentrant &&`)、`▶ Run Test` 執行按鈕。
+   - 增加 `📋 帶入導引參數 (Apply From Wizard)` 按鈕，一鍵讀取導引精靈中的輸入設定並填入測試列。
+3. **右欄核心：雙視圖分頁容器 (`TabCallViews`)**：
+   - **`🖥️ FrontPanel (執行時前面板)`**：掛載選中 CSVI 之 `Panel.axaml` 或 `GetFrontPanelControl()`。即時呈現該小程式的運行期視覺回饋（如檢測指示燈、波形圖表、演算法結果卡片）。
+   - **`⚙️ Parameter Wizard (參數導引精靈)`**：掛載選中 CSVI 之 `Wizard.axaml`。在不進入排程器腳本編輯器的情況下，直接呈現該指令的參數配置介面，供工程師驗證精靈版面與點選配置。
+4. **右欄底部：終端日誌 (Execution Console Log)**：
+   - 緊湊暗色終端（高度約 130px），在不遮蔽上方 FrontPanel 與 Wizard 的前提下，即時輸出調用時間戳、耗時微秒、回傳狀態與日誌。工程師點擊 `▶ Run Test` 時可「眼觀 FrontPanel 視覺動態，耳聽 Console 狀態回傳」，達成真正零割裂的除錯體驗。
+
 ---
 
 ## 5. 兩層式 SubPanel 階層化調度機制 (Two-Tier SubPanel Routing)
