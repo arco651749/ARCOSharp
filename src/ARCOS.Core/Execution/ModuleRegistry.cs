@@ -10,11 +10,23 @@ public sealed class ModuleRegistry
 {
     private readonly Dictionary<string, IModuleHandler> _handlers = new(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// 當有新模組被註冊或動態加載時觸發 (提供模組名稱供 UI 即時更新)
+    /// </summary>
+    public event Action<string>? ModuleRegistered;
+
     public void RegisterHandler(IModuleHandler handler)
     {
         ArgumentNullException.ThrowIfNull(handler);
         _handlers[handler.ModuleName] = handler;
+        ModuleRegistered?.Invoke(handler.ModuleName);
     }
+
+    /// <summary>
+    /// 取得目前所有已載入之模組名稱清單
+    /// </summary>
+    public IReadOnlyList<string> GetLoadedModules() => _handlers.Keys.ToList();
+
 
     /// <summary>
     /// 動態掃描 MODULES 與 EXTRACMD 目錄，加載所有外部指令模組 (如 MODULES/IO/IO.dll, EXTRACMD/LaserMarking/LaserMarking.dll 等)

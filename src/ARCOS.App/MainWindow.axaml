@@ -1277,381 +1277,75 @@
 
             <!-- ========================================================= -->
 
-            <!-- 4. Point&Path (空間點位、6 軸 DRO 與軌跡陣列) -->
-
             <!-- ========================================================= -->
-
-            <TabItem Header="Point&amp;Path">
-
-                <Grid Margin="12" RowDefinitions="Auto,*">
-
-                    <!-- 頂部工具列 -->
-
-                    <Border Grid.Row="0" Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="6" Padding="10,6" Margin="0,0,0,10">
-
-                        <Grid ColumnDefinitions="Auto,*,Auto">
-
-                            <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-
-                                <Button x:Name="BtnRefreshPoints" Height="28" Padding="10,0" Background="#0284C7" Foreground="White" FontWeight="Bold" FontSize="11" CornerRadius="4">
-
-
-
-                                    <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-
-
-
-                                        <Path Data="{StaticResource IconRefresh}" Fill="White" Width="12" Height="12" Stretch="Uniform"/>
-
-
-
-                                        <TextBlock Text="Refresh Points" FontSize="11" FontWeight="Bold" Foreground="White" VerticalAlignment="Center"/>
-
-
-
-                                    </StackPanel>
-
-
-
-                                </Button>
-
-                                <TextBlock x:Name="TxtPointSummary" Text="Total Points: 0" VerticalAlignment="Center" FontWeight="Bold" FontSize="12" Foreground="#475569" Margin="8,0"/>
-
+            <!-- 4. Modules Info (統一模組中心與兩層式 SubPanel 路由) -->
+            <!-- ========================================================= -->
+            <TabItem Header="Modules Info">
+                <Grid ColumnDefinitions="230,*" Margin="6">
+                    <!-- 左側：已載入模組清單 (Loaded Modules List) -->
+                    <Border Grid.Column="0" Background="#FFFFFF" BorderBrush="#CBD5E1" BorderThickness="1" CornerRadius="6" Margin="0,0,6,0" Padding="8">
+                        <Grid RowDefinitions="Auto,*">
+                            <StackPanel Grid.Row="0" Margin="0,0,0,8">
+                                <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                    <Path Data="{StaticResource IconGrid}" Fill="#0284C7" Width="13" Height="13" Stretch="Uniform"/>
+                                    <TextBlock Text="LOADED MODULES" FontSize="12" FontWeight="Black" Foreground="#0F172A"/>
+                                </StackPanel>
+                                <TextBlock Text="System@IncludeModule 模組清單" FontSize="10" Foreground="#64748B" Margin="0,2,0,0"/>
                             </StackPanel>
-
-                            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8">
-
-                                <Button x:Name="BtnSavePoints" Height="28" Padding="10,0" Background="#059669" Foreground="White" FontWeight="Bold" FontSize="11" CornerRadius="4" ToolTip.Tip="儲存點位至 POINT&amp;PATH/Points.ini">
-
-
-
-                                    <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-
-
-
-                                        <Path Data="{StaticResource IconFloppySave}" Fill="White" Width="12" Height="12" Stretch="Uniform"/>
-
-
-
-                                        <TextBlock Text="Save (POINT&amp;PATH)" FontSize="11" FontWeight="Bold" Foreground="White" VerticalAlignment="Center"/>
-
-
-
-                                    </StackPanel>
-
-
-
-                                </Button>
-
-                                <Button x:Name="BtnLoadPoints" Height="28" Padding="10,0" Background="#0284C7" Foreground="White" FontWeight="Bold" FontSize="11" CornerRadius="4" ToolTip.Tip="從 POINT&amp;PATH/ 載入點位">
-
-
-
-                                    <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-
-
-
-                                        <Path Data="{StaticResource IconFolderOpen}" Fill="White" Width="12" Height="12" Stretch="Uniform"/>
-
-
-
-                                        <TextBlock Text="Load (POINT&amp;PATH)" FontSize="11" FontWeight="Bold" Foreground="White" VerticalAlignment="Center"/>
-
-
-
-                                    </StackPanel>
-
-
-
-                                </Button>
-
-                            </StackPanel>
-
+                            <ListBox x:Name="LstLoadedModules" Grid.Row="1" Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="4">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <Grid ColumnDefinitions="Auto,*,Auto" Margin="2,4">
+                                            <Ellipse Width="8" Height="8" Fill="#10B981" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                                            <TextBlock Grid.Column="1" Text="{Binding Name}" FontWeight="Bold" FontSize="12" Foreground="#0F172A" VerticalAlignment="Center"/>
+                                            <Border Grid.Column="2" Background="{Binding BadgeBackground}" CornerRadius="3" Padding="4,1" VerticalAlignment="Center">
+                                                <TextBlock Text="{Binding BadgeText}" FontSize="8.5" FontWeight="Bold" Foreground="White"/>
+                                            </Border>
+                                        </Grid>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
                         </Grid>
-
                     </Border>
 
-
-
-                    <Grid Grid.Row="1" ColumnDefinitions="260,*,320">
-
-                        <!-- 第 1 欄：點位清單 -->
-
-                        <Border Grid.Column="0" Background="White" BorderBrush="#CBD5E1" BorderThickness="1" CornerRadius="6" Padding="8" Margin="0,0,8,0">
-
-                            <Grid RowDefinitions="Auto,*">
-
-                                <TextBlock Grid.Row="0" Text="Point Keys (PointEngine):" FontWeight="Bold" FontSize="12" Foreground="#334155" Margin="0,0,0,6"/>
-
-                                <ListBox x:Name="LstPoints" Grid.Row="1" Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="4"/>
-
-                            </Grid>
-
-                        </Border>
-
-
-
-                        <!-- 第 2 欄：所有點位 DataGrid 表格總覽 -->
-
-                        <Border Grid.Column="1" Background="White" BorderBrush="#CBD5E1" BorderThickness="1" CornerRadius="6" Padding="8" Margin="0,0,8,0">
-
-                            <Grid RowDefinitions="Auto,*">
-
-                                <TextBlock Grid.Row="0" Text="Points Table (Overview):" FontWeight="Bold" FontSize="12" Foreground="#334155" Margin="0,0,0,6"/>
-
-                                <DataGrid x:Name="GridPoints" Grid.Row="1" Background="White" AutoGenerateColumns="False" 
-
-                                          CanUserResizeColumns="True" HeadersVisibility="Column" GridLinesVisibility="All"
-
-                                          HorizontalGridLinesBrush="#E2E8F0" VerticalGridLinesBrush="#E2E8F0" RowHeight="24">
-
-                                    <DataGrid.Columns>
-
-                                        <DataGridTextColumn Header="Point Name" Binding="{Binding Name}" Width="120"/>
-
-                                        <DataGridTextColumn Header="X (mm)" Binding="{Binding X}" Width="75"/>
-
-                                        <DataGridTextColumn Header="Y (mm)" Binding="{Binding Y}" Width="75"/>
-
-                                        <DataGridTextColumn Header="Z (mm)" Binding="{Binding Z}" Width="75"/>
-
-                                        <DataGridTextColumn Header="U (deg)" Binding="{Binding U}" Width="75"/>
-
-                                        <DataGridTextColumn Header="V (deg)" Binding="{Binding V}" Width="75"/>
-
-                                        <DataGridTextColumn Header="W (deg)" Binding="{Binding W}" Width="75"/>
-
-                                    </DataGrid.Columns>
-
-                                </DataGrid>
-
-                            </Grid>
-
-                        </Border>
-
-
-
-                        <!-- 第 3 欄：所選點位 6 軸 DRO 座標卡片與微調 -->
-
-                        <Border Grid.Column="2" Background="White" BorderBrush="#CBD5E1" BorderThickness="1" CornerRadius="6" Padding="12">
-
-                            <StackPanel Spacing="10">
-
-                                <TextBlock Text="Selected Point DRO &amp; Editor" FontWeight="Bold" FontSize="13" Foreground="#0F172A"/>
-
-                                <Border Background="#F1F5F9" BorderBrush="#CBD5E1" BorderThickness="1" CornerRadius="4" Padding="8,4">
-
-                                    <StackPanel Orientation="Horizontal" Spacing="6">
-
-                                        <TextBlock Text="Target Key:" FontWeight="SemiBold" FontSize="11" Foreground="#475569" VerticalAlignment="Center"/>
-
-                                        <TextBox x:Name="TxtPointEditKey" Width="180" Height="26" FontSize="11" FontWeight="Bold" Foreground="#0284C7"/>
-
-                                    </StackPanel>
-
+                    <!-- 右側統一 SubPanel (一級模組面板容器) -->
+                    <Border Grid.Column="1" Background="#FFFFFF" BorderBrush="#CBD5E1" BorderThickness="1" CornerRadius="6" Padding="6">
+                        <Grid x:Name="ModulesSubPanelHost">
+                            <!-- 1. SYSTEM 面板 -->
+                            <Grid x:Name="PnlModuleSystem" RowDefinitions="Auto,*" Margin="6" IsVisible="True">
+                                <Border Grid.Row="0" Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="6" Padding="12,8" Margin="0,0,0,8">
+                                    <Grid ColumnDefinitions="*,Auto,Auto,Auto">
+                                        <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                                <TextBlock Text="SYSTEM MODULE (CORE)" FontWeight="Black" FontSize="14" Foreground="#0F172A"/>
+                                                <Border Background="#10B981" CornerRadius="3" Padding="6,1">
+                                                    <TextBlock Text="ONLINE / HEALTHY" FontSize="9" FontWeight="Bold" Foreground="White"/>
+                                                </Border>
+                                            </StackPanel>
+                                            <TextBlock Text="系統執行日誌、Cycle Time、執行緒調度與健康監控" FontSize="11" Foreground="#64748B" Margin="0,2,0,0"/>
+                                        </StackPanel>
+                                        <Border Grid.Column="1" Background="White" BorderBrush="#CBD5E1" BorderThickness="1" Padding="12,4" Margin="6,0" CornerRadius="4">
+                                            <StackPanel>
+                                                <TextBlock Text="RUN STATE" FontSize="9.5" FontWeight="SemiBold" Foreground="#64748B" HorizontalAlignment="Center"/>
+                                                <TextBlock x:Name="TxtSystemRunState" Text="IDLE" FontSize="14" FontWeight="Black" Foreground="#0284C7" HorizontalAlignment="Center"/>
+                                            </StackPanel>
+                                        </Border>
+                                        <Border Grid.Column="2" Background="White" BorderBrush="#CBD5E1" BorderThickness="1" Padding="12,4" Margin="6,0" CornerRadius="4">
+                                            <StackPanel>
+                                                <TextBlock Text="CYCLE TIME" FontSize="9.5" FontWeight="SemiBold" Foreground="#64748B" HorizontalAlignment="Center"/>
+                                                <TextBlock x:Name="TxtSystemCycleTime" Text="0.00 s" FontSize="14" FontWeight="Black" Foreground="#F59E0B" HorizontalAlignment="Center"/>
+                                            </StackPanel>
+                                        </Border>
+                                        <Button x:Name="BtnClearSystemLog" Grid.Column="3" Content="Clear Log" Height="28" Padding="10,0" Margin="6,0,0,0" Background="#F1F5F9" Foreground="#475569" FontSize="11" FontWeight="SemiBold" CornerRadius="4"/>
+                                    </Grid>
                                 </Border>
-
-
-
-                                <!-- 6 軸座標輸入/顯示盒 -->
-
-                                <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto,Auto" Margin="0,4">
-
-                                    <Border Grid.Row="0" Grid.Column="0" Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="1" Margin="2" Padding="6,4" CornerRadius="4">
-
-                                        <StackPanel>
-
-                                            <TextBlock Text="X AXIS" FontSize="9.5" FontWeight="Bold" Foreground="#0284C7"/>
-
-                                            <TextBox x:Name="TxtPointX" Text="0.000" FontSize="13" FontWeight="Black" Height="26" Padding="2,0"/>
-
-                                        </StackPanel>
-
-                                    </Border>
-
-                                    <Border Grid.Row="0" Grid.Column="1" Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="1" Margin="2" Padding="6,4" CornerRadius="4">
-
-                                        <StackPanel>
-
-                                            <TextBlock Text="Y AXIS" FontSize="9.5" FontWeight="Bold" Foreground="#0284C7"/>
-
-                                            <TextBox x:Name="TxtPointY" Text="0.000" FontSize="13" FontWeight="Black" Height="26" Padding="2,0"/>
-
-                                        </StackPanel>
-
-                                    </Border>
-
-                                    <Border Grid.Row="1" Grid.Column="0" Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="1" Margin="2" Padding="6,4" CornerRadius="4">
-
-                                        <StackPanel>
-
-                                            <TextBlock Text="Z AXIS" FontSize="9.5" FontWeight="Bold" Foreground="#10B981"/>
-
-                                            <TextBox x:Name="TxtPointZ" Text="0.000" FontSize="13" FontWeight="Black" Height="26" Padding="2,0"/>
-
-                                        </StackPanel>
-
-                                    </Border>
-
-                                    <Border Grid.Row="1" Grid.Column="1" Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="1" Margin="2" Padding="6,4" CornerRadius="4">
-
-                                        <StackPanel>
-
-                                            <TextBlock Text="U (Rz)" FontSize="9.5" FontWeight="Bold" Foreground="#7C3AED"/>
-
-                                            <TextBox x:Name="TxtPointU" Text="0.000" FontSize="13" FontWeight="Black" Height="26" Padding="2,0"/>
-
-                                        </StackPanel>
-
-                                    </Border>
-
-                                    <Border Grid.Row="2" Grid.Column="0" Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="1" Margin="2" Padding="6,4" CornerRadius="4">
-
-                                        <StackPanel>
-
-                                            <TextBlock Text="V (Ry)" FontSize="9.5" FontWeight="Bold" Foreground="#D97706"/>
-
-                                            <TextBox x:Name="TxtPointV" Text="0.000" FontSize="13" FontWeight="Black" Height="26" Padding="2,0"/>
-
-                                        </StackPanel>
-
-                                    </Border>
-
-                                    <Border Grid.Row="2" Grid.Column="1" Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="1" Margin="2" Padding="6,4" CornerRadius="4">
-
-                                        <StackPanel>
-
-                                            <TextBlock Text="W (Rx)" FontSize="9.5" FontWeight="Bold" Foreground="#D97706"/>
-
-                                            <TextBox x:Name="TxtPointW" Text="0.000" FontSize="13" FontWeight="Black" Height="26" Padding="2,0"/>
-
-                                        </StackPanel>
-
-                                    </Border>
-
-                                </Grid>
-
-
-
-                                <Button x:Name="BtnApplyPointEdit" Content="Apply / Set Point" Height="30" Background="#0284C7" Foreground="White" FontWeight="Bold" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" CornerRadius="4"/>
-
-                            </StackPanel>
-
-                        </Border>
-
-                    </Grid>
-
-                </Grid>
-
-            </TabItem>
-
-
-
-            <!-- ========================================================= -->
-
-            <!-- 5. Modules Info (模組硬體前面板容器與日誌) -->
-
-            <!-- ========================================================= -->
-
-            <TabItem Header="Modules Info">
-
-                <TabControl Margin="10">
-
-                    <TabControl.Styles>
-
-                        <Style Selector="TabItem">
-
-                            <Setter Property="Width" Value="125"/>
-
-                            <Setter Property="Height" Value="28"/>
-
-                            <Setter Property="HorizontalContentAlignment" Value="Center"/>
-
-                            <Setter Property="VerticalContentAlignment" Value="Center"/>
-
-                            <Setter Property="FontSize" Value="12"/>
-
-                            <Setter Property="FontWeight" Value="SemiBold"/>
-
-                        </Style>
-
-                    </TabControl.Styles>
-
-                    <TabItem Header="System">
-
-                        <Grid ColumnDefinitions="*,*">
-
-                            <TextBox Margin="5" AcceptsReturn="True" IsReadOnly="True"/>
-
-                            <ListBox Grid.Column="1" Margin="5" Background="White"/>
-
-                        </Grid>
-
-                    </TabItem>
-
-                    <TabItem Header="IO">
-
-                        <Grid ColumnDefinitions="240,*">
-
-                            <Border Background="White" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="4" Margin="5" Padding="8">
-
-                                <Grid RowDefinitions="Auto,*">
-
-                                    <TextBlock Grid.Row="0" Text="Discovered Drivers (*.csvi):" FontWeight="Bold" FontSize="12" Foreground="#334155" Margin="0,0,0,6"/>
-
-                                    <ListBox x:Name="LstIoDrivers" Grid.Row="1" Background="#F8FAFC" BorderBrush="#CBD5E1" BorderThickness="1" CornerRadius="4"/>
-
-                                </Grid>
-
-                            </Border>
-
-                            <ContentControl x:Name="DriverViewContainer" Grid.Column="1" Margin="5" Background="White"/>
-
-                        </Grid>
-
-                    </TabItem>
-
-                    <TabItem Header="Motion">
-
-                        <TextBlock Text="Motion Modules Info &amp; Driver FrontPanel" Margin="15"/>
-
-                    </TabItem>
-
-                    <TabItem Header="DAQ">
-
-                        <TextBlock Text="DAQ Modules Info &amp; Channels" Margin="15"/>
-
-                    </TabItem>
-
-                    <TabItem Header="MultiStation">
-
-                        <TextBlock Text="MultiStation Carousel &amp; Index Table status" Margin="15"/>
-
-                    </TabItem>
-
-                    <TabItem Header="ExternalModule">
-
-                        <TextBlock Text="Redis, Python, AIAgent External Modules" Margin="15"/>
-
-                    </TabItem>
-
-                </TabControl>
-
-            </TabItem>
-
-
-
-            <!-- ========================================================= -->
-
-            <!-- 6. Threads (13 主執行緒並行 PC 矩陣 + SubThread 動態池) -->
-
-            <!-- Manager (Thread Main) 常駐左側，Worker 與 SubThread 分頁切換於右側 -->
-
-            <!-- ========================================================= -->
-
-            <TabItem Header="Threads">
-
-                <Grid ColumnDefinitions="320,*" Margin="6">
+                                <Border Grid.Row="1" Background="#0F172A" BorderBrush="#334155" BorderThickness="1" CornerRadius="6" Padding="8">
+                                    <TextBox x:Name="TxtSystemLogs" AcceptsReturn="True" IsReadOnly="True" Background="Transparent" Foreground="#F8FAFC" FontFamily="Consolas" FontSize="11" BorderThickness="0"/>
+                                </Border>
+                            </Grid>
+
+                            <!-- 2. THREAD 面板 (原 Threads Tab 內容) -->
+                            <Grid x:Name="PnlModuleThread" ColumnDefinitions="320,*" Margin="6" IsVisible="False">
 
                     <!-- ===================================================== -->
 
@@ -1969,21 +1663,10 @@
 
                     </TabControl>
 
-                </Grid>
+                            </Grid>
 
-            </TabItem>
-
-
-
-            <!-- ========================================================= -->
-
-            <!-- 7. Parameter&Variable (變數與配方即時檢視) -->
-
-            <!-- ========================================================= -->
-
-            <TabItem Header="Parameter&amp;Variable">
-
-                <Grid Margin="12" RowDefinitions="Auto,*">
+                            <!-- 3. VARIABLE 面板 (原 Parameter&Variable Tab 內容) -->
+                            <Grid x:Name="PnlModuleVariable" Margin="6" RowDefinitions="Auto,*" IsVisible="False">
 
                     <!-- 頂部工具列 -->
 
@@ -2215,13 +1898,344 @@
 
                     </Grid>
 
+                            </Grid>
+
+                            <!-- 4. POINT&PATH 面板 (原 Point&Path Tab 內容) -->
+                            <Grid x:Name="PnlModulePointPath" Margin="6" RowDefinitions="Auto,*" IsVisible="False">
+
+                    <!-- 頂部工具列 -->
+
+                    <Border Grid.Row="0" Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="6" Padding="10,6" Margin="0,0,0,10">
+
+                        <Grid ColumnDefinitions="Auto,*,Auto">
+
+                            <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+
+                                <Button x:Name="BtnRefreshPoints" Height="28" Padding="10,0" Background="#0284C7" Foreground="White" FontWeight="Bold" FontSize="11" CornerRadius="4">
+
+
+
+                                    <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+
+
+
+                                        <Path Data="{StaticResource IconRefresh}" Fill="White" Width="12" Height="12" Stretch="Uniform"/>
+
+
+
+                                        <TextBlock Text="Refresh Points" FontSize="11" FontWeight="Bold" Foreground="White" VerticalAlignment="Center"/>
+
+
+
+                                    </StackPanel>
+
+
+
+                                </Button>
+
+                                <TextBlock x:Name="TxtPointSummary" Text="Total Points: 0" VerticalAlignment="Center" FontWeight="Bold" FontSize="12" Foreground="#475569" Margin="8,0"/>
+
+                            </StackPanel>
+
+                            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8">
+
+                                <Button x:Name="BtnSavePoints" Height="28" Padding="10,0" Background="#059669" Foreground="White" FontWeight="Bold" FontSize="11" CornerRadius="4" ToolTip.Tip="儲存點位至 POINT&amp;PATH/Points.ini">
+
+
+
+                                    <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+
+
+
+                                        <Path Data="{StaticResource IconFloppySave}" Fill="White" Width="12" Height="12" Stretch="Uniform"/>
+
+
+
+                                        <TextBlock Text="Save (POINT&amp;PATH)" FontSize="11" FontWeight="Bold" Foreground="White" VerticalAlignment="Center"/>
+
+
+
+                                    </StackPanel>
+
+
+
+                                </Button>
+
+                                <Button x:Name="BtnLoadPoints" Height="28" Padding="10,0" Background="#0284C7" Foreground="White" FontWeight="Bold" FontSize="11" CornerRadius="4" ToolTip.Tip="從 POINT&amp;PATH/ 載入點位">
+
+
+
+                                    <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+
+
+
+                                        <Path Data="{StaticResource IconFolderOpen}" Fill="White" Width="12" Height="12" Stretch="Uniform"/>
+
+
+
+                                        <TextBlock Text="Load (POINT&amp;PATH)" FontSize="11" FontWeight="Bold" Foreground="White" VerticalAlignment="Center"/>
+
+
+
+                                    </StackPanel>
+
+
+
+                                </Button>
+
+                            </StackPanel>
+
+                        </Grid>
+
+                    </Border>
+
+
+
+                    <Grid Grid.Row="1" ColumnDefinitions="260,*,320">
+
+                        <!-- 第 1 欄：點位清單 -->
+
+                        <Border Grid.Column="0" Background="White" BorderBrush="#CBD5E1" BorderThickness="1" CornerRadius="6" Padding="8" Margin="0,0,8,0">
+
+                            <Grid RowDefinitions="Auto,*">
+
+                                <TextBlock Grid.Row="0" Text="Point Keys (PointEngine):" FontWeight="Bold" FontSize="12" Foreground="#334155" Margin="0,0,0,6"/>
+
+                                <ListBox x:Name="LstPoints" Grid.Row="1" Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="4"/>
+
+                            </Grid>
+
+                        </Border>
+
+
+
+                        <!-- 第 2 欄：所有點位 DataGrid 表格總覽 -->
+
+                        <Border Grid.Column="1" Background="White" BorderBrush="#CBD5E1" BorderThickness="1" CornerRadius="6" Padding="8" Margin="0,0,8,0">
+
+                            <Grid RowDefinitions="Auto,*">
+
+                                <TextBlock Grid.Row="0" Text="Points Table (Overview):" FontWeight="Bold" FontSize="12" Foreground="#334155" Margin="0,0,0,6"/>
+
+                                <DataGrid x:Name="GridPoints" Grid.Row="1" Background="White" AutoGenerateColumns="False" 
+
+                                          CanUserResizeColumns="True" HeadersVisibility="Column" GridLinesVisibility="All"
+
+                                          HorizontalGridLinesBrush="#E2E8F0" VerticalGridLinesBrush="#E2E8F0" RowHeight="24">
+
+                                    <DataGrid.Columns>
+
+                                        <DataGridTextColumn Header="Point Name" Binding="{Binding Name}" Width="120"/>
+
+                                        <DataGridTextColumn Header="X (mm)" Binding="{Binding X}" Width="75"/>
+
+                                        <DataGridTextColumn Header="Y (mm)" Binding="{Binding Y}" Width="75"/>
+
+                                        <DataGridTextColumn Header="Z (mm)" Binding="{Binding Z}" Width="75"/>
+
+                                        <DataGridTextColumn Header="U (deg)" Binding="{Binding U}" Width="75"/>
+
+                                        <DataGridTextColumn Header="V (deg)" Binding="{Binding V}" Width="75"/>
+
+                                        <DataGridTextColumn Header="W (deg)" Binding="{Binding W}" Width="75"/>
+
+                                    </DataGrid.Columns>
+
+                                </DataGrid>
+
+                            </Grid>
+
+                        </Border>
+
+
+
+                        <!-- 第 3 欄：所選點位 6 軸 DRO 座標卡片與微調 -->
+
+                        <Border Grid.Column="2" Background="White" BorderBrush="#CBD5E1" BorderThickness="1" CornerRadius="6" Padding="12">
+
+                            <StackPanel Spacing="10">
+
+                                <TextBlock Text="Selected Point DRO &amp; Editor" FontWeight="Bold" FontSize="13" Foreground="#0F172A"/>
+
+                                <Border Background="#F1F5F9" BorderBrush="#CBD5E1" BorderThickness="1" CornerRadius="4" Padding="8,4">
+
+                                    <StackPanel Orientation="Horizontal" Spacing="6">
+
+                                        <TextBlock Text="Target Key:" FontWeight="SemiBold" FontSize="11" Foreground="#475569" VerticalAlignment="Center"/>
+
+                                        <TextBox x:Name="TxtPointEditKey" Width="180" Height="26" FontSize="11" FontWeight="Bold" Foreground="#0284C7"/>
+
+                                    </StackPanel>
+
+                                </Border>
+
+
+
+                                <!-- 6 軸座標輸入/顯示盒 -->
+
+                                <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto,Auto" Margin="0,4">
+
+                                    <Border Grid.Row="0" Grid.Column="0" Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="1" Margin="2" Padding="6,4" CornerRadius="4">
+
+                                        <StackPanel>
+
+                                            <TextBlock Text="X AXIS" FontSize="9.5" FontWeight="Bold" Foreground="#0284C7"/>
+
+                                            <TextBox x:Name="TxtPointX" Text="0.000" FontSize="13" FontWeight="Black" Height="26" Padding="2,0"/>
+
+                                        </StackPanel>
+
+                                    </Border>
+
+                                    <Border Grid.Row="0" Grid.Column="1" Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="1" Margin="2" Padding="6,4" CornerRadius="4">
+
+                                        <StackPanel>
+
+                                            <TextBlock Text="Y AXIS" FontSize="9.5" FontWeight="Bold" Foreground="#0284C7"/>
+
+                                            <TextBox x:Name="TxtPointY" Text="0.000" FontSize="13" FontWeight="Black" Height="26" Padding="2,0"/>
+
+                                        </StackPanel>
+
+                                    </Border>
+
+                                    <Border Grid.Row="1" Grid.Column="0" Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="1" Margin="2" Padding="6,4" CornerRadius="4">
+
+                                        <StackPanel>
+
+                                            <TextBlock Text="Z AXIS" FontSize="9.5" FontWeight="Bold" Foreground="#10B981"/>
+
+                                            <TextBox x:Name="TxtPointZ" Text="0.000" FontSize="13" FontWeight="Black" Height="26" Padding="2,0"/>
+
+                                        </StackPanel>
+
+                                    </Border>
+
+                                    <Border Grid.Row="1" Grid.Column="1" Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="1" Margin="2" Padding="6,4" CornerRadius="4">
+
+                                        <StackPanel>
+
+                                            <TextBlock Text="U (Rz)" FontSize="9.5" FontWeight="Bold" Foreground="#7C3AED"/>
+
+                                            <TextBox x:Name="TxtPointU" Text="0.000" FontSize="13" FontWeight="Black" Height="26" Padding="2,0"/>
+
+                                        </StackPanel>
+
+                                    </Border>
+
+                                    <Border Grid.Row="2" Grid.Column="0" Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="1" Margin="2" Padding="6,4" CornerRadius="4">
+
+                                        <StackPanel>
+
+                                            <TextBlock Text="V (Ry)" FontSize="9.5" FontWeight="Bold" Foreground="#D97706"/>
+
+                                            <TextBox x:Name="TxtPointV" Text="0.000" FontSize="13" FontWeight="Black" Height="26" Padding="2,0"/>
+
+                                        </StackPanel>
+
+                                    </Border>
+
+                                    <Border Grid.Row="2" Grid.Column="1" Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="1" Margin="2" Padding="6,4" CornerRadius="4">
+
+                                        <StackPanel>
+
+                                            <TextBlock Text="W (Rx)" FontSize="9.5" FontWeight="Bold" Foreground="#D97706"/>
+
+                                            <TextBox x:Name="TxtPointW" Text="0.000" FontSize="13" FontWeight="Black" Height="26" Padding="2,0"/>
+
+                                        </StackPanel>
+
+                                    </Border>
+
+                                </Grid>
+
+
+
+                                <Button x:Name="BtnApplyPointEdit" Content="Apply / Set Point" Height="30" Background="#0284C7" Foreground="White" FontWeight="Bold" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" CornerRadius="4"/>
+
+                            </StackPanel>
+
+                        </Border>
+
+                    </Grid>
+
+                            </Grid>
+
+                            <!-- 5. CALL 面板 (外部單檔 CSVI 管理與 CsviStudio 整合) -->
+                            <Grid x:Name="PnlModuleCall" ColumnDefinitions="260,*" Margin="6" IsVisible="False">
+                                <Border Grid.Column="0" Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="6" Margin="0,0,6,0" Padding="10">
+                                    <Grid RowDefinitions="Auto,*,Auto">
+                                        <StackPanel Grid.Row="0" Margin="0,0,0,8">
+                                            <TextBlock Text="STANDALONE CSVI" FontSize="12" FontWeight="Black" Foreground="#0F172A"/>
+                                            <TextBlock Text="ExternalModules/*.csvi (Call@)" FontSize="10" Foreground="#64748B" Margin="0,2,0,0"/>
+                                        </StackPanel>
+                                        <ListBox x:Name="LstCallFiles" Grid.Row="1" Background="White" BorderBrush="#CBD5E1" BorderThickness="1" CornerRadius="4"/>
+                                        <StackPanel Grid.Row="2" Spacing="6" Margin="0,8,0,0">
+                                            <Button x:Name="BtnRefreshCallFiles" Content="Refresh CSVI List" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" Height="28" Background="#0284C7" Foreground="White" FontWeight="Bold" FontSize="11" CornerRadius="4"/>
+                                            <Button x:Name="BtnOpenCsviStudio" Content="🛠 Open CsviStudio" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" Height="30" Background="#059669" Foreground="White" FontWeight="Bold" FontSize="11.5" CornerRadius="4"/>
+                                        </StackPanel>
+                                    </Grid>
+                                </Border>
+                                <Grid Grid.Column="1" RowDefinitions="Auto,*" Margin="0">
+                                    <Border Grid.Row="0" Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="6" Padding="12,10" Margin="0,0,0,8">
+                                        <Grid ColumnDefinitions="*,*,*">
+                                            <StackPanel Grid.Column="0">
+                                                <TextBlock Text="SELECTED CALL CSVI" FontSize="9.5" FontWeight="SemiBold" Foreground="#64748B"/>
+                                                <TextBlock x:Name="TxtCallSelectedFile" Text="None" FontSize="13" FontWeight="Bold" Foreground="#0F172A"/>
+                                            </StackPanel>
+                                            <StackPanel Grid.Column="1">
+                                                <TextBlock Text="LAST EXEC DURATION" FontSize="9.5" FontWeight="SemiBold" Foreground="#64748B"/>
+                                                <TextBlock x:Name="TxtCallDuration" Text="-- ms" FontSize="13" FontWeight="Bold" Foreground="#10B981" FontFamily="Consolas"/>
+                                            </StackPanel>
+                                            <StackPanel Grid.Column="2">
+                                                <TextBlock Text="STATUS / RETURN" FontSize="9.5" FontWeight="SemiBold" Foreground="#64748B"/>
+                                                <TextBlock x:Name="TxtCallStatus" Text="IDLE" FontSize="13" FontWeight="Bold" Foreground="#F59E0B" FontFamily="Consolas"/>
+                                            </StackPanel>
+                                        </Grid>
+                                    </Border>
+                                    <Border Grid.Row="1" Background="White" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="6" Padding="12">
+                                        <Grid RowDefinitions="Auto,Auto,Auto,*">
+                                            <TextBlock Grid.Row="0" Text="INTERACTIVE TEST HARNESS (互動式單元測試)" FontWeight="Bold" FontSize="12" Foreground="#334155" Margin="0,0,0,8"/>
+                                            <Grid Grid.Row="1" ColumnDefinitions="*,130,Auto" Margin="0,0,0,8">
+                                                <TextBox x:Name="TxtCallTestArgs" Watermark="輸入測試參數 (如: 10,20)" Height="28" FontSize="11" Margin="0,0,6,0"/>
+                                                <ComboBox x:Name="CmbCallTestMode" Grid.Column="1" Height="28" FontSize="11" Margin="0,0,6,0">
+                                                    <ComboBoxItem Content="Debug" IsSelected="True"/>
+                                                    <ComboBoxItem Content="Runtime &amp;"/>
+                                                    <ComboBoxItem Content="Reentrant &amp;&amp;"/>
+                                                </ComboBox>
+                                                <Button x:Name="BtnCallRunTest" Grid.Column="2" Content="▶ Run Test" Height="28" Padding="12,0" Background="#0284C7" Foreground="White" FontWeight="Bold" FontSize="11" CornerRadius="4"/>
+                                            </Grid>
+                                            <TextBlock Grid.Row="2" Text="EXECUTION LOG / OUTPUT:" FontSize="10" FontWeight="SemiBold" Foreground="#64748B" Margin="0,0,0,4"/>
+                                            <Border Grid.Row="3" Background="#0F172A" BorderBrush="#334155" BorderThickness="1" CornerRadius="4" Padding="6">
+                                                <TextBox x:Name="TxtCallTestOutput" AcceptsReturn="True" IsReadOnly="True" Background="Transparent" Foreground="#38BDF8" FontFamily="Consolas" FontSize="11" BorderThickness="0"/>
+                                            </Border>
+                                        </Grid>
+                                    </Border>
+                                </Grid>
+                            </Grid>
+
+                            <!-- 6. IO 面板 (二層 SubPanel：左欄 Devices 清單，右欄次級 Driver SubPanel) -->
+                            <Grid x:Name="PnlModuleIo" ColumnDefinitions="240,*" Margin="6" IsVisible="False">
+                                <Border Grid.Column="0" Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="6" Margin="0,0,6,0" Padding="8">
+                                    <Grid RowDefinitions="Auto,*,Auto">
+                                        <StackPanel Grid.Row="0" Margin="0,0,0,8">
+                                            <TextBlock Text="IO DEVICES &amp; DRIVERS" FontWeight="Black" FontSize="12" Foreground="#0F172A"/>
+                                            <TextBlock Text="選取裝置載入專屬驅動 SubPanel" FontSize="10" Foreground="#64748B" Margin="0,2,0,0"/>
+                                        </StackPanel>
+                                        <ListBox x:Name="LstIoDrivers" Grid.Row="1" Background="White" BorderBrush="#CBD5E1" BorderThickness="1" CornerRadius="4"/>
+                                        <Border Grid.Row="2" Background="#EFF6FF" BorderBrush="#BFDBFE" BorderThickness="1" CornerRadius="4" Padding="6" Margin="0,8,0,0">
+                                            <TextBlock Text="💡 提示：點擊上方裝置即可載入該 Driver 之即時控制面板 (SubPanel)" FontSize="9.5" Foreground="#1E40AF" TextWrapping="Wrap"/>
+                                        </Border>
+                                    </Grid>
+                                </Border>
+                                <Border Grid.Column="1" Background="White" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="6" Margin="0">
+                                    <ContentControl x:Name="DriverViewContainer" Background="White"/>
+                                </Border>
+                            </Grid>
+                        </Grid>
+                    </Border>
                 </Grid>
-
             </TabItem>
-
-
-
-            <!-- ========================================================= -->
 
             <!-- 8. WaveForm (示波器、波形暫存庫與 DAQ 檢視) -->
 

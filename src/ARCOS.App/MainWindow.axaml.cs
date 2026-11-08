@@ -27,6 +27,14 @@ using ScottPlot.Avalonia;
 
 namespace ARCOS.App;
 
+public class ModuleListItem
+{
+    public string Name { get; set; } = "";
+    public string Description { get; set; } = "";
+    public string BadgeText { get; set; } = "CORE";
+    public IBrush BadgeBackground { get; set; } = Brushes.SlateGray;
+}
+
 public partial class MainWindow : Window
 {
     private readonly BasicEngines _engines;
@@ -34,6 +42,8 @@ public partial class MainWindow : Window
     private readonly ArcosThreadVM _vm;
     private readonly DispatcherTimer _uiTimer;
     private readonly ObservableCollection<IoChannelViewModel> _ioChannels = new();
+    private readonly ObservableCollection<ModuleListItem> _loadedModules = new();
+    private double _systemCycleTime = 0.0;
     private object? _defaultSubPanelContent;
     private ARCOS.Core.Csvi.CsviPackage? _activeUserPanelPackage;
     private object? _cachedIoFrontPanel;
@@ -125,7 +135,7 @@ public partial class MainWindow : Window
         // 6. 綁定 USER TAB 與 CAPTURE 交互事件與 SubPanel 動態調度
         BindUserTabControls();
         BindCaptureTabControls();
-        BindIoModulesTab();
+        BindModulesInfoTab();
         BindEngineInspectionTabs();
         BindThreadsTab();
 
@@ -134,7 +144,7 @@ public partial class MainWindow : Window
         _uiTimer.Tick += UiTimer_Tick;
         _uiTimer.Start();
 
-        // 8. 監聽執行緒即時日誌流，推送到 USER TAB 的 Log 視窗
+        // 8. 監聽執行緒即時日誌流，推送到 USER TAB 與 SYSTEM 模組的 Log 視窗
         _vm.MainThreads[0].OnLog += (entry, isErr) =>
         {
             Dispatcher.UIThread.Post(() =>
@@ -144,6 +154,12 @@ public partial class MainWindow : Window
                 {
                     txtLogs.Text += entry + Environment.NewLine;
                     txtLogs.CaretIndex = txtLogs.Text.Length;
+                }
+                var txtSysLogs = this.FindControl<TextBox>("TxtSystemLogs");
+                if (txtSysLogs != null)
+                {
+                    txtSysLogs.Text += entry + Environment.NewLine;
+                    txtSysLogs.CaretIndex = txtSysLogs.Text.Length;
                 }
             });
         };
@@ -687,6 +703,221 @@ public partial class MainWindow : Window
         }
     }
 
+    private void BindModulesInfoTab()
+    {
+        var lstModules = this.FindControl<ListBox>("LstLoadedModules");
+        if (lstModules == null) return;
+
+        _loadedModules.Clear();
+        _loadedModules.Add(new ModuleListItem { Name = "SYSTEM", Description = "System Logs & Performance", BadgeText = "CORE", BadgeBackground = new SolidColorBrush(Color.Parse("#0284C7")) });
+        _loadedModules.Add(new ModuleListItem { Name = "THREAD", Description = "Thread Monitor Matrix", BadgeText = "ENGINE", BadgeBackground = new SolidColorBrush(Color.Parse("#7C3AED")) });
+        _loadedModules.Add(new ModuleListItem { Name = "VARIABLE", Description = "Variables & Parameters", BadgeText = "DATA", BadgeBackground = new SolidColorBrush(Color.Parse("#059669")) });
+        _loadedModules.Add(new ModuleListItem { Name = "POINT&PATH", Description = "Point Table & Teaching", BadgeText = "MOTION", BadgeBackground = new SolidColorBrush(Color.Parse("#EA580C")) });
+        _loadedModules.Add(new ModuleListItem { Name = "CALL", Description = "External CSVI Manager", BadgeText = "PLUGIN", BadgeBackground = new SolidColorBrush(Color.Parse("#D97706")) });
+        _loadedModules.Add(new ModuleListItem { Name = "IO", Description = "IO Devices & SubPanels", BadgeText = "HARDWARE", BadgeBackground = new SolidColorBrush(Color.Parse("#2563EB")) });
+
+        lstModules.ItemsSource = _loadedModules;
+
+        // 監聽 ModuleRegistry 動態載入事件 (由 System@IncludeModule 觸發)
+        if (_vm.Executor.Registry != null)
+        {
+            _vm.Executor.Registry.ModuleRegistered += (modName) =>
+            {
+                Dispatcher.UIThread.Post(() =>
+                {
+                    if (!_loadedModules.Any(m => string.Equals(m.Name, modName, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        _loadedModules.Add(new ModuleListItem
+                        {
+                            Name = modName.ToUpperInvariant(),
+                            Description = $"Dynamic Included Module ({modName})",
+                            BadgeText = "DYNAMIC",
+                            BadgeBackground = new SolidColorBrush(Color.Parse("#4F46E5"))
+                        });
+                    }
+                });
+            };
+        }
+
+        var pnlSys = this.FindControl<Grid>("PnlModuleSystem");
+        var pnlThr = this.FindControl<Grid>("PnlModuleThread");
+        var pnlVar = this.FindControl<Grid>("PnlModuleVariable");
+        var pnlPt = this.FindControl<Grid>("PnlModulePointPath");
+        var pnlCall = this.FindControl<Grid>("PnlModuleCall");
+        var pnlIo = this.FindControl<Grid>("PnlModuleIo");
+
+        lstModules.SelectionChanged += (_, _) =>
+        {
+            if (lstModules.SelectedItem is ModuleListItem selected)
+            {
+                if (pnlSys != null) pnlSys.IsVisible = selected.Name == "SYSTEM";
+                if (pnlThr != null) pnlThr.IsVisible = selected.Name == "THREAD";
+                if (pnlVar != null) pnlVar.IsVisible = selected.Name == "VARIABLE";
+                if (pnlPt != null) pnlPt.IsVisible = selected.Name == "POINT&PATH";
+                if (pnlCall != null) pnlCall.IsVisible = selected.Name == "CALL";
+                if (pnlIo != null) pnlIo.IsVisible = selected.Name == "IO";
+
+                if (selected.Name == "IO")
+                {
+                    RefreshIoTab();
+                }
+                else if (selected.Name == "CALL")
+                {
+                    RefreshCallModuleFiles();
+                }
+            }
+        };
+
+        BindSystemModule();
+        BindCallModule();
+        BindIoModulesTab();
+
+        lstModules.SelectedIndex = 0;
+    }
+
+    private void BindSystemModule()
+    {
+        var btnClear = this.FindControl<Button>("BtnClearSystemLog");
+        if (btnClear != null)
+        {
+            btnClear.Click += (_, _) =>
+            {
+                var txtLogs = this.FindControl<TextBox>("TxtSystemLogs");
+                if (txtLogs != null) txtLogs.Text = "";
+            };
+        }
+    }
+
+    private void BindCallModule()
+    {
+        var btnRefresh = this.FindControl<Button>("BtnRefreshCallFiles");
+        var lstFiles = this.FindControl<ListBox>("LstCallFiles");
+        var txtSelected = this.FindControl<TextBlock>("TxtCallSelectedFile");
+        var txtDuration = this.FindControl<TextBlock>("TxtCallDuration");
+        var txtStatus = this.FindControl<TextBlock>("TxtCallStatus");
+        var txtArgs = this.FindControl<TextBox>("TxtCallTestArgs");
+        var cmbMode = this.FindControl<ComboBox>("CmbCallTestMode");
+        var btnRun = this.FindControl<Button>("BtnCallRunTest");
+        var txtOutput = this.FindControl<TextBox>("TxtCallTestOutput");
+        var btnStudio = this.FindControl<Button>("BtnOpenCsviStudio");
+
+        if (btnRefresh != null) btnRefresh.Click += (_, _) => RefreshCallModuleFiles();
+
+        if (lstFiles != null)
+        {
+            lstFiles.SelectionChanged += (_, _) =>
+            {
+                if (lstFiles.SelectedItem is string f && txtSelected != null)
+                {
+                    txtSelected.Text = f;
+                }
+            };
+        }
+
+        if (btnRun != null)
+        {
+            btnRun.Click += (_, _) =>
+            {
+                string target = txtSelected?.Text ?? "";
+                if (string.IsNullOrEmpty(target) || target == "None")
+                {
+                    if (txtOutput != null) txtOutput.Text = "請先由左側選取要測試的 CSVI 小程式！";
+                    return;
+                }
+                string modCmdName = System.IO.Path.GetFileNameWithoutExtension(target);
+                string args = txtArgs?.Text?.Trim() ?? "";
+                int modeIdx = cmbMode?.SelectedIndex ?? 0;
+                string suffix = modeIdx switch { 1 => "&", 2 => "&&", _ => "" };
+                string fullCmd = $"Call@{modCmdName}{suffix}\t{args}";
+
+                var sw = System.Diagnostics.Stopwatch.StartNew();
+                try
+                {
+                    var result = _vm.Executor.ExecuteCommandLine(_vm.MainThreads[0], fullCmd);
+                    sw.Stop();
+                    if (txtDuration != null) txtDuration.Text = $"{sw.ElapsedMilliseconds} ms";
+                    if (txtStatus != null) txtStatus.Text = result.Status == CommandStatus.Completed ? "SUCCESS" : result.Status.ToString();
+                    if (txtOutput != null) txtOutput.Text = $"Command: {fullCmd}\nStatus: {result.Status}\nTimestamp: {DateTime.Now:HH:mm:ss.fff}";
+                }
+                catch (Exception ex)
+                {
+                    sw.Stop();
+                    if (txtDuration != null) txtDuration.Text = $"{sw.ElapsedMilliseconds} ms";
+                    if (txtStatus != null) txtStatus.Text = "ERROR";
+                    if (txtOutput != null) txtOutput.Text = $"Error executing Call command:\n{ex.Message}";
+                }
+            };
+        }
+
+        if (btnStudio != null)
+        {
+            btnStudio.Click += (_, _) =>
+            {
+                var candidatePaths = new[]
+                {
+                    System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "CSVI_Studio.exe"),
+                    System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "ARCOS.CsviStudio.exe"),
+                    System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "..", "src", "ARCOS.CsviStudio", "bin", "Debug", "net8.0", "CSVI_Studio.exe")
+                };
+                string? exe = candidatePaths.FirstOrDefault(p => System.IO.File.Exists(p));
+                if (exe != null)
+                {
+                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(exe) { UseShellExecute = true });
+                }
+                else
+                {
+                    if (txtOutput != null) txtOutput.Text = "[CsviStudio] CSVI Studio 整合編輯器將於下一階段編譯就緒，隨時支援熱重載！";
+                }
+            };
+        }
+    }
+
+    private void RefreshCallModuleFiles()
+    {
+        var lstFiles = this.FindControl<ListBox>("LstCallFiles");
+        if (lstFiles == null) return;
+        var files = new List<string>();
+
+        var candidateDirs = new[]
+        {
+            System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "ExternalModules"),
+            System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "..", "dist", "ARCOS_Runtime", "ExternalModules"),
+            System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "..", "ExternalModules")
+        };
+
+        foreach (var dir in candidateDirs)
+        {
+            if (System.IO.Directory.Exists(dir))
+            {
+                foreach (var f in System.IO.Directory.GetFiles(dir, "*.csvi"))
+                {
+                    string fn = System.IO.Path.GetFileName(f);
+                    if (!files.Contains(fn)) files.Add(fn);
+                }
+            }
+        }
+
+        if (files.Count == 0)
+        {
+            files.Add("MyCalc.csvi");
+        }
+
+        lstFiles.ItemsSource = files;
+        if (files.Count > 0 && lstFiles.SelectedIndex < 0)
+        {
+            lstFiles.SelectedIndex = 0;
+        }
+    }
+
+    private void RefreshIoTab()
+    {
+        var lstDrivers = this.FindControl<ListBox>("LstIoDrivers");
+        if (lstDrivers != null && lstDrivers.SelectedIndex < 0 && (lstDrivers.ItemsSource as System.Collections.IEnumerable)?.Cast<object>().Any() == true)
+        {
+            lstDrivers.SelectedIndex = 0;
+        }
+    }
+
     private void BindIoModulesTab()
     {
         var lstDrivers = this.FindControl<ListBox>("LstIoDrivers");
@@ -694,14 +925,27 @@ public partial class MainWindow : Window
         if (lstDrivers == null) return;
 
         var available = _driverManager.Loader.GetAvailableDrivers("IO");
-        lstDrivers.ItemsSource = available.Count > 0 ? available : new List<string> { "MockIO" };
+        var devices = _driverManager.GetDevicesByCategory("IO");
+        var driverList = new List<string>();
+        foreach (var dev in devices)
+        {
+            driverList.Add($"{dev.DeviceName} ({dev.DriverType})");
+        }
+        foreach (var drv in available)
+        {
+            if (!driverList.Contains(drv)) driverList.Add(drv);
+        }
+        if (driverList.Count == 0) driverList.Add("MockIO");
+
+        lstDrivers.ItemsSource = driverList;
 
         lstDrivers.SelectionChanged += (_, _) =>
         {
-            if (lstDrivers.SelectedItem is string driverName && driverContainer != null)
+            if (lstDrivers.SelectedItem is string rawName && driverContainer != null)
             {
-                var driver = _driverManager.GetDevice("IO", "StationIO");
-                if (driver != null && driver.DriverType.Equals(driverName, StringComparison.OrdinalIgnoreCase))
+                string driverName = rawName.Split(' ')[0]; // 支援 "StationIO (MockIO)" 或 "MockIO"
+                var driver = _driverManager.GetDevice("IO", driverName) ?? _driverManager.GetDevice("IO", "StationIO");
+                if (driver != null)
                 {
                     driverContainer.Content = driver.CreateDriverView();
                 }
@@ -716,12 +960,8 @@ public partial class MainWindow : Window
                 }
             }
         };
-
-        if (lstDrivers.Items.Count > 0 || available.Count > 0)
-        {
-            lstDrivers.SelectedIndex = 0;
-        }
     }
+
 
     private void BindCaptureTabControls()
     {
@@ -1075,6 +1315,26 @@ public partial class MainWindow : Window
         if (txtDroW != null) txtDroW.Text = $"W: {curPt.W:F3}";
         var txtDroH = this.FindControl<TextBlock>("TxtDroH");
         if (txtDroH != null) txtDroH.Text = $"H: {(int)curPt.H}";
+
+        // 4. 刷新 SYSTEM 模組狀態與 Cycle Time
+        var txtSysState = this.FindControl<TextBlock>("TxtSystemRunState");
+        var txtSysCycle = this.FindControl<TextBlock>("TxtSystemCycleTime");
+        if (txtSysState != null)
+        {
+            bool isRunning = _vm.MainThreads[0].IsRunning;
+            txtSysState.Text = isRunning ? "RUNNING" : "IDLE";
+            txtSysState.Foreground = isRunning 
+                ? new SolidColorBrush(Color.Parse("#10B981")) 
+                : new SolidColorBrush(Color.Parse("#0284C7"));
+        }
+        if (_vm.MainThreads[0].IsRunning)
+        {
+            _systemCycleTime += 0.05;
+        }
+        if (txtSysCycle != null)
+        {
+            txtSysCycle.Text = $"{_systemCycleTime:F2} s";
+        }
     }
 
     // =========================================================
