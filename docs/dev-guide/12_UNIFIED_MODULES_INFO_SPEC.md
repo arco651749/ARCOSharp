@@ -98,7 +98,7 @@ flowchart TD
 ```
 
 ### 4.1 預載模組清單 (Default Preloaded Modules)
-系統啟動時，以下 8 大核心模組自動進入清單：
+系統啟動時，以下 9 大核心模組自動進入清單：
 1. **`SYSTEM`**：系統核心（運行日誌、Cycle Time 紀錄、系統資源統計、機台狀態）。
 2. **`THREAD`**：執行緒核心（收納原 Threads Tab，13 個主執行緒與動態 SubThread 狀態矩陣）。
 3. **`VARIABLE`**：變數管理（收納原 Parameter&Variable Tab，全域/區域變數查詢、修改與監視）。
@@ -107,6 +107,7 @@ flowchart TD
 6. **`IO`**：數位/類比 IO 模組（管理 IO 裝置清單與驅動面板）。
 7. **`MOTION`**：運動控制模組（管理軸控制器、馬達伺服、運動參數與手動寸動視圖）。
 8. **`DAQ`**：資料採集模組（收納原 WaveForm Tab，高速採集通道、波形圖、觸發紀錄）。
+9. **`CALL`**：外部獨立 CSVI 小程式管理中心（原 `ExternalModule` 正式對齊指令前綴更名為 `CALL`，掌管 `ExternalModules/*.csvi` 之狀態監控、即時測試與 CsviStudio 整合開發）。
 
 ### 4.2 動態載入指令 (`SYSTEM@INCLUDEMODULE`)
 當自動化腳本執行：
@@ -154,12 +155,48 @@ sequenceDiagram
   - `IMAQ` ➔ 封裝原 `TabImaqArray` 為獨立之 `ImaqArrayView`。
   - `POINT&PATH` ➔ 封裝原 `TabPointPath` 為獨立之 `PointPathView`。
   - `DAQ` ➔ 封裝原 `TabWaveform` 為獨立之 `DaqWaveformView`。
+  - `CALL` ➔ 載入 `MODULES/CALL/CALL.csvi`（外部單檔 CSVI 管理與 CsviStudio 工作台）。
 
 ### 5.2 第二層：裝置驅動視圖 (Tier 2: Device Driver SubPanel)
 專門用於掌管多個硬體裝置（Multiple Devices）的模組（如 `IO`、`MOTION`、`DAQ`）：
 1. 模組的 FrontPanel 左側包含 `LstDevices`，列出該模組名下所有已註冊的 Device 實例（例如：`StationIO`、`ArmIO`、`LaserIO`）。
 2. 使用者選取該 Device 時，模組 FrontPanel 的右側次級容器調用 `IDriver.CreateDriverView()`，載入該裝置專屬的驅動面板（例如 `MockIoView`、`Advantech1750View`）。
 3. 驅動面板直接與底層硬體通訊，提供工程師點擊輸出測試（Output Force）、輸入指示燈（Input LEDs）即時刷新。
+
+---
+
+### 5.3 特殊型模組：CALL 模組與 CsviStudio 深度綁定架構
+
+在 ARCOSharp 排程器中，所有外部獨立單檔小程式均使用指令 `Call@<Name>` 調用。將原 `ExternalModule` 正式更名為 **`CALL`** 模組，可達成指令語法（`Call@`）與模組名稱（`CALL`）的 100% 正交對稱。
+
+當工程師在 `Modules Info` 選取 `CALL` 時，右側 SubPanel 載入 **`CALL.csvi`**，提供三大核心職責：
+
+```
++----------------------------------------------------------------------------------------------------+
+|  MODULE: CALL (External CSVI Management & CsviStudio Workbench)                                   |
++--------------------------+-------------------------------------------------------------------------+
+|  Discovered CSVI Files   |  Execution Monitor & Interactive Test Harness                           |
+|  +--------------------+  |  +-------------------------------------------------------------------+  |
+|  | MyCalc.csvi        |  |  Last Invocation: Thread 01 | Duration: 1.42 ms | Status: SUCCESS        |  |
+|  | BarcodeFilter.csvi |  |  Return Value: 30                                                    |  |
+|  | AiDefectDetect.csvi|  |  -----------------------------------------------------------------  |  |
+|  | MathFit.csvi       |  |  [Test Inputs]: "10,20"    [Mode]: [Debug (Call@) v]                 |  |
+|  +--------------------+  |  [ ▶ Run Test ] -> Output: 30                                           |  |
+|                          |  +-------------------------------------------------------------------+  |
+|  [ ＋ New Call CSVI ]    |  CsviStudio Workbench Linkage:                                          |
+|  [ 🛠 Open CsviStudio ]  |  [ ⚡ Launch CsviStudio Editor ] -> 直接在線上修改 C# 與 XAML 並熱重載     |
++--------------------------+-------------------------------------------------------------------------+
+```
+
+#### CALL.csvi 三大核心能力：
+1. **外部 CSVI 發現與執行狀態監控 (Execution Monitor)**：
+   - 即時掃描 `ExternalModules/*.csvi`。
+   - 記錄各 CSVI 被哪個 Thread 呼叫、呼叫頻率、執行微秒延遲（Latency）、最後回傳值與例外日誌。
+2. **即時互動測試儀 (Interactive Test Harness)**：
+   - 無需在 Sequencer 寫程式碼，工程師可直接在 UI 輸入參數、選擇呼叫模式（`Debug`、`Runtime &`、`Reentrant &&`），手動觸發 `ICallCommand.Execute()` 檢驗運算結果。
+3. **深度整合 CsviStudio (Authoring & Hot-Reload)**：
+   - 介面提供 `[Open CsviStudio]` 按鈕或在右側容器嵌入 CsviStudio 工作台。
+   - 借助 `CollectiblePluginContext` 的非鎖定（Non-locking MemoryStream）架構，工程師可在 CsviStudio 內直接撰寫 C# 代碼、設計 FrontPanel、編譯替換，系統立即無感熱重載，完全不需重開主程式！
 
 ---
 
