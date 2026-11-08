@@ -51,7 +51,32 @@ ARCOSharp 的本質是一套專注於工業級自動化機台的高吞吐、低�
 1. **固定槽位與原地賦值**：
    * 針對高頻記錄（如 `Record`、`SYSTEMLOG`、波形取樣）：
    * 嚴禁使用動態 `List.Add`、`ObservableCollection.Add` 或字串 `+=` 拼接，以避免高頻記憶體複製與 GC 凍結。
-   * 強制使用預先分配固定容量（如 2000-slot Ring Buffer），透過 `Index % Capacity` 原地更新槽位物件屬性（搭配局部 `INotifyPropertyChanged`）。
+   * 強制使用預先分配固定容量（如 2000-slot Ring Buffer），透過 `Index % Capacity` 原地更新純 POCO 槽位物件屬性（零 `INotifyPropertyChanged` 事件觸發開銷）。
+
+---
+
+## 3. 使用者觸發之按需查詢哲學 (User-Triggered On-Demand Pull Architecture)
+
+> **「自動化只需要內部資料正確，顯示經由正確的觸發再正確顯示就可以了，不然時間都花在 UI 更新上了！」**
+
+在 ARCOSharp 與原版 ARCOS 架構中，所有給人類工程師或操作員審視的資訊清單，**全數嚴格遵守「按需拉取 (On-Demand Pull)」哲學**，嚴禁在背後即時串流刷新：
+
+### 🎯 七大資訊清單統一交互模式 (The 7 Inspection Lists Pattern)
+
+| 模組清單 | 對應觸發按鈕 / 交互 | 執行期行為 (Running) | 查詢呈現行為 (On-Demand Pull) |
+| :--- | :--- | :--- | :--- |
+| **`RECORD LIST`** | `[Get RecordS]` / 選取通道項 | 僅以 $O(1)$ 寫入記憶體環狀槽位，**UI 0 刷新** | 點擊後一次性拉取該通道 2000 槽位快照與最新 Index 呈現 |
+| **`VARIABLE LIST`** | `[Get Variables]` / 選取變數項 | 變數引擎純記憶體極速讀寫，**UI 0 刷新** | 點擊後一次性載入當前系統變數快照列表 |
+| **`POINT&PATH LIST`** | `[Get Points]` / 選取點位項 | 點位引擎數值解算，**UI 0 刷新** | 點擊後一次性載入點位座標清單 |
+| **`CAM LIST`** | `[Get Cameras]` / 選取相機項 | 相機連續硬體取像/演算法比對，**UI 0 刷新** | 點擊後才拉取當前相機清單與手動 Snap 預覽 |
+| **`MOTION LIST`** | `[Get Motion]` / 選取軸卡項 | 運動控制器高速脈波輸出，**UI 0 刷新** | 點擊後一次性拉取軸卡組態與當前狀態 |
+| **`DAQ LIST`** | `[Get DAQ]` / 選取採樣項 | 高速多通道電壓/電流連續採樣，**UI 0 刷新** | 點擊後一次性載入採樣通道狀態 |
+| **`WAVEFORM LIST`** | `[Get Waveforms]` / 選取波形項 | 波形緩衝區寫入與檔案持久化，**UI 0 刷新** | 點擊後一次性讀取快照波形進行圖表繪製 |
+
+#### 關鍵實現準則：
+1. **解耦 Reactive Binding**：UI 清單的 `ItemsSource` **絕不可直接綁定**到後端運行中頻繁修改的即時資料集合。
+2. **靜態快照呈現**：當且僅當使用者點擊 `[Get XXX]` 按鈕、或在 ListBox 中點擊選中某項目、或按下 `Clear` 時，UI EventHandler 才從子引擎讀取當前資料並複製一份**靜態快照（Snapshot）**指派給 UI。
+3. **無動作時絕對安靜**：在使用者未點擊時，無論後端腳本迴圈執行了數萬次 `System@Record` 或變數修改，UI 表格與文字完全靜止不動，零 CPU 消耗！
 
 ---
 

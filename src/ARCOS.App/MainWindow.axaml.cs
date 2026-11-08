@@ -1627,25 +1627,22 @@ public partial class MainWindow : Window
 
 
         Action updateSelectedChannel = () =>
-
         {
-
             string? chName = lstChannels?.SelectedItem as string ?? "SYSTEMLOG";
-
             var ch = _engines.Record.GetOrCreateChannel(chName);
-
             if (lstEntries != null)
-
             {
-
-                lstEntries.ItemsSource = ch.Entries;
-
+                // 最高架構準則：僅在使用者點擊 [Get RecordS] 或選取清單項目時，才建立快照送進 UI
+                // 執行期間內部資料極速累積，UI 完全不監聽、不重排，保障最大吞吐量
+                var snapshot = new ARCOS.Core.Model.RecordEntry[ch.Capacity];
+                for (int i = 0; i < ch.Capacity; i++)
+                {
+                    snapshot[i] = new ARCOS.Core.Model.RecordEntry(ch.Entries[i].Timestamp, ch.Entries[i].Message);
+                }
+                lstEntries.ItemsSource = snapshot;
             }
-
             if (txtIndex != null) txtIndex.Text = ch.Index.ToString();
-
             if (txtCap != null) txtCap.Text = ch.Capacity.ToString();
-
         };
 
 
@@ -3651,13 +3648,7 @@ public partial class MainWindow : Window
                 {
                     txtSysCycle.Text = $"{_systemCycleTime:F2} s";
                 }
-                var lstRecCh = this.FindControl<ListBox>("LstRecordChannels");
-                var txtRecIdx = this.FindControl<TextBlock>("TxtRecordIndex");
-                if (lstRecCh?.SelectedItem is string curRecCh && txtRecIdx != null)
-                {
-                    var ch = _engines.Record.GetChannel(curRecCh);
-                    if (ch != null) txtRecIdx.Text = ch.Index.ToString();
-                }
+                // RecordIndex 與表格遵循 On-Demand Pull 原則，僅在點擊 Get RecordS 或選單時更新
                 return;
             }
 
