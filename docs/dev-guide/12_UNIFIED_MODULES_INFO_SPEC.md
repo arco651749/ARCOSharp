@@ -1,260 +1,192 @@
 # 12. 統一模組中心與兩層式 SubPanel 架構規格書 (Unified Modules Info & Two-Tier SubPanel Spec)
 
-本文檔定義 ARCOSharp 系統中 **「統一模組中心 (Modules Info)」** 的架構重構規範、底部主分頁收納標準、動態模組載入機制，以及**兩層式階層 SubPanel (Two-Tier Hierarchical SubPanel Routing)** 的設計與擴充規範。
+本文檔定義 ARCOSharp 系統中 **「統一模組中心 (Modules Info)」** 的架構重構規範、底部主分頁收納標準、動態模組載入機制、**兩層式階層 SubPanel (Two-Tier Hierarchical SubPanel Routing)**，以及 **CSVI Studio 深度內嵌工作台與動態 MCP 服務規範**。
 
 ---
 
 ## 1. 架構願景與重構動機 (Architectural Motivation)
 
-ARCOSharp 的核心哲學是 **「一切皆模組（Everything is a Module / CSVI）」**。所有核心子引擎與外掛硬體均應具備統一的探索、展示、監控與控制規範。
+ARCOSharp 的核心哲學是 **「一切皆模組（Everything is a Module / CSVI）」**。所有核心子引擎、外部小程式與外掛硬體均應具備統一的探索、展示、監控與控制規範。
 
 ### 現行架構痛點分析 (Pain Points)
 1. **底部分頁過度膨脹 (Bottom Tabs Sprawl)**：
-   - 底部導航欄常駐高達 10 個分頁，其中 `IMAQ Array`、`Point&Path`、`Threads`、`Parameter&Variable`、`WaveForm` 各自獨立佔位，畫面擁擠繁雜。
-   - 這些分頁實質上對應於 ARCOS 核心引擎（Image/IMAQ、Point、Thread、Variable、Daq），卻以特殊視圖形式散落在主介面底部，破壞了「模組一致性」。
-2. **Modules Info 靜態僵化 (Hardcoded Static Tabs)**：
-   - 原 `Modules Info` 內部頂部採用 6 個硬編碼子分頁（1. System, 2. IO, 3. Motion, 4. DAQ, 5. MultiStation, 6. ExternalModule）。
-   - 當產線腳本呼叫 `SYSTEM@INCLUDEMODULE` 動態引入新模組（如 `PLC`、`ROBOT`、`PY_VISION`）時，介面無法自動長出對應的模組分頁，失去動態外掛的靈活性。
+   - 底部導航欄原先常駐高達 10 個分頁，其中 `IMAQ Array`、`Point&Path`、`Threads`、`Parameter&Variable`、`WaveForm` 各自獨立佔位，破壞主畫面俐落性與工控現場焦點。
+   - 這些分頁實質上對應於 ARCOS 核心引擎（Image/IMAQ、Point、Thread、Variable、Daq），卻以特殊視圖形式散落在主介面底部。
+2. **User Tab 包含硬編碼非模組控制項**：
+   - 原 `User Tab` 左側包含硬編碼的 Station 資訊列與 `SUBPANEL VIEW` 快捷按鈕組，限制了客製化 `UserPanel.csvi` 的最大化發揮空間。
+3. **Capture 頁籤操作工學需進化**：
+   - 裝置清單（CamList、MotorList）過於狹小（僅 70px），不利於多相機多軸產線檢視。
+   - 頂部硬編碼 CAM0~CAM11 單選按鈕列浪費空間且不夠靈活。
+   - Snap 按鈕僅支援單次觸發，缺乏連續高速取像（Live）能力。
+4. **硬體 Driver 預載造成虛擬設備污染**：
+   - 開機自動載入 MockIO、MockMotion、MockCamera、MockDAQ，無法如實反映真實產線「依腳本配置動態掛載驅動」的行為。
+5. **CSVI Studio 孤立於主程式之外**：
+   - CsviStudio 原先為獨立 EXE，工程師與 AI Agent 無法在主機台介面同進程內即時修改程式碼、預覽與熱重載。
 
 ### 統一重構願景 (Unified Vision)
-* **底部分頁大幅瘦身**：底部僅保留核心主入口（`User Tab`、`Capture`、`Modules Info`、`Panel CMD`、`Remote`）。
-* **Modules Info 統一收納中心**：
-  - 頂部硬編碼子 Tab 全部移除。
-  - 改採 **「左側動態模組清單 (Module Text List) + 右側動態統一 SubPanel」**。
-  - 被收納的 5 個底部分頁與硬體模組，全部以模組項目的形式收錄於清單中。
-* **兩層式 SubPanel (Two-Tier Routing)**：點選模組載入模組主視圖（`MODULES/<Name>/<Name>.csvi`）；硬體模組內部再列出裝置清單，點選裝置載入驅動視圖（`Driver FrontPanel`）。
+* **底部分頁終極精簡（6 大分頁）**：
+  底部導覽列固定為：`User Tab` ➔ `Capture` ➔ `Modules Info` ➔ `Panel CMD` ➔ `Remote` ➔ **`CSVI STUDIO: MCP <PORT>`**。
+* **User Tab 100% 純淨 SubPanel 化**：
+  左側工作區域全數改為乾淨的 `UserPanelContainer`，專供載入自訂 `UserPanel.csvi`。
+* **Capture 工學進化**：
+  CamList/MotorList 長度加大 4 倍（280px），相機選取改由清單直選，Snap 具備「單擊單張 / 雙擊連續 5fps 取像」雙模式。
+* **硬體 Driver 延遲載入 (On-Demand Loading Discipline)**：
+  開機不預載任何硬體 Driver，直到執行指令（如 `IO@AddIODriver`）時才動態建立裝置並掛入二級 SubPanel。
+* **CSVI Studio 深度內嵌與動態 MCP Server**：
+  內嵌於第 6 個分頁，具備自動尋找可用 TCP Port 號機制，多開實例互不衝突，分頁標籤動態呈現 `CSVI STUDIO: MCP <PORT>`。
 
 ---
 
-## 2. 底部導航頁籤收納映射表 (Tab Bar Consolidation)
+## 2. 底部導航頁籤配置與收納映射表 (Tab Bar Architecture)
 
-底部原有的 5 個獨立分頁直接移出底部導航列，並全數映射為 `Modules Info` 左側清單中的一級模組項目：
+底部導航列全面整併後，固定呈現 6 個專業主入口：
 
-| 原底部分頁 (Bottom Tab) | 狀態 | 移入 Modules Info 對應模組 | 載入內容與核心職責 |
-|---|---|---|---|
-| **User Tab** | **保留** | - | 機台主操作畫面（作業員 HMI、UserPanel.csvi、Sequencer） |
-| **Capture** | **保留** | - | 機台主視覺檢驗與對位輔助視窗 |
-| **IMAQ Array** | **收納移除 ➔** | **`IMAQ`** | 各相機連續抓圖預覽、通道縮圖陣列與歷史影像檢驗 |
-| **Point&Path** | **收納移除 ➔** | **`POINT&PATH`** | 點位資料庫（Point Table）、運動路徑軌跡教學與參數調整 |
-| **Modules Info** | **升級保留** | - | **系統統一模組中心（本規格核心改造對象）** |
-| **Threads** | **收納移除 ➔** | **`THREAD`** | 13 個主執行緒即時 PC、Call Stack、執行微步與 SubThread 監視 |
-| **Parameter&Variable** | **收納移除 ➔** | **`VARIABLE`** | 全域變數、執行緒局部變數、配方參數之即時查詢與線上修改 |
-| **WaveForm** | **收納移除 ➔** | **`DAQ`** | 類比採集通道波形、即時示波器視圖與觸發條件配置 |
-| **Panel CMD** | **保留** | - | 快速手動發送文字指令與除錯終端 |
-| **Remote** | **保留** | - | Telnet / TCP 遠端遙控服務狀態與連線 Session 監控 |
+| 底部主分頁 (Bottom Tab) | 狀態 | 核心職責與設計規範 |
+|---|---|---|
+| **1. User Tab** | **升級保留** | **純淨 SubPanel 工作區**：全面清空寫死的頂部橫條與工具列按鈕，全域工作區 100% 專供載入 `UserPanel.csvi`。 |
+| **2. Capture** | **升級保留** | **相機與視覺對位工學主畫面**：<br>• CamList 與 MotorList 垂直長度加大 4 倍（280px）。<br>• 移除頂部 CAM0~CAM11，改由 CamList 直選切換相機影像。<br>• 移除無用之 CaptureCMD。<br>• Snap 支援單擊單張、雙擊連續 5fps（200ms）高速取像。 |
+| **3. Modules Info** | **升級保留** | **系統統一模組中心**：收納原 `IMAQ Array`、`Point&Path`、`Threads`、`Parameter&Variable`、`WaveForm` 5 大分頁。<br>• 左側：9 大預載核心/硬體模組清單 (`LstLoadedModules`)。<br>• 右側：統一動態 SubPanel 容器 (`ModulesSubPanelHost`)。 |
+| **4. Panel CMD** | **保留** | 快速終端指令輸入列與日誌。 |
+| **5. Remote** | **保留** | Telnet / TCP 遠端遙控服務狀態與連線 Session 監控。 |
+| **6. CSVI STUDIO** | **全新內嵌** | **即時 IDE 與動態 MCP 服務工作台**：<br>• 內嵌完整 C# Logic 編輯器、XAML 畫布、Roslyn 編譯器與沙盒測試。<br>• 啟動 MCP Server 並自動尋找可用 Port，分頁標題動態顯示 `CSVI STUDIO: MCP <PORT>`。<br>• 支援 AI Agent 即時連線檢驗、修改與熱重載 CSVI。 |
 
 ---
 
-## 3. `Modules Info` 主頁面版面佈局 (Layout & Topology)
+## 3. 分頁工學與視圖規範 (Tab Ergonomic Specs)
 
-`Modules Info` 視圖全面改為清爽、對稱、具備高度擴展性的「Master-Detail / Two-Tier」佈局架構：
+### 3.1 User Tab：純淨 SubPanel 規範
+* **佈局定義**：
+  - 左側 70% 區域：移除非模組化的 `STATION 01: AUTO INSPECTION` 頂部 Banner 與 `SUBPANEL VIEW` ComboBox/按鈕組。
+  - 改為單一滿版之 `<ContentControl x:Name="UserPanelContainer" Background="#FFFFFF" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch"/>`。
+  - 系統開機或腳本執行 `System@UserPanelOpen, UserPanel.csvi` 時，直接將解析出的 `UserPanel` 實體無縫掛載於此。
 
-```
-+--------------------------------------------------------------------------------------------------------+
-|  Modules Info                                                                                         |
-+--------------------------+-----------------------------------------------------------------------------+
-|  Loaded Modules          |  Module SubPanel (Dynamic Container)                                        |
-|  +--------------------+  |  +-----------------------------------------------------------------------+  |
-|  | SYSTEM             |  |  | [第一層 Module FrontPanel: MODULES/<Selected>/<Selected>.csvi]        |  |
-|  | THREAD             |  |  |                                                                       |  |
-|  | VARIABLE           |  |  |  (例如選取 IO 模組時):                                                |  |
-|  | IMAQ               |  |  |  +-------------------------+---------------------------------------+  |  |
-|  | POINT&PATH         |  |  |  | Discovered Devices:     | Device Driver SubPanel (第二層)        |  |  |
-|  | IO           [選取] |  |  |  | - StationIO             | [MockIO Control Panel]                |  |  |
-|  | MOTION             |  |  |  | - RobotIO               |  DI 0-15: [●][○][●]...                |  |  |
-|  | DAQ                |  |  |  | - Advantech_PCI1750 [選取]|  DO 0-15: [Set][Reset]...             |  |  |
-|  | *CUSTOM_MODULE*    |  |  |  +-------------------------+---------------------------------------+  |  |
-|  +--------------------+  |  +-----------------------------------------------------------------------+  |
-+--------------------------+-----------------------------------------------------------------------------+
-```
-
-### 佈局組件定義 (XAML Component Spec)
-* **左側模組清單 (`LstLoadedModules: ListBox`)**：
-  - 固定寬度（推薦 `220px ~ 250px`）。
-  - 綁定至 `ObservableCollection<ModuleInfoItem>`。
-  - 支援圖示與模組狀態指示（Preloaded / Dynamic / Active）。
-* **右側一級模組容器 (`ModuleSubPanelContainer: ContentControl`)**：
-  - 填滿剩餘空間（`*`）。
-  - 當左側選取項目變更時，依據模組型別動態掛載對應的 FrontPanel 視圖。
+### 3.2 Capture 頁籤：現代視覺工學規範
+* **清單垂直長度加大 4 倍**：
+  - `LstCaptureCameras`（CamList）與 `LstCaptureMotors`（MotorList For IMAQ）的高度由原本的 `70px` 擴增為 **`280px`**，大幅提升能見度與多裝置排程效率，水平寬度保持不變。
+* **精簡冗餘控制項**：
+  - 完整移除左側已不再使用的 `CaptureCMD` 區塊（`UpdateImage -1`）。
+  - 移除頂部藍框之 `CAM0 ~ CAM11` 單選按鈕條。
+* **相機選取驅動機制**：
+  - 廢棄 RadioButton 輪詢，改為監聽 `LstCaptureCameras.SelectionChanged` 事件。
+  - 當使用者點擊清單中的相機項目時，即時調用 `_engines.Image.GetFrame(camName)` 並將點陣影像推播至主畫布 `ImgLivePreview`。
+* **Snap 按鈕雙模式（單張 / 連續 5fps）**：
+  - **單擊（Single Click）**：執行單次取像 `PerformSnap()`。
+  - **雙擊（Double Click）**：進入連續取像模式（Continuous Live Capture），啟動內部高精度計時器，以 **每秒 5 次（200ms）** 頻率循環調用取像；按鈕外觀轉為綠色或文字提示（如 `● LIVE (5fps)`）。
+  - **連續中單擊（Click while running）**：立即終止計時器，平穩復原回單張 Snap 模式。
 
 ---
 
-## 4. 模組註冊與動態載入體系 (Module Discovery & Registration)
+## 4. 模組註冊與硬體 Driver 延遲載入體系 (On-Demand Loading Discipline)
 
-模組清單由 **「開機預載」** 與 **「執行期動態引入」** 兩部分組成：
+### 4.1 硬體 Driver 不開機預載規範
+* **核心規範**：
+  - 系統啟動時，`_driverManager` 嚴禁自動註冊任何 Mock 裝置實例（禁止預跑 `MockIO`、`MockCamera`、`MockMotion`、`MockDAQ`）。
+  - 當使用者點入 `IO`、`CAPTURE`、`MOTION`、`DAQ` 模組時，左側裝置清單初態為空，右側二級 SubPanel 顯示等待掛載引導提示：
+    ```
+    [ 尚無已載入之硬體裝置 ]
+    請於 Sequencer 腳本或終端執行指令以掛載硬體 (例如: IO@AddIODriver StationIO, MockIO)
+    ```
+* **指令動態掛載機制**：
+  - 當腳本或 Panel CMD 執行例如：
+    ```csv
+    1, IO@AddIODriver, "StationIO, MockIO, StartPort=P0.0,BitCount=64,Interval=25"
+    2, Capture@AddCam, "CamTop, MockCamera, CamIndex=0,Res=640x480"
+    3, Motion@AddMotion, "RobotGantry, MockMotion, Mechanism=Gantry6Axis"
+    4, DAQ@AddDAQ, "PressSensor, MockDAQ, Rate=1000,Channels=1"
+    ```
+  - `_driverManager` 動態載入 DLL、實例化驅動並加入裝置集合。
+  - 觸發裝置更新通知，模組頁面之裝置清單即時出現該硬體，點擊後立刻調用 `CreateDriverView()` 掛入二級 SubPanel。
 
-```mermaid
-flowchart TD
-    Boot["系統開機啟動"] --> Preload["載入內建預載模組清單 (Preloaded Defaults)"]
-    Preload --> RegInit["註冊 SYSTEM, THREAD, VARIABLE, IMAQ, POINT&PATH, IO, MOTION, DAQ"]
-    
-    RegInit --> UIList["Modules Info 左側清單呈現 (LstLoadedModules)"]
-    
-    ScriptExec["腳本或終端執行指令"] --> CmdCheck{"是否為 System@IncludeModule?"}
-    CmdCheck -- "是" --> IncModule["載入 MODULES/&lt;ModuleName&gt;/Init.csvi"]
-    IncModule --> RegDyn["註冊動態模組至 ModuleRegistry"]
-    RegDyn --> FireEvent["觸發 OnModuleRegistered 事件"]
-    FireEvent --> UIList
-```
+### 4.2 模組清單開機預載與動態擴充
+系統開機時，`Modules Info` 左側清單預載以下 9 大模組：
+1. **`SYSTEM`**（核心日誌與資源統計）
+2. **`THREAD`**（13 主執行緒 PC 矩陣與微步監視）
+3. **`VARIABLE`**（全域/局部變數線上查詢與修改）
+4. **`POINT&PATH`**（6 軸 DRO 與教導點位資料庫）
+5. **`CALL`**（外部 CSVI 管理與即時測試儀）
+6. **`IO`**（IO 裝置清單與驅動 SubPanel）
+7. **`CAPTURE`**（相機硬體清單、驅動 SubPanel ⇄ IMAQ 影像陣列檢視）
+8. **`MOTION`**（軸控制器清單與驅動寸動 SubPanel）
+9. **`DAQ`**（資料採樣裝置清單、驅動 SubPanel ⇄ ScottPlot 示波器）
 
-### 4.1 預載模組清單 (Default Preloaded Modules)
-系統啟動時，以下 9 大核心模組自動進入清單：
-1. **`SYSTEM`**：系統核心（運行日誌、Cycle Time 紀錄、系統資源統計、機台狀態）。
-2. **`THREAD`**：執行緒核心（收納原 Threads Tab，13 個主執行緒與動態 SubThread 狀態矩陣）。
-3. **`VARIABLE`**：變數管理（收納原 Parameter&Variable Tab，全域/區域變數查詢、修改與監視）。
-4. **`IMAQ`**：視覺影像（收納原 IMAQ Array Tab，多相機影像陣列、檢驗圖表）。
-5. **`POINT&PATH`**：點位路徑（收納原 Point&Path Tab，教導點位管理、多軸軌跡規劃）。
-6. **`IO`**：數位/類比 IO 模組（管理 IO 裝置清單與驅動面板）。
-7. **`MOTION`**：運動控制模組（管理軸控制器、馬達伺服、運動參數與手動寸動視圖）。
-8. **`DAQ`**：資料採集模組（收納原 WaveForm Tab，高速採集通道、波形圖、觸發紀錄）。
-9. **`CALL`**：外部獨立 CSVI 小程式管理中心（原 `ExternalModule` 正式對齊指令前綴更名為 `CALL`，掌管 `ExternalModules/*.csvi` 之狀態監控、即時測試與 CsviStudio 整合開發）。
-
-### 4.2 動態載入指令 (`SYSTEM@INCLUDEMODULE`)
-當自動化腳本執行：
-```csv
-1, SYSTEM@INCLUDEMODULE, "LASER"
-```
-1. 核心直譯器調用 `MODULES/LASER/Init.csvi` 完成初始化。
-2. `ModuleRegistry` 登記新模組 `LASER`。
-3. 觸發 `ModuleRegistered` 通知，UI 的 `LstLoadedModules` 即時追加 `LASER` 項目。
-4. 使用者在 `Modules Info` 點擊 `LASER`，即載入 `MODULES/LASER/LASER.csvi`。
+當腳本執行 `System@IncludeModule <ModuleName>`（如 `PYTHON`）時，清單即時動態追加新項目。
 
 ---
 
 ## 5. 兩層式 SubPanel 階層化調度機制 (Two-Tier SubPanel Routing)
-
-系統定義兩層視圖路由協議，依模組性質區分為 **「資料/監控型模組」** 與 **「多裝置硬體型模組」**：
 
 ```mermaid
 sequenceDiagram
     autonumber
     actor User as 使用者 / 工程師
     participant List as LstLoadedModules (左側清單)
-    participant Tier1 as ModuleSubPanelContainer (一級容器)
-    participant ModView as Module FrontPanel (如 IO.csvi)
+    participant Tier1 as ModulesSubPanelHost (一級容器)
     participant DevList as LstDevices (裝置清單)
-    participant Tier2 as DriverSubPanelContainer (二級容器)
+    participant Tier2 as DriverSubPanelHost (二級容器)
 
-    User->>List: 點選模組項目 "IO"
-    List->>Tier1: 請求載入 MODULES/IO/IO.csvi
-    Tier1->>ModView: 實例化並呼叫 Init(Engines, DriverManager)
-    ModView-->>Tier1: 呈現 IO 模組主面板
+    User->>List: 點選模組項目 (例如 "IO")
+    List->>Tier1: 啟用 PnlModuleIo
+    Note over Tier1,DevList: 裝置清單初始為空 (無預載 Driver)
     
-    Note over ModView,DevList: IO.csvi 內部自動列出目前已掛載的 IO Devices
-    User->>DevList: 點選裝置 "StationIO (MockIO)"
+    opt 當腳本執行 IO@AddIODriver 時
+        DevList-->>User: 清單即時出現 "StationIO (MockIO)"
+    end
+
+    User->>DevList: 點選 "StationIO"
     DevList->>Tier2: 調用 driver.CreateDriverView()
-    Tier2-->>User: 於二級容器呈現 MockIO 驅動即時除錯控制面板
-```
-
-### 5.1 第一層：模組主視圖 (Tier 1: Module FrontPanel)
-* **檔案約定**：置於 `MODULES/<ModuleName>/<ModuleName>.csvi`（或編譯後之 DLL）。
-* **內建模組視圖解析**：
-  - `SYSTEM` ➔ 內部封裝之 `SystemView` (Logs + Statistics)。
-  - `THREAD` ➔ 封裝原 `TabThreads` 為獨立之 `ThreadMonitorView`。
-  - `VARIABLE` ➔ 封裝原 `TabParamVar` 為獨立之 `VariableManagerView`。
-  - `IMAQ` ➔ 封裝原 `TabImaqArray` 為獨立之 `ImaqArrayView`。
-  - `POINT&PATH` ➔ 封裝原 `TabPointPath` 為獨立之 `PointPathView`。
-  - `DAQ` ➔ 封裝原 `TabWaveform` 為獨立之 `DaqWaveformView`。
-  - `CALL` ➔ 載入 `MODULES/CALL/CALL.csvi`（外部單檔 CSVI 管理與 CsviStudio 工作台）。
-
-### 5.2 第二層：裝置驅動視圖 (Tier 2: Device Driver SubPanel)
-專門用於掌管多個硬體裝置（Multiple Devices）的模組（如 `IO`、`MOTION`、`DAQ`）：
-1. 模組的 FrontPanel 左側包含 `LstDevices`，列出該模組名下所有已註冊的 Device 實例（例如：`StationIO`、`ArmIO`、`LaserIO`）。
-2. 使用者選取該 Device 時，模組 FrontPanel 的右側次級容器調用 `IDriver.CreateDriverView()`，載入該裝置專屬的驅動面板（例如 `MockIoView`、`Advantech1750View`）。
-3. 驅動面板直接與底層硬體通訊，提供工程師點擊輸出測試（Output Force）、輸入指示燈（Input LEDs）即時刷新。
-
----
-
-### 5.3 特殊型模組：CALL 模組與 CsviStudio 深度綁定架構
-
-在 ARCOSharp 排程器中，所有外部獨立單檔小程式均使用指令 `Call@<Name>` 調用。將原 `ExternalModule` 正式更名為 **`CALL`** 模組，可達成指令語法（`Call@`）與模組名稱（`CALL`）的 100% 正交對稱。
-
-當工程師在 `Modules Info` 選取 `CALL` 時，右側 SubPanel 載入 **`CALL.csvi`**，提供三大核心職責：
-
-```
-+----------------------------------------------------------------------------------------------------+
-|  MODULE: CALL (External CSVI Management & CsviStudio Workbench)                                   |
-+--------------------------+-------------------------------------------------------------------------+
-|  Discovered CSVI Files   |  Execution Monitor & Interactive Test Harness                           |
-|  +--------------------+  |  +-------------------------------------------------------------------+  |
-|  | MyCalc.csvi        |  |  Last Invocation: Thread 01 | Duration: 1.42 ms | Status: SUCCESS        |  |
-|  | BarcodeFilter.csvi |  |  Return Value: 30                                                    |  |
-|  | AiDefectDetect.csvi|  |  -----------------------------------------------------------------  |  |
-|  | MathFit.csvi       |  |  [Test Inputs]: "10,20"    [Mode]: [Debug (Call@) v]                 |  |
-|  +--------------------+  |  [ ▶ Run Test ] -> Output: 30                                           |  |
-|                          |  +-------------------------------------------------------------------+  |
-|  [ ＋ New Call CSVI ]    |  CsviStudio Workbench Linkage:                                          |
-|  [ 🛠 Open CsviStudio ]  |  [ ⚡ Launch CsviStudio Editor ] -> 直接在線上修改 C# 與 XAML 並熱重載     |
-+--------------------------+-------------------------------------------------------------------------+
-```
-
-#### CALL.csvi 三大核心能力：
-1. **外部 CSVI 發現與執行狀態監控 (Execution Monitor)**：
-   - 即時掃描 `ExternalModules/*.csvi`。
-   - 記錄各 CSVI 被哪個 Thread 呼叫、呼叫頻率、執行微秒延遲（Latency）、最後回傳值與例外日誌。
-2. **即時互動測試儀 (Interactive Test Harness)**：
-   - 無需在 Sequencer 寫程式碼，工程師可直接在 UI 輸入參數、選擇呼叫模式（`Debug`、`Runtime &`、`Reentrant &&`），手動觸發 `ICallCommand.Execute()` 檢驗運算結果。
-3. **深度整合 CsviStudio (Authoring & Hot-Reload)**：
-   - 介面提供 `[Open CsviStudio]` 按鈕或在右側容器嵌入 CsviStudio 工作台。
-   - 借助 `CollectiblePluginContext` 的非鎖定（Non-locking MemoryStream）架構，工程師可在 CsviStudio 內直接撰寫 C# 代碼、設計 FrontPanel、編譯替換，系統立即無感熱重載，完全不需重開主程式！
-
----
-
-## 6. 二次開發者指引：自訂模組之 FrontPanel 開發 (Developer Guide)
-
-當您依據 [05. 動態模組擴充教學](./05_EXTEND_MODULE.md) 開發全新模組時，若希望該模組能在 `Modules Info` 中呈現專屬視圖，請遵循以下步驟：
-
-### 步驟 1：建立模組主視圖 (`<ModuleName>.csvi`)
-在模組目錄下提供主視圖：
-```
-MODULES/BARCODE/
-├── BARCODE.Module.dll          # 模組指令直譯核心
-├── Init.csvi                   # 初始化腳本
-├── BARCODE.csvi                # 模組主視圖 (Front Panel)
-└── DRIVER/
-    └── KeyenceSR/
-        └── KeyenceSR.Driver.dll
-```
-
-### 步驟 2：實作 `IModuleFrontPanel` 契約介面
-在您的 View 或 ViewModel 實作生命週期注入介面：
-```csharp
-namespace ARCOS.Common.UI;
-
-public interface IModuleFrontPanel
-{
-    // 當視圖被掛載入 Modules Info 一級容器時呼叫
-    void OnMounted(BasicEngines engines, DriverManager driverManager);
-
-    // 當使用者切換至其他模組或離開頁面時呼叫 (釋放計時器與繪圖資源)
-    void OnUnmounted();
-}
-```
-
-### 步驟 3：提供兩層式驅動掛載（若適用）
-若您的模組掌管多個硬體裝置，建議在 `BARCODE.axaml` 中保留一個內部 `ContentControl`，並監聽裝置選取事件：
-```csharp
-private void OnDeviceSelected(string deviceName)
-{
-    var driver = _driverManager.GetDevice("BARCODE", deviceName);
-    if (driver != null)
-    {
-        DeviceSubPanel.Content = driver.CreateDriverView();
-    }
-}
+    Tier2-->>User: 於二級容器呈現 MockIoView (即時 DI/DO 開關與指示燈)
 ```
 
 ---
 
-## 7. 驗證與驗收標準 (Acceptance Criteria)
+## 6. CSVI Studio 深度內嵌與動態 MCP Server 規範 (Embedded IDE & MCP Spec)
 
-1. **介面純淨度**：
-   - 底部 `MainTabControl` 不得再出現 `IMAQ Array`、`Point&Path`、`Threads`、`Parameter&Variable`、`WaveForm` 5 個頁籤。
-2. **開機預載完整度**：
-   - 開機後點進 `Modules Info`，左側清單必定完整呈現 8 大預載模組（`SYSTEM`, `THREAD`, `VARIABLE`, `IMAQ`, `POINT&PATH`, `IO`, `MOTION`, `DAQ`）。
-3. **無縫功能切換**：
-   - 點擊 `THREAD` 必須能正常觀看 13 個主執行緒即時 PC 與微步狀態。
-   - 點擊 `VARIABLE` 必須能查詢與修改全域變數。
-   - 點擊 `IO` 必須能看見 Device List，選取 `StationIO` 後次級 SubPanel 必須正確載入 `MockIoView` 並可直接測試開關。
-4. **動態載入即時響應**：
-   - 執行 `SYSTEM@INCLUDEMODULE` 後，新模組自動動態列入左側清單，無需重啟系統。
+### 6.1 內嵌設計 (Embedded UserControl Architecture)
+* 將原獨立專案 `ARCOS.CsviStudio` 之編輯器、XAML 預覽、編譯服務解耦，封裝為Avalonia 控制項 `CsviStudioControl`。
+* 位於主視窗底部導覽列之最後一個 TAB（第 6 個分頁）：
+  `<TabItem x:Name="TabStudio" Header="CSVI STUDIO: MCP 48800">`。
+* 具備完整現代工控淺色風格工具列：
+  - `📂 Open .csvi`、`✨ New CSVI`、`⚡ Build & Save (Ctrl+S)`。
+  - 編譯模式切換（`🟢 PortableOpen`、`🟡 PasswordLocked`、`🔴 StrippedRelease`）。
+  - 左側原始碼編輯（`Logic.cs`, `Wizard.axaml`, `FrontPanel.axaml`, `Config.json`）。
+  - 右側沙盒測試與即時畫布預覽。
+  - 底部編譯日誌與例外堆疊。
+
+### 6.2 MCP Server 動態 Port 探測與多開隔離 (Dynamic Port Discovery)
+* **多開防衝突演算**：
+  1. 系統啟動時，MCP 服務自基礎通訊埠（如 `48800`）開始探測可用 TCP Port（或透過 `TcpListener(IPAddress.Loopback, 0)` 由作業系統動態分派未佔用埠號）。
+  2. 若發現已被先前的 ARCOSharp 實例佔用，則自動依序遞增（`48801`, `48802`...）直至綁定成功。
+  3. 綁定成功後，非同步啟動 `McpTcpListener` 監聽 JSON-RPC 2.0 請求。
+* **UI 動態回顯**：
+  - 取得實際監聽的 Port（例如 `48800`）後，即時更新主介面分頁標題：
+    ```csharp
+    TabStudio.Header = $"CSVI STUDIO: MCP {mcpPort}";
+    ```
+  - 同時在 CsviStudio 頂部狀態列顯示：`🟢 MCP Active: 127.0.0.1:{mcpPort}`。
+* **AI Agent 協同能力**：
+  - 本地或遠端 AI Agent 可透過 JSON-RPC over TCP 直接連線該 Port，執行以下 MCP 工具：
+    1. `csvi_list_modules`：列出所有模組與 CSVI 清單。
+    2. `csvi_inspect`：提取指定 CSVI 之 C# 代碼、XAML 介面與配置。
+    3. `csvi_compile`：傳入新程式碼並直接動態編譯與熱重載替換。
+    4. `csvi_test`：以沙盒環境執行指定參數並回傳輸出與執行耗時。
+
+---
+
+## 7. 驗收標準與驗證指引 (Acceptance Criteria)
+
+1. **User Tab 純淨性驗收**：
+   - `User Tab` 內不再有 Station 橫條與快捷按鈕組，畫布全面提供 `UserPanelContainer`。
+2. **Capture 頁籤工學驗收**：
+   - `LstCaptureCameras` 與 `LstCaptureMotors` 垂直高度為 `280px`（加大 4 倍）。
+   - 頂部無 `CAM0~CAM11` 按鈕；在 `CamList` 點選相機即切換預覽畫面。
+   - `CaptureCMD` 區塊已徹底移除。
+   - `Snap` 單擊取單張；雙擊切換每秒 5 次連續取像；再次單擊即停止。
+3. **Driver 延遲載入驗收**：
+   - 開機啟動時，`IO`、`CAPTURE`、`MOTION`、`DAQ` 裝置清單皆為空，次級 SubPanel 顯示未掛載提示。
+   - 執行 `Add...` 指令後，裝置立即出現並可掛載驅動視圖。
+4. **CSVI Studio 內嵌與 MCP Port 驗收**：
+   - 底部第 6 個分頁成功呈現 `CSVI STUDIO: MCP <PORT>`。
+   - 點進分頁可完整檢視與編輯 CSVI。
+   - 當開啟多個主程式實例時，各實例之 MCP Port 號自動遞增且清晰可見。
+5. **Desktop Cockpit 自動化驗證**：
+   - 所有視圖切換與按鈕動作必須於零干擾 Windows 虛擬螢幕（`\\.\DISPLAY9`）通過 Desktop Cockpit 截圖與互動驗收。

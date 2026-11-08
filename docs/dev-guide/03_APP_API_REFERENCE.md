@@ -179,14 +179,23 @@ print(call_mcp("arcos_test_thread", {"action": "open_guidance", "rowIndex": 0}))
 
 ---
 
-## 6. 統一模組中心 (Modules Info) 與兩層式 SubPanel 路由架構
+## 6. 統一模組中心 (Modules Info)、兩層式 SubPanel 與內嵌 CSVI Studio
 
-為了達成機台介面極致模組化並解決底部分頁過度膨脹問題，`ARCOS.App` 實施 **統一模組導航與兩層式 SubPanel 體系**：
-1. **底部分頁瘦身**：原底部 `IMAQ Array`、`Point&Path`、`Threads`、`Parameter&Variable`、`WaveForm` 5 個獨立分頁正式收納入 `Modules Info`。
-2. **左側動態清單 (LstLoadedModules)**：呈現開機預載（`SYSTEM`, `THREAD`, `VARIABLE`, `IMAQ`, `POINT&PATH`, `IO`, `MOTION`, `DAQ`）與 `System@IncludeModule` 動態引入之所有模組。
+為了達成機台介面極致模組化並解決底部分頁過度膨脹問題，`ARCOS.App` 實施 **統一模組導航、兩層式 SubPanel 體系與內嵌 CSVI Studio**：
+1. **底部分頁終極精簡（6 大分頁）**：
+   - `User Tab`（純淨 SubPanel 容器）
+   - `Capture`（視覺對位主視窗，CamList 直選相機，Snap 支援單擊單張/雙擊連續 5fps）
+   - `Modules Info`（9 大核心與硬體模組清單，左側清單 + 右側 SubPanel）
+   - `Panel CMD`（終端指令輸入列）
+   - `Remote`（遠端連線監控）
+   - **`CSVI STUDIO: MCP <PORT>`**（內嵌 IDE 與動態 TCP Port 之 MCP Server）
+2. **硬體 Driver 延遲載入 (On-Demand Loading Discipline)**：
+   - 開機嚴禁自動預載硬體 Mock 實例；直到執行 `IO@AddIODriver`、`Capture@AddCam`、`Motion@AddMotion`、`DAQ@AddDAQ` 時才動態載入並掛載至次級 SubPanel。
 3. **兩層式 SubPanel (Two-Tier Routing)**：
    - **第一層**：點擊模組載入對應 `MODULES/<Name>/<Name>.csvi` 的 FrontPanel。
-   - **第二層**：硬體多裝置模組（如 IO、Motion）在模組視圖內列出 Devices，點擊特定 Device 載入專屬 `IDriver.CreateDriverView()`。
+   - **第二層**：硬體多裝置模組在模組視圖內列出 Devices，點擊特定 Device 載入專屬 `IDriver.CreateDriverView()`。
+4. **CSVI Studio 動態 MCP 服務**：
+   - 啟動時自動探索可用 TCP Port 號（如 `48800` 起算），分頁標籤動態回顯 `CSVI STUDIO: MCP <PORT>`，多開實例互不衝突，AI Agent 可透過 JSON-RPC over TCP 直接遠端操作。
 
 > 完整設計規範、版面拓撲圖與調用循序圖，請詳閱：[12. 統一模組中心與兩層式 SubPanel 規格書](./12_UNIFIED_MODULES_INFO_SPEC.md)。
 
