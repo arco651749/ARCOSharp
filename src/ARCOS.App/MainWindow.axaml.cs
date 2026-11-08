@@ -715,6 +715,9 @@ public partial class MainWindow : Window
         _loadedModules.Add(new ModuleListItem { Name = "POINT&PATH", Description = "Point Table & Teaching", BadgeText = "MOTION", BadgeBackground = new SolidColorBrush(Color.Parse("#EA580C")) });
         _loadedModules.Add(new ModuleListItem { Name = "CALL", Description = "External CSVI Manager", BadgeText = "PLUGIN", BadgeBackground = new SolidColorBrush(Color.Parse("#D97706")) });
         _loadedModules.Add(new ModuleListItem { Name = "IO", Description = "IO Devices & SubPanels", BadgeText = "HARDWARE", BadgeBackground = new SolidColorBrush(Color.Parse("#2563EB")) });
+        _loadedModules.Add(new ModuleListItem { Name = "CAPTURE", Description = "Cameras & Image Buffers", BadgeText = "HARDWARE", BadgeBackground = new SolidColorBrush(Color.Parse("#0284C7")) });
+        _loadedModules.Add(new ModuleListItem { Name = "MOTION", Description = "Motion Controllers & Jog", BadgeText = "HARDWARE", BadgeBackground = new SolidColorBrush(Color.Parse("#EA580C")) });
+        _loadedModules.Add(new ModuleListItem { Name = "DAQ", Description = "Data Acquisition & Plots", BadgeText = "HARDWARE", BadgeBackground = new SolidColorBrush(Color.Parse("#9333EA")) });
 
         lstModules.ItemsSource = _loadedModules;
 
@@ -745,6 +748,9 @@ public partial class MainWindow : Window
         var pnlPt = this.FindControl<Grid>("PnlModulePointPath");
         var pnlCall = this.FindControl<Grid>("PnlModuleCall");
         var pnlIo = this.FindControl<Grid>("PnlModuleIo");
+        var pnlCapture = this.FindControl<Grid>("PnlModuleCapture");
+        var pnlMotion = this.FindControl<Grid>("PnlModuleMotion");
+        var pnlDaq = this.FindControl<Grid>("PnlModuleDaq");
 
         lstModules.SelectionChanged += (_, _) =>
         {
@@ -756,6 +762,9 @@ public partial class MainWindow : Window
                 if (pnlPt != null) pnlPt.IsVisible = selected.Name == "POINT&PATH";
                 if (pnlCall != null) pnlCall.IsVisible = selected.Name == "CALL";
                 if (pnlIo != null) pnlIo.IsVisible = selected.Name == "IO";
+                if (pnlCapture != null) pnlCapture.IsVisible = selected.Name == "CAPTURE" || selected.Name == "IMAQ";
+                if (pnlMotion != null) pnlMotion.IsVisible = selected.Name == "MOTION";
+                if (pnlDaq != null) pnlDaq.IsVisible = selected.Name == "DAQ";
 
                 if (selected.Name == "IO")
                 {
@@ -765,12 +774,27 @@ public partial class MainWindow : Window
                 {
                     RefreshCallModuleFiles();
                 }
+                else if (selected.Name == "CAPTURE" || selected.Name == "IMAQ")
+                {
+                    RefreshCaptureTab();
+                }
+                else if (selected.Name == "MOTION")
+                {
+                    RefreshMotionTab();
+                }
+                else if (selected.Name == "DAQ")
+                {
+                    RefreshDaqTab();
+                }
             }
         };
 
         BindSystemModule();
         BindCallModule();
         BindIoModulesTab();
+        BindCaptureModule();
+        BindMotionModule();
+        BindDaqModule();
 
         lstModules.SelectedIndex = 0;
     }
@@ -912,9 +936,267 @@ public partial class MainWindow : Window
     private void RefreshIoTab()
     {
         var lstDrivers = this.FindControl<ListBox>("LstIoDrivers");
-        if (lstDrivers != null && lstDrivers.SelectedIndex < 0 && (lstDrivers.ItemsSource as System.Collections.IEnumerable)?.Cast<object>().Any() == true)
+        if (lstDrivers != null)
         {
-            lstDrivers.SelectedIndex = 0;
+            if (lstDrivers.ItemsSource == null || !(lstDrivers.ItemsSource as System.Collections.IEnumerable)!.Cast<object>().Any())
+            {
+                var available = _driverManager.Loader.GetAvailableDrivers("IO");
+                var devices = _driverManager.GetDevicesByCategory("IO");
+                var driverList = new List<string>();
+                foreach (var dev in devices)
+                {
+                    driverList.Add($"{dev.DeviceName} ({dev.DriverType})");
+                }
+                foreach (var drv in available)
+                {
+                    if (!driverList.Contains(drv)) driverList.Add(drv);
+                }
+                if (driverList.Count == 0) driverList.Add("MockIO");
+                lstDrivers.ItemsSource = driverList;
+            }
+
+            if (lstDrivers.SelectedIndex < 0 && (lstDrivers.ItemsSource as System.Collections.IEnumerable)?.Cast<object>().Any() == true)
+            {
+                lstDrivers.SelectedIndex = 0;
+            }
+        }
+    }
+
+    private void BindCaptureModule()
+    {
+        var lstDrivers = this.FindControl<ListBox>("LstCaptureDrivers");
+        var host = this.FindControl<ContentControl>("PnlCaptureDriverSubPanelHost");
+        var rbDriver = this.FindControl<RadioButton>("RbCaptureDriverView");
+        var rbImaq = this.FindControl<RadioButton>("RbCaptureImaqView");
+        var pnlImaq = this.FindControl<Grid>("PnlCaptureImaqInspector");
+        var btnRefresh = this.FindControl<Button>("BtnRefreshImaq");
+
+        if (rbDriver != null && rbImaq != null)
+        {
+            rbDriver.IsCheckedChanged += (_, _) =>
+            {
+                if (host != null) host.IsVisible = rbDriver.IsChecked == true;
+                if (pnlImaq != null) pnlImaq.IsVisible = rbImaq.IsChecked == true;
+            };
+            rbImaq.IsCheckedChanged += (_, _) =>
+            {
+                if (host != null) host.IsVisible = rbDriver.IsChecked == true;
+                if (pnlImaq != null) pnlImaq.IsVisible = rbImaq.IsChecked == true;
+            };
+        }
+
+        if (lstDrivers != null)
+        {
+            lstDrivers.SelectionChanged += (_, _) =>
+            {
+                if (lstDrivers.SelectedItem is string rawName && host != null)
+                {
+                    string driverName = rawName.Split(' ')[0];
+                    var driver = _driverManager.GetDevice("Capture", driverName);
+                    if (driver != null)
+                    {
+                        host.Content = driver.CreateDriverView();
+                    }
+                    else
+                    {
+                        var newDriver = _driverManager.Loader.LoadDriver("Capture", driverName);
+                        if (newDriver != null)
+                        {
+                            newDriver.Init(driverName, "", _engines);
+                            host.Content = newDriver.CreateDriverView();
+                        }
+                    }
+                }
+            };
+        }
+    }
+
+    private void RefreshCaptureTab()
+    {
+        var lstDrivers = this.FindControl<ListBox>("LstCaptureDrivers");
+        if (lstDrivers != null)
+        {
+            var available = _driverManager.Loader.GetAvailableDrivers("Capture");
+            var devices = _driverManager.GetDevicesByCategory("Capture");
+            var driverList = new List<string>();
+            foreach (var dev in devices)
+            {
+                driverList.Add($"{dev.DeviceName} ({dev.DriverType})");
+            }
+            foreach (var drv in available)
+            {
+                if (!driverList.Contains(drv)) driverList.Add(drv);
+            }
+            if (driverList.Count == 0) driverList.Add("MockCamera");
+
+            lstDrivers.ItemsSource = driverList;
+            if (lstDrivers.SelectedIndex < 0 && driverList.Count > 0)
+            {
+                lstDrivers.SelectedIndex = 0;
+            }
+        }
+
+        // 觸發刷新 IMAQ 清單
+        var lstImaq = this.FindControl<ListBox>("LstImaqImages");
+        var txtSummary = this.FindControl<TextBlock>("TxtImaqSummary");
+        if (lstImaq != null)
+        {
+            var names = _engines.Imaq.GetAllNames();
+            if (txtSummary != null) txtSummary.Text = $"Total Images: {names.Count}";
+            string? prevSel = lstImaq.SelectedItem as string;
+            lstImaq.ItemsSource = names;
+            if (!string.IsNullOrEmpty(prevSel) && names.Contains(prevSel)) lstImaq.SelectedItem = prevSel;
+            else if (names.Count > 0) lstImaq.SelectedIndex = 0;
+        }
+    }
+
+    private void BindMotionModule()
+    {
+        var lstDrivers = this.FindControl<ListBox>("LstMotionDrivers");
+        var host = this.FindControl<ContentControl>("PnlMotionDriverSubPanelHost");
+        var btnRefresh = this.FindControl<Button>("BtnRefreshMotionDrivers");
+
+        if (btnRefresh != null)
+        {
+            btnRefresh.Click += (_, _) => RefreshMotionTab();
+        }
+
+        if (lstDrivers != null)
+        {
+            lstDrivers.SelectionChanged += (_, _) =>
+            {
+                if (lstDrivers.SelectedItem is string rawName && host != null)
+                {
+                    string driverName = rawName.Split(' ')[0];
+                    var driver = _driverManager.GetDevice("Motion", driverName);
+                    if (driver != null)
+                    {
+                        host.Content = driver.CreateDriverView();
+                    }
+                    else
+                    {
+                        var newDriver = _driverManager.Loader.LoadDriver("Motion", driverName);
+                        if (newDriver != null)
+                        {
+                            newDriver.Init(driverName, "", _engines);
+                            host.Content = newDriver.CreateDriverView();
+                        }
+                    }
+                }
+            };
+        }
+    }
+
+    private void RefreshMotionTab()
+    {
+        var lstDrivers = this.FindControl<ListBox>("LstMotionDrivers");
+        if (lstDrivers != null)
+        {
+            var available = _driverManager.Loader.GetAvailableDrivers("Motion");
+            var devices = _driverManager.GetDevicesByCategory("Motion");
+            var driverList = new List<string>();
+            foreach (var dev in devices)
+            {
+                driverList.Add($"{dev.DeviceName} ({dev.DriverType})");
+            }
+            foreach (var drv in available)
+            {
+                if (!driverList.Contains(drv)) driverList.Add(drv);
+            }
+            if (driverList.Count == 0) driverList.Add("MockMotion");
+
+            lstDrivers.ItemsSource = driverList;
+            if (lstDrivers.SelectedIndex < 0 && driverList.Count > 0)
+            {
+                lstDrivers.SelectedIndex = 0;
+            }
+        }
+    }
+
+    private void BindDaqModule()
+    {
+        var lstDrivers = this.FindControl<ListBox>("LstDaqDrivers");
+        var host = this.FindControl<ContentControl>("PnlDaqDriverSubPanelHost");
+        var rbDriver = this.FindControl<RadioButton>("RbDaqDriverView");
+        var rbWave = this.FindControl<RadioButton>("RbDaqWaveformView");
+        var pnlWave = this.FindControl<Border>("PnlDaqWaveformHost");
+
+        if (rbDriver != null && rbWave != null)
+        {
+            rbDriver.IsCheckedChanged += (_, _) =>
+            {
+                if (host != null) host.IsVisible = rbDriver.IsChecked == true;
+                if (pnlWave != null) pnlWave.IsVisible = rbWave.IsChecked == true;
+            };
+            rbWave.IsCheckedChanged += (_, _) =>
+            {
+                if (host != null) host.IsVisible = rbDriver.IsChecked == true;
+                if (pnlWave != null) pnlWave.IsVisible = rbWave.IsChecked == true;
+            };
+        }
+
+        if (lstDrivers != null)
+        {
+            lstDrivers.SelectionChanged += (_, _) =>
+            {
+                if (lstDrivers.SelectedItem is string rawName && host != null)
+                {
+                    string driverName = rawName.Split(' ')[0];
+                    var driver = _driverManager.GetDevice("DAQ", driverName);
+                    if (driver != null)
+                    {
+                        host.Content = driver.CreateDriverView();
+                    }
+                    else
+                    {
+                        var newDriver = _driverManager.Loader.LoadDriver("DAQ", driverName);
+                        if (newDriver != null)
+                        {
+                            newDriver.Init(driverName, "", _engines);
+                            host.Content = newDriver.CreateDriverView();
+                        }
+                    }
+                }
+            };
+        }
+    }
+
+    private void RefreshDaqTab()
+    {
+        var lstDrivers = this.FindControl<ListBox>("LstDaqDrivers");
+        if (lstDrivers != null)
+        {
+            var available = _driverManager.Loader.GetAvailableDrivers("DAQ");
+            var devices = _driverManager.GetDevicesByCategory("DAQ");
+            var driverList = new List<string>();
+            foreach (var dev in devices)
+            {
+                driverList.Add($"{dev.DeviceName} ({dev.DriverType})");
+            }
+            foreach (var drv in available)
+            {
+                if (!driverList.Contains(drv)) driverList.Add(drv);
+            }
+            if (driverList.Count == 0) driverList.Add("MockDAQ");
+
+            lstDrivers.ItemsSource = driverList;
+            if (lstDrivers.SelectedIndex < 0 && driverList.Count > 0)
+            {
+                lstDrivers.SelectedIndex = 0;
+            }
+        }
+
+        // 刷新波形清單
+        var lstWaves = this.FindControl<ListBox>("LstWaveforms");
+        var txtSummary = this.FindControl<TextBlock>("TxtWaveformSummary");
+        if (lstWaves != null)
+        {
+            var names = _engines.Daq.GetAllNames();
+            if (txtSummary != null) txtSummary.Text = $"Total Waveforms: {names.Count}";
+            string? prevSel = lstWaves.SelectedItem as string;
+            lstWaves.ItemsSource = names;
+            if (!string.IsNullOrEmpty(prevSel) && names.Contains(prevSel)) lstWaves.SelectedItem = prevSel;
+            else if (names.Count > 0) lstWaves.SelectedIndex = 0;
         }
     }
 
