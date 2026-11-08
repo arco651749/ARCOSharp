@@ -56,6 +56,5 @@ public class BasicEngines
         Daq = daq ?? throw new ArgumentNullException(nameof(daq));
         Timer = timer ?? throw new ArgumentNullException(nameof(timer));
         Record = record ?? throw new ArgumentNullException(nameof(record));
-        Timer.AttachRecordEngine(Record);
     }
 }

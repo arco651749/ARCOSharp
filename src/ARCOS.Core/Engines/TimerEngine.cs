@@ -40,7 +40,6 @@ public class TimerEngine
 {
     private readonly object _lock = new();
     private readonly ConcurrentDictionary<string, TimerEntry> _timers = new(StringComparer.OrdinalIgnoreCase);
-    private readonly ConcurrentDictionary<string, (long StartTicks, List<string> Messages)> _records = new(StringComparer.OrdinalIgnoreCase);
     private readonly IoEngine? _ioEngine;
     private readonly CounterEngine _counterEngine;
     private bool _isSystemPaused = false;
@@ -68,53 +67,6 @@ public class TimerEngine
     /// 取得計數器當前數值
     /// </summary>
     public int GetCount(string counterName) => _counterEngine.GetCount(counterName);
-
-    private RecordEngine? _recordEngine;
-
-    public void AttachRecordEngine(RecordEngine recordEngine)
-    {
-        _recordEngine = recordEngine;
-    }
-
-    [Obsolete("Record functionality has been decoupled into RecordEngine. Use BasicEngines.Record instead.")]
-    public void Record(string recordName, string message)
-    {
-        if (_recordEngine != null)
-        {
-            _recordEngine.Record(recordName, message);
-            return;
-        }
-        if (string.IsNullOrWhiteSpace(recordName)) return;
-        long nowTicks = Stopwatch.GetTimestamp();
-        var entry = _records.GetOrAdd(recordName, _ => (nowTicks, new List<string>()));
-        if (string.Equals(message, "Start", StringComparison.OrdinalIgnoreCase))
-        {
-            _records[recordName] = (nowTicks, new List<string> { $"Start at {DateTime.Now:HH:mm:ss.fff}" });
-        }
-        else
-        {
-            lock (entry.Messages)
-            {
-                entry.Messages.Add($"[{DateTime.Now:HH:mm:ss.fff}] {message}");
-            }
-        }
-    }
-
-    [Obsolete("Record functionality has been decoupled into RecordEngine. Use BasicEngines.Record instead.")]
-    public double GetRecordElapsedSeconds(string recordName)
-    {
-        if (_recordEngine != null)
-        {
-            return _recordEngine.GetRecordElapsedSeconds(recordName);
-        }
-        if (string.IsNullOrWhiteSpace(recordName)) return 0.0;
-        if (_records.TryGetValue(recordName, out var entry))
-        {
-            long nowTicks = Stopwatch.GetTimestamp();
-            return (double)(nowTicks - entry.StartTicks) / Stopwatch.Frequency;
-        }
-        return 0.0;
-    }
 
     /// <summary>
     /// 同步全機暫停狀態 (對應 System@SystemPause 與 System@SystemResume)
