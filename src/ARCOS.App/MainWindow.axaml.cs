@@ -964,6 +964,8 @@ public partial class MainWindow : Window
                 {
                     txtSelected.Text = f;
                     UpdateCallModulePreview(f);
+                    var tabViews = this.FindControl<TabControl>("TabCallViews");
+                    if (tabViews != null) tabViews.SelectedIndex = 0;
                 }
             };
         }
@@ -1010,6 +1012,8 @@ public partial class MainWindow : Window
                 var sw = System.Diagnostics.Stopwatch.StartNew();
                 try
                 {
+                    var tabViews = this.FindControl<TabControl>("TabCallViews");
+                    if (tabViews != null) tabViews.SelectedIndex = 1;
                     var result = _vm.Executor.ExecuteCommandLine(_vm.MainThreads[0], fullCmd);
                     sw.Stop();
                     if (txtDuration != null) txtDuration.Text = $"{sw.ElapsedMilliseconds} ms";

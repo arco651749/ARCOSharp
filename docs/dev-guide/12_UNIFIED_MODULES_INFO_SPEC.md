@@ -121,9 +121,9 @@ CALL 模組不僅是外部 CSVI 小程式的調度宿主，更是工程師除錯
    - 即時狀態列：`SELECTED CALL CSVI`、`LAST EXEC DURATION`、`STATUS / RETURN`。
    - 輸入測試參數 (`TxtCallTestArgs`)、執行模式 (`Debug` / `Runtime &` / `Reentrant &&`)、`▶ Run Test` 執行按鈕。
    - 增加 `📋 帶入導引參數 (Apply From Wizard)` 按鈕，一鍵讀取導引精靈中的輸入設定並填入測試列。
-3. **右欄核心：雙視圖分頁容器 (`TabCallViews`)**：
-   - **`🖥️ FrontPanel (執行時前面板)`**：掛載選中 CSVI 之 `Panel.axaml` 或 `GetFrontPanelControl()`。即時呈現該小程式的運行期視覺回饋（如檢測指示燈、波形圖表、演算法結果卡片）。
-   - **`⚙️ Parameter Wizard (參數導引精靈)`**：掛載選中 CSVI 之 `Wizard.axaml`。在不進入排程器腳本編輯器的情況下，直接呈現該指令的參數配置介面，供工程師驗證精靈版面與點選配置。
+3. **右欄核心：雙視圖分頁容器 (`TabCallViews`)——遵循「先導引配置、後執行結果」認知工學**：
+   - **第一分頁（預設焦點）：`⚙️ 參數導引精靈 (Wizard)`**：掛載選中 CSVI 之 `Wizard.axaml`。在不進入排程器腳本編輯器的情況下，直接呈現該指令的參數配置介面，工程師選取小程式後首先在此驗證精靈版面，並可一鍵將配置參數帶入測試列。
+   - **第二分頁：`🖥️ 執行時前面板 (FrontPanel)`**：掛載選中 CSVI 之 `Panel.axaml` 或 `GetFrontPanelControl()`。即時呈現該小程式的運行期視覺回饋（如檢測指示燈、波形圖表、演算法結果卡片）。點擊 `▶ Run Test` 時系統可自動平滑切換至此分頁，第一時間目睹執行反饋。
 4. **右欄底部：終端日誌 (Execution Console Log)**：
    - 緊湊暗色終端（高度約 130px），在不遮蔽上方 FrontPanel 與 Wizard 的前提下，即時輸出調用時間戳、耗時微秒、回傳狀態與日誌。工程師點擊 `▶ Run Test` 時可「眼觀 FrontPanel 視覺動態，耳聽 Console 狀態回傳」，達成真正零割裂的除錯體驗。
 

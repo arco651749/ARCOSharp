@@ -126,7 +126,7 @@ public class MyCalcCommand : ICallCommand
 2. **專屬除錯整合台與雙 UI 視圖**：
    - 點擊 `Modules Info` 中的 `CALL`，即載入單檔外掛管理與單元除錯介面。
    - 介面自動條列 `ExternalModules/` 目錄下的所有已編譯 `.csvi` 檔案。
-   - **雙視圖預覽 (Dual-View)**：右側提供 `🖥️ FrontPanel (執行時前面板)` 與 `⚙️ Parameter Wizard (參數導引精靈)` 雙分頁，直接解析並即時渲染選中 CSVI 內嵌之 `Panel.axaml` 與 `Wizard.axaml`。
+   - **雙視圖預覽 (Dual-View)**：右側提供「先導引、後結果」認知順序之雙分頁：第一分頁 ⚙️ Parameter Wizard (參數導引精靈)（輸入配置）與第二分頁 🖥️ FrontPanel (執行時前面板)（運行成果），直接解析並即時渲染選中 CSVI 內嵌之 Wizard.axaml 與 Panel.axaml。
    - **互動式除錯面板 (Interactive Test Harness)**：支援手動輸入參數或一鍵從導引精靈帶入參數，執行後於下方終端日誌即時輸出耗時微秒（Latency）、回傳狀態與日誌。
 3. **無縫串接 CsviStudio**：
    - `CALL.csvi` 提供快捷按鈕直接啟動或內嵌 **`CsviStudio`**。

@@ -1769,22 +1769,22 @@
                                                 <Button x:Name="BtnCallRunTest" Grid.Column="3" Content="▶ Run Test" Height="28" Padding="12,0" Background="#0284C7" Foreground="White" FontWeight="Bold" FontSize="11" CornerRadius="4"/>
                                             </Grid>
 
-                                            <!-- CSVI 雙視圖容器 (FrontPanel 與 Parameter Guidance) -->
+                                            <!-- CSVI 雙視圖容器 (先 Wizard 參數導引，後 FrontPanel 執行結果) -->
                                             <TabControl x:Name="TabCallViews" Grid.Row="2" Margin="0,0,0,8">
-                                                <TabItem x:Name="TabCallFrontPanel" Header="🖥️ 執行時前面板 (FrontPanel)">
-                                                    <Border Background="#F8FAFC" BorderBrush="#CBD5E1" BorderThickness="1" CornerRadius="4" Padding="12" MinHeight="180">
-                                                        <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
-                                                            <Border x:Name="PnlCallFrontPanelHost" HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
-                                                                <TextBlock Text="請選取左側 CSVI 檔案以載入 FrontPanel 前面板" Foreground="#94A3B8" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="20"/>
-                                                            </Border>
-                                                        </ScrollViewer>
-                                                    </Border>
-                                                </TabItem>
                                                 <TabItem x:Name="TabCallWizard" Header="⚙️ 參數導引精靈 (Wizard)">
                                                     <Border Background="#F8FAFC" BorderBrush="#CBD5E1" BorderThickness="1" CornerRadius="4" Padding="12" MinHeight="180">
                                                         <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
                                                             <Border x:Name="PnlCallWizardHost" HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
                                                                 <TextBlock Text="請選取左側 CSVI 檔案以載入 Parameter Guidance 導引視圖" Foreground="#94A3B8" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="20"/>
+                                                            </Border>
+                                                        </ScrollViewer>
+                                                    </Border>
+                                                </TabItem>
+                                                <TabItem x:Name="TabCallFrontPanel" Header="🖥️ 執行時前面板 (FrontPanel)">
+                                                    <Border Background="#F8FAFC" BorderBrush="#CBD5E1" BorderThickness="1" CornerRadius="4" Padding="12" MinHeight="180">
+                                                        <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
+                                                            <Border x:Name="PnlCallFrontPanelHost" HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
+                                                                <TextBlock Text="請選取左側 CSVI 檔案以載入 FrontPanel 前面板" Foreground="#94A3B8" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="20"/>
                                                             </Border>
                                                         </ScrollViewer>
                                                     </Border>
