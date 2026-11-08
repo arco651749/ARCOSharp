@@ -98,7 +98,7 @@ public partial class TestThreadWindow : Window
         _autoTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(50) };
         _autoTimer.Tick += AutoTimer_Tick;
 
-        _pcDrainerTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(33) };
+        _pcDrainerTimer = new DispatcherTimer(DispatcherPriority.Background) { Interval = TimeSpan.FromMilliseconds(100) };
         _pcDrainerTimer.Tick += (_, _) => DrainPCPointer();
         _pcDrainerTimer.Start();
 

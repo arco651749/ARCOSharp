@@ -108,7 +108,40 @@ ARCOSharp 的本質是一套專注於工業級自動化機台的高吞吐、低�
 
 ---
 
-## 5. 標準程式碼範例與實作模式 (Best Practice Code Patterns)
+## 5. STEP 單步與 AUTO 自動執行之指標語意與 NOTIFY 機制 (STEP & AUTO Execution Pointer Semantics)
+
+在排程器編輯器（`SequencerEditorControl`）與測試執行緒編輯器（`TestThreadWindow`）中，指令執行指標（紅色高亮游標 `IsCurrentPC`）的行為嚴格遵循以下工程準則：
+
+### 🎯 一、STEP 單步執行之指標判定哲學 (STEP Semantics)
+* **核心指標定義**：紅色游標所在的行號，恆代表**「下一個即將被執行的指令 (Next Instruction to be Executed)」**。
+* **按了 STEP 之後的指標動態流向**：
+  1. **未完成狀態 (Incomplete / Waiting)**：
+     * 若該指令需要多輪微步輪詢等待（例如：`System@Delay` 尚未逾時、`System@WaitIO` 等待外部訊號到位、運動軸卡尚未到達目標座標），執行引擎回傳 `CommandStatus.Waiting`。
+     * **指標必須維持停留在原處不變 (Stays at Current Index)**！
+     * 再次點擊 STEP 時，系統繼續對此同一指令做下一微步的狀態機推進。
+  2. **已完成狀態 (Completed / Finished)**：
+     * 當該指令正式滿足結束條件並完成時，執行引擎推進 PC 指標。
+     * **指標必須立即跳轉至完成後的下一個目標位置 (Advances to Target Position)**：
+       * **一般指令**：指標行號順向 `+1`。
+       * **條件與流程分支**（`Thread@If`、`Thread@Jump`、`Thread@Call`、`Thread@Else`）：若條件成立或發生跳轉，指標直接跳躍到目標標籤（Label）或副程式行號。
+       * **異常自癒跳轉**（Error Handler / `[[Label]]`）：若指令發生硬體或通訊錯誤，且觸發了自癒機制，指標立即跳轉至對應的錯誤處理標籤。
+* **工程價值與操作員回饋**：
+  * **確認上一步是否成功**：操作員按下 STEP 後，只要看到游標前進或跳轉，即確信上一個指令已順利結束；若游標停留在原地，代表該動作仍在等待中。
+  * **明確預期下一步**：游標當前停在哪一行，下一次點擊 STEP 就會精準執行該行指令。
+
+---
+
+### ⚡ 二、AUTO 全速自動執行之非阻塞 NOTIFY 機制 (AUTO Non-Blocking Notify)
+* **執行與顯示徹底非同步解耦**：
+  * 在 AUTO（自動/連續運行）模式下，後端執行緒以 CPU 全速滿載執行，**絕對不等待 UI 渲染完成才跑下一步**。
+  * 執行位置的更新採用 **非阻塞 NOTIFY（最後值合併 Last-Value-Wins）** 進行傳遞。
+* **視覺流動感知**：
+  * 因為採用低頻合併 NOTIFY（約 10 Hz / 100ms），當機台全速運轉時，許多微秒級指令直接一閃而過，人眼可能根本看不到游標停在某一行。
+  * 但操作員能看到紅色游標在程式區段間平滑跳躍與流動，**明確感知到系統正在健康全速推進**，兼顧了執行極速與視覺安心感！
+
+---
+
+## 6. 標準程式碼範例與實作模式 (Best Practice Code Patterns)
 
 ### ✅ 模式 1：UI 定時器之 Active 守衛模式 (Active Guard Pattern)
 

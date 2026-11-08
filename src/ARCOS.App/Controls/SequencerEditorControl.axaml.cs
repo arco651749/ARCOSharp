@@ -78,7 +78,7 @@ public partial class SequencerEditorControl : UserControl
         _autoTimer.Tick += AutoTimer_Tick;
 
         // 獨立 UI 節流排程器 (33ms / ~30 FPS)：定時非同步抽取最新 PC，絕不阻塞 CMDEXECUTE 微秒級調度
-        _pcDrainerTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(33) };
+        _pcDrainerTimer = new DispatcherTimer(DispatcherPriority.Background) { Interval = TimeSpan.FromMilliseconds(100) };
         _pcDrainerTimer.Tick += (_, _) => DrainPCPointer();
         _pcDrainerTimer.Start();
     }
