@@ -1,0 +1,140 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="ARCOS.CsviStudio.Controls.CsviStudioControl"
+             Background="#FBFBFA">
+
+    <Grid RowDefinitions="Auto, Auto, *, 130">
+        <!-- Top Toolbar (Warm Light Cream) -->
+        <Border Grid.Row="0" Background="#F4F4F0" Padding="12,8" BorderBrush="#E5E5DF" BorderThickness="0,0,0,1">
+            <DockPanel LastChildFill="False">
+                <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                    <Button Name="OpenBtn" Content="📂 Open .csvi" Click="OnOpenClick" 
+                            Background="#FFFFFF" Foreground="#2D3748" BorderBrush="#D1D5DB" Padding="10,5" FontSize="11.5"/>
+                    <Button Name="NewBtn" Content="✨ New CSVI" Click="OnNewClick" 
+                            Background="#FFFFFF" Foreground="#2D3748" BorderBrush="#D1D5DB" Padding="10,5" FontSize="11.5"/>
+                    <Button Name="BuildBtn" Content="⚡ Build &amp; Save (Ctrl+S)" Click="OnBuildClick" 
+                            Background="#2B6CB0" Foreground="White" BorderBrush="#2B6CB0" FontWeight="Bold" Padding="12,5" FontSize="11.5"/>
+                    
+                    <Separator Width="1" Margin="4,2" Background="#D1D5DB"/>
+                    
+                    <TextBlock Text="Mode:" VerticalAlignment="Center" Foreground="#4A5568" FontWeight="SemiBold" FontSize="11.5"/>
+                    <ComboBox Name="ModeCombo" SelectedIndex="0" Width="160" Height="28" FontSize="11" Background="#FFFFFF" BorderBrush="#D1D5DB">
+                        <ComboBoxItem Content="🟢 PortableOpen"/>
+                        <ComboBoxItem Content="🟡 PasswordLocked"/>
+                        <ComboBoxItem Content="🔴 StrippedRelease"/>
+                    </ComboBox>
+
+                    <Button Name="SetPasswordBtn" Content="🔑 Password..." Click="OnSetPasswordClick" 
+                            Background="#FFFFFF" Foreground="#2D3748" BorderBrush="#D1D5DB" Padding="8,5" FontSize="11"/>
+                    <Button Name="ExportSourceBtn" Content="📤 Export Source" Click="OnExportSourceClick" 
+                            Background="#FFFFFF" Foreground="#2D3748" BorderBrush="#D1D5DB" Padding="8,5" FontSize="11"/>
+                </StackPanel>
+
+                <!-- Right Status Blocks: SDK + MCP Server Port -->
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                    <Border Background="#E6FFFA" BorderBrush="#81E6D9" BorderThickness="1" CornerRadius="4" Padding="8,4">
+                        <TextBlock Name="SdkStatusBlock" Text="SDK: ARCOS-SDK-8.0.1 [✔ ALIGNED]" 
+                                   Foreground="#234E52" FontWeight="SemiBold" FontSize="11"/>
+                    </Border>
+                    <Border Background="#EEF2FF" BorderBrush="#C7D2FE" BorderThickness="1" CornerRadius="4" Padding="8,4">
+                        <TextBlock Name="McpStatusBlock" Text="🟢 MCP Server: Port 48800" 
+                                   Foreground="#4338CA" FontWeight="Bold" FontSize="11"/>
+                    </Border>
+                </StackPanel>
+            </DockPanel>
+        </Border>
+
+        <!-- Status / Header Bar -->
+        <Border Grid.Row="1" Background="#FAF9F5" Padding="14,6" BorderBrush="#E5E5DF" BorderThickness="0,0,0,1">
+            <Grid ColumnDefinitions="*, Auto">
+                <TextBlock Name="CurrentFileBlock" Text="No file opened" Foreground="#2D3748" FontWeight="SemiBold" FontSize="11.5" VerticalAlignment="Center"/>
+                <TextBlock Grid.Column="1" Name="ModeStatusBlock" Text="Mode: PortableOpen" Foreground="#718096" VerticalAlignment="Center" FontSize="11"/>
+            </Grid>
+        </Border>
+
+        <!-- Main Workspace: Split Left (Source Tabs) & Right (Live Preview / Sandbox) -->
+        <Grid Grid.Row="2" ColumnDefinitions="*, 6, 520" Background="#FBFBFA">
+            <!-- Left: Source Code Tabs (Clean Paper Tone) -->
+            <Border Grid.Column="0" Background="#FFFFFF" BorderBrush="#E5E5DF" BorderThickness="0,0,1,0">
+                <TabControl Name="SourceTabs">
+                    <TabItem Header="📄 Logic.cs" FontSize="12" FontWeight="SemiBold">
+                        <TextBox Name="LogicEditor" AcceptsReturn="True" AcceptsTab="True" 
+                                 FontFamily="Cascadia Code, Consolas, Courier New" FontSize="12.5"
+                                 Background="#FFFFFF" Foreground="#1A202C" BorderThickness="0" Padding="12"/>
+                    </TabItem>
+                    <TabItem Header="🎨 Wizard.axaml" FontSize="12" FontWeight="SemiBold">
+                        <TextBox Name="WizardEditor" AcceptsReturn="True" AcceptsTab="True"
+                                 FontFamily="Cascadia Code, Consolas, Courier New" FontSize="12.5"
+                                 Background="#FFFFFF" Foreground="#1A202C" BorderThickness="0" Padding="12"/>
+                    </TabItem>
+                    <TabItem Header="🎛️ Panel.axaml" FontSize="12" FontWeight="SemiBold">
+                        <TextBox Name="PanelEditor" AcceptsReturn="True" AcceptsTab="True"
+                                 FontFamily="Cascadia Code, Consolas, Courier New" FontSize="12.5"
+                                 Background="#FFFFFF" Foreground="#1A202C" BorderThickness="0" Padding="12"/>
+                    </TabItem>
+                    <TabItem Header="📜 History &amp; Diff" FontSize="12" FontWeight="SemiBold">
+                        <TextBox Name="HistoryViewer" IsReadOnly="True" AcceptsReturn="True"
+                                 FontFamily="Cascadia Code, Consolas, Courier New" FontSize="12"
+                                 Background="#F7FAFC" Foreground="#2B6CB0" BorderThickness="0" Padding="12"/>
+                    </TabItem>
+                </TabControl>
+            </Border>
+
+            <!-- GridSplitter to resize Left / Right panels -->
+            <GridSplitter Grid.Column="1" Width="6" Background="#E2E8F0" ResizeDirection="Columns"/>
+
+            <!-- Right: Four-in-One Sandbox & Live Preview -->
+            <Grid Grid.Column="2" RowDefinitions="Auto, *" Background="#F8F8F5">
+                <Border Background="#F4F4F0" Padding="12,8" BorderBrush="#E5E5DF" BorderThickness="0,0,0,1">
+                    <TextBlock Text="🔍 LIVE SANDBOX &amp; PREVIEW" FontWeight="Bold" Foreground="#2C7A7B" FontSize="12"/>
+                </Border>
+
+                <TabControl Grid.Row="1">
+                    <TabItem Header="🧪 Headless Benchmark" FontSize="12" FontWeight="SemiBold">
+                        <StackPanel Margin="14" Spacing="10">
+                            <TextBlock Text="Command Parameter:" Foreground="#4A5568" FontWeight="SemiBold" FontSize="11.5"/>
+                            <TextBox Name="TestParamBox" Text="P0.0,0.5" FontFamily="Cascadia Code" FontSize="11.5"
+                                     Background="#FFFFFF" Foreground="#1A202C" BorderBrush="#CBD5E0" Padding="8,6"/>
+                            
+                            <Button Content="▶ Execute (Headless Sandbox)" Click="OnRunSandboxClick" 
+                                    Background="#2F855A" Foreground="White" BorderBrush="#276749" FontWeight="Bold" 
+                                    HorizontalAlignment="Stretch" Padding="10,7" Margin="0,4,0,0" FontSize="12"/>
+
+                            <Border Background="#FFFFFF" BorderBrush="#E2E8F0" BorderThickness="1" 
+                                    CornerRadius="6" Padding="10" Margin="0,10,0,0" Height="220">
+                                <ScrollViewer>
+                                    <TextBlock Name="SandboxOutputBlock" Text="Ready to run sandbox." 
+                                               FontFamily="Cascadia Code" Foreground="#2D3748" TextWrapping="Wrap" FontSize="11"/>
+                                </ScrollViewer>
+                            </Border>
+                        </StackPanel>
+                    </TabItem>
+
+                    <TabItem Header="🎨 Live XAML Preview" FontSize="12" FontWeight="SemiBold">
+                        <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
+                            <Border Name="XamlPreviewHost" Background="#FFFFFF" BorderBrush="#E2E8F0" BorderThickness="1" 
+                                    Margin="12" CornerRadius="6" Padding="14">
+                                <TextBlock Text="Live preview rendered from Wizard.axaml / Panel.axaml" Foreground="#A0AEC0" 
+                                           HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="12"/>
+                            </Border>
+                        </ScrollViewer>
+                    </TabItem>
+                </TabControl>
+            </Grid>
+        </Grid>
+
+        <!-- Bottom: Diagnostics & Compiler Output (Soft Warm Linen) -->
+        <Border Grid.Row="3" Background="#F4F4F0" Padding="12,8" BorderBrush="#E5E5DF" BorderThickness="0,1,0,0">
+            <Grid RowDefinitions="Auto, *">
+                <TextBlock Text="💬 COMPILER &amp; MCP DIAGNOSTICS" FontWeight="SemiBold" Foreground="#4A5568" FontSize="11.5" Margin="0,0,0,4"/>
+                <Border Grid.Row="1" Background="#FFFFFF" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="4" Padding="6">
+                    <ScrollViewer>
+                        <TextBox Name="DiagnosticsBox" IsReadOnly="True" AcceptsReturn="True"
+                                 FontFamily="Cascadia Code, Consolas" FontSize="11.5"
+                                 Background="#FFFFFF" Foreground="#276749" BorderThickness="0"/>
+                    </ScrollViewer>
+                </Border>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

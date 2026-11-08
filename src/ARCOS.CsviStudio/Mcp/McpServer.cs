@@ -63,6 +63,11 @@ public class McpServer
         }
     }
 
+    public JsonObject? HandleRequestDirect(string? method, JsonNode? @params, JsonNode? id)
+    {
+        return HandleRequest(method, @params, id);
+    }
+
     private JsonObject? HandleRequest(string? method, JsonNode? @params, JsonNode? id)
     {
         var response = new JsonObject

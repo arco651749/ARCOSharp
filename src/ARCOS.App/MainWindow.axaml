@@ -5,6 +5,7 @@
         xmlns:controls="clr-namespace:ARCOS.App.Controls"
 
         xmlns:ScottPlot="clr-namespace:ScottPlot.Avalonia;assembly=ScottPlot.Avalonia"
+        xmlns:studio="clr-namespace:ARCOS.CsviStudio.Controls;assembly=CSVI_Studio"
 
         x:Class="ARCOS.App.MainWindow"
 
@@ -126,226 +127,17 @@
 
                         <!-- 上半部：User Front Panel 動態自訂畫布 -->
 
-                        <Border Grid.Row="0" Background="#FFFFFF" BorderBrush="#CBD5E1" BorderThickness="1" Margin="0,0,0,4" CornerRadius="6">
-
-                            <Grid RowDefinitions="Auto,*" Margin="12">
-
-                                <!-- 機台標題與統計區 (方案 B 精緻現代儀表板卡片) -->
-
-                                <Border Grid.Row="0" Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="1" Padding="14,8" CornerRadius="6" Margin="0,0,0,10">
-
-                                    <Grid ColumnDefinitions="*,Auto,Auto,Auto">
-
-                                        <StackPanel Grid.Column="0" VerticalAlignment="Center">
-
-                                            <TextBlock Text="STATION 01 : AUTO INSPECTION &amp; ASSEMBLY" FontWeight="Bold" FontSize="15" Foreground="#0F172A"/>
-
-                                            <TextBlock Text="Model: ARCOS-PROD-2026 | Recipe: Master_V1.pro" FontSize="11.5" Foreground="#64748B"/>
-
-                                        </StackPanel>
-
-                                        <Border Grid.Column="1" Background="White" BorderBrush="#CBD5E1" BorderThickness="1" Padding="12,4" Margin="6,0" CornerRadius="4">
-
-                                            <StackPanel>
-
-                                                <TextBlock Text="TOTAL PARTS" FontSize="10" FontWeight="SemiBold" Foreground="#64748B" HorizontalAlignment="Center"/>
-
-                                                <TextBlock x:Name="TxtTotalCount" Text="1,248" FontSize="17" FontWeight="Black" Foreground="#0284C7" HorizontalAlignment="Center"/>
-
-                                            </StackPanel>
-
-                                        </Border>
-
-                                        <Border Grid.Column="2" Background="White" BorderBrush="#CBD5E1" BorderThickness="1" Padding="12,4" Margin="6,0" CornerRadius="4">
-
-                                            <StackPanel>
-
-                                                <TextBlock Text="OK / YIELD" FontSize="10" FontWeight="SemiBold" Foreground="#64748B" HorizontalAlignment="Center"/>
-
-                                                <TextBlock x:Name="TxtOkCount" Text="1,236 (99.0%)" FontSize="17" FontWeight="Black" Foreground="#10B981" HorizontalAlignment="Center"/>
-
-                                            </StackPanel>
-
-                                        </Border>
-
-                                        <Border Grid.Column="3" Background="White" BorderBrush="#CBD5E1" BorderThickness="1" Padding="12,4" Margin="6,0" CornerRadius="4">
-
-                                            <StackPanel>
-
-                                                <TextBlock Text="CYCLE TIME" FontSize="10" FontWeight="SemiBold" Foreground="#64748B" HorizontalAlignment="Center"/>
-
-                                                <TextBlock x:Name="TxtCycleTime" Text="1.82 s" FontSize="17" FontWeight="Black" Foreground="#F59E0B" HorizontalAlignment="Center"/>
-
-                                            </StackPanel>
-
-                                        </Border>
-
-                                    </Grid>
-
+                        <Border Grid.Row="0" Background="#FFFFFF" BorderBrush="#CBD5E1" BorderThickness="1" Margin="0,0,0,4" CornerRadius="6" Padding="6">
+                            <ContentControl x:Name="UserFrontPanelContainer" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch">
+                                <Border Background="#F8FAFC" BorderBrush="#CBD5E1" BorderThickness="1" CornerRadius="8" Padding="32,24" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                    <StackPanel Spacing="12" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                        <TextBlock Text="🖥️ [ USER FRONT PANEL SUBPANEL ]" FontWeight="Black" FontSize="16" Foreground="#0284C7" HorizontalAlignment="Center"/>
+                                        <TextBlock Text="尚未載入自訂使用者介面 (No User Panel Loaded)" Foreground="#64748B" FontSize="13" HorizontalAlignment="Center"/>
+                                        <TextBlock Text="請於腳本下達指令：System@UserPanelOpen, UserPanel.csvi" FontFamily="Consolas" Foreground="#0284C7" HorizontalAlignment="Center" FontSize="12"/>
+                                    </StackPanel>
                                 </Border>
-
-
-
-                                <!-- 動態嵌入使用者前面板或產線狀態視覺化 (支援 SubPanel 熱插拔切換) -->
-
-                                <Grid Grid.Row="1" RowDefinitions="Auto,*">
-
-                                    <!-- SubPanel 儀表掛載控制列 -->
-
-                                    <Border Grid.Row="0" Background="#F1F5F9" BorderBrush="#CBD5E1" BorderThickness="1" CornerRadius="4" Padding="10,6" Margin="0,0,0,8">
-
-                                        <Grid ColumnDefinitions="Auto,*,Auto">
-
-                                            <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-
-                                                <StackPanel Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
-
-
-
-                                                    <Path Data="{StaticResource IconSliders}" Fill="#475569" Width="12" Height="12" Stretch="Uniform"/>
-
-
-
-                                                    <TextBlock Text="SUBPANEL VIEW:" FontWeight="Bold" FontSize="11" Foreground="#475569" VerticalAlignment="Center"/>
-
-
-
-                                                </StackPanel>
-
-                                                <ComboBox x:Name="CmbSubPanelSelect" Width="260" Height="28" FontSize="11" VerticalContentAlignment="Center">
-
-                                                    <ComboBoxItem Content="Station HMI (Default)" IsSelected="True"/>
-
-                                                    <ComboBoxItem Content="IO Dashboard (IO.csvi Front Panel)"/>
-
-                                                    <ComboBoxItem Content="MockIO Driver (MockIO.csvi Front Panel)"/>
-
-                                                    <ComboBoxItem Content="System Dashboard (System.csvi Front Panel)"/>
-
-                                                    <ComboBoxItem Content="Thread Monitor (Thread.csvi Front Panel)"/>
-
-                                                    <ComboBoxItem Content="Capture Viewfinder (Capture.csvi Front Panel)"/>
-
-                                                    <ComboBoxItem Content="MockCamera Driver (MockCamera.csvi Front Panel)"/>
-
-                                                    <ComboBoxItem Content="DAQ Oscilloscope (DAQ.csvi Front Panel)"/>
-
-                                                    <ComboBoxItem Content="MockDAQ Driver (MockDAQ.csvi Front Panel)"/>
-
-                                                    <ComboBoxItem Content="Variable Watcher (Variable.csvi Front Panel)"/>
-
-                                                    <ComboBoxItem Content="Motion Controller (Motion.csvi Front Panel)"/>
-
-                                                    <ComboBoxItem Content="MockMotion Driver (MockMotion.csvi Front Panel)"/>
-
-                                                </ComboBox>
-
-                                            </StackPanel>
-
-
-
-                                            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4">
-
-                                                <Button x:Name="BtnMountIoPanel" Content="IO" Height="28" Padding="6,0" FontSize="11" FontWeight="SemiBold" Background="#0284C7" Foreground="White" CornerRadius="3"/>
-
-                                                <Button x:Name="BtnMountDriverPanel" Content="Driver" Height="28" Padding="6,0" FontSize="11" FontWeight="SemiBold" Background="#0F766E" Foreground="White" CornerRadius="3"/>
-
-                                                <Button x:Name="BtnMountSystemPanel" Content="System" Height="28" Padding="6,0" FontSize="11" FontWeight="SemiBold" Background="#7C3AED" Foreground="White" CornerRadius="3"/>
-
-                                                <Button x:Name="BtnMountThreadPanel" Content="Thread" Height="28" Padding="6,0" FontSize="11" FontWeight="SemiBold" Background="#D97706" Foreground="White" CornerRadius="3"/>
-
-                                                <Button x:Name="BtnMountCapturePanel" Content="Capture" Height="28" Padding="6,0" FontSize="11" FontWeight="SemiBold" Background="#2563EB" Foreground="White" CornerRadius="3"/>
-
-                                                <Button x:Name="BtnMountCamDriver" Content="Cam" Height="28" Padding="6,0" FontSize="11" FontWeight="SemiBold" Background="#0284C7" Foreground="White" CornerRadius="3"/>
-
-                                                <Button x:Name="BtnMountDaqPanel" Content="DAQ" Height="28" Padding="6,0" FontSize="11" FontWeight="SemiBold" Background="#059669" Foreground="White" CornerRadius="3"/>
-
-                                                <Button x:Name="BtnMountDaqDriver" Content="DaqDrv" Height="28" Padding="6,0" FontSize="11" FontWeight="SemiBold" Background="#0F766E" Foreground="White" CornerRadius="3"/>
-
-                                                <Button x:Name="BtnMountVariablePanel" Content="Var" Height="28" Padding="6,0" FontSize="11" FontWeight="SemiBold" Background="#9333EA" Foreground="White" CornerRadius="3"/>
-
-                                                <Button x:Name="BtnMountMotionPanel" Content="Mot" Height="28" Padding="6,0" FontSize="11" FontWeight="SemiBold" Background="#0284C7" Foreground="White" CornerRadius="3"/>
-
-                                                <Button x:Name="BtnMountMotionDriver" Content="MMot" Height="28" Padding="6,0" FontSize="11" FontWeight="SemiBold" Background="#0369A1" Foreground="White" CornerRadius="3"/>
-
-                                                <Button x:Name="BtnOpenUserPanelCsvi" Height="28" Padding="8,0" FontSize="11" FontWeight="Bold" Background="#059669" Foreground="White" CornerRadius="3" ToolTip.Tip="從根目錄載入使用者自訂 User Panel CSVI">
-
-
-
-                                                    <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
-
-
-
-                                                        <Path Data="{StaticResource IconFolderOpen}" Fill="White" Width="12" Height="12" Stretch="Uniform"/>
-
-
-
-                                                        <TextBlock Text="User CSVI" FontSize="11" FontWeight="Bold" Foreground="White" VerticalAlignment="Center"/>
-
-
-
-                                                    </StackPanel>
-
-
-
-                                                </Button>
-
-                                                <Button x:Name="BtnResetSubPanel" Height="28" Padding="8,0" FontSize="11" Background="#E2E8F0" Foreground="#334155" CornerRadius="3" ToolTip.Tip="重設為預設 HMI">
-
-
-
-                                                    <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
-
-
-
-                                                        <Path Data="{StaticResource IconLayoutDashboard}" Fill="#334155" Width="11" Height="11" Stretch="Uniform"/>
-
-
-
-                                                        <TextBlock Text="Reset" FontSize="11" Foreground="#334155" VerticalAlignment="Center"/>
-
-
-
-                                                    </StackPanel>
-
-
-
-                                                </Button>
-
-                                            </StackPanel>
-
-                                        </Grid>
-
-                                    </Border>
-
-
-
-                                    <!-- 動態掛載容器 -->
-
-                                    <Border Grid.Row="1" Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="6" Padding="10">
-
-                                        <ContentControl x:Name="UserFrontPanelContainer">
-
-                                            <Border Background="#F8FAFC" BorderBrush="#CBD5E1" BorderThickness="1" CornerRadius="8" Padding="32,24" HorizontalAlignment="Center" VerticalAlignment="Center">
-                                                <StackPanel Spacing="12" HorizontalAlignment="Center" VerticalAlignment="Center">
-                                                    <TextBlock Text="📺 [ USER FRONT PANEL CANVAS ]" FontWeight="Bold" FontSize="16" Foreground="#475569" HorizontalAlignment="Center"/>
-                                                    <TextBlock Text="尚未載入自訂使用者介面 (No User Panel Loaded)" FontSize="13" FontWeight="SemiBold" Foreground="#64748B" HorizontalAlignment="Center"/>
-                                                    <TextBlock Text="請於腳本下達指令： System@UserPanelOpen, UserPanel.csvi" FontSize="12" FontFamily="Consolas, Courier New, monospace" Foreground="#0284C7" HorizontalAlignment="Center"/>
-                                                    <TextBlock Text="或點選上方「載入 CSVI 儀表...」按鈕選擇自訂 HMI 面板。" FontSize="11" Foreground="#94A3B8" HorizontalAlignment="Center"/>
-                                                </StackPanel>
-                                            </Border>
-
-                                        </ContentControl>
-
-                                    </Border>
-
-                                </Grid>
-
-                            </Grid>
-
+                            </ContentControl>
                         </Border>
-
-
 
                         <!-- 下半部：方案 B 現代精緻工控底欄 (PAUSE、急停 STOP、OK 狀態膠囊與終端日誌) -->
 
@@ -455,43 +247,13 @@
 
                     <!-- 上方相機分頁 (CAM0 ~ CAM11) -->
 
-                    <Border Grid.Row="0" Background="#FFFFFF" BorderBrush="#CBD5E1" BorderThickness="0,0,0,1" Margin="0,0,0,4" Padding="4,2">
-
-                        <StackPanel x:Name="PnlCamTabs" Orientation="Horizontal" Spacing="4">
-
-                            <RadioButton Content="CAM0" IsChecked="True" GroupName="CamSel" Height="26" FontSize="11" FontWeight="Bold" Margin="2,0"/>
-
-                            <RadioButton Content="CAM1" GroupName="CamSel" Height="26" FontSize="11" FontWeight="Bold" Margin="2,0"/>
-
-                            <RadioButton Content="CAM2" GroupName="CamSel" Height="26" FontSize="11" FontWeight="Bold" Margin="2,0"/>
-
-                            <RadioButton Content="CAM3" GroupName="CamSel" Height="26" FontSize="11" FontWeight="Bold" Margin="2,0"/>
-
-                            <RadioButton Content="CAM4" GroupName="CamSel" Height="26" FontSize="11" FontWeight="Bold" Margin="2,0"/>
-
-                            <RadioButton Content="CAM5" GroupName="CamSel" Height="26" FontSize="11" FontWeight="Bold" Margin="2,0"/>
-
-                            <RadioButton Content="CAM6" GroupName="CamSel" Height="26" FontSize="11" FontWeight="Bold" Margin="2,0"/>
-
-                            <RadioButton Content="CAM7" GroupName="CamSel" Height="26" FontSize="11" FontWeight="Bold" Margin="2,0"/>
-
-                            <RadioButton Content="CAM8" GroupName="CamSel" Height="26" FontSize="11" FontWeight="Bold" Margin="2,0"/>
-
-                            <RadioButton Content="CAM9" GroupName="CamSel" Height="26" FontSize="11" FontWeight="Bold" Margin="2,0"/>
-
-                            <RadioButton Content="CAM10" GroupName="CamSel" Height="26" FontSize="11" FontWeight="Bold" Margin="2,0"/>
-
-                            <RadioButton Content="CAM11" GroupName="CamSel" Height="26" FontSize="11" FontWeight="Bold" Margin="2,0"/>
-
-                        </StackPanel>
-
-                    </Border>
+                    
 
 
 
                     <!-- 下方主內容區：第 1 欄硬體/指令 (150px)，第 2 欄無限 IO (235px)，第 3 欄影像與運動 (*) -->
 
-                    <Grid Grid.Row="1" ColumnDefinitions="150,235,*">
+                    <Grid ColumnDefinitions="150,235,*">
 
                         <!-- 第 1 欄：硬體快捷清單、ROI STRING 與 CaptureCMD 快速指令 -->
 
@@ -515,7 +277,7 @@
 
                                     </Grid>
 
-                                    <ListBox x:Name="LstCaptureCameras" Height="70" Background="#F8FAFC" BorderBrush="#CBD5E1" BorderThickness="1"/>
+                                    <ListBox x:Name="LstCaptureCameras" Height="280" Background="#F8FAFC" BorderBrush="#CBD5E1" BorderThickness="1"/>
 
 
 
@@ -533,29 +295,11 @@
 
 
 
-                                    <!-- CaptureCMD 快速指令 (Capture@ 模組) -->
-
-                                    <TextBlock Text="CaptureCMD" FontWeight="Bold" FontSize="11" Foreground="#334155" Margin="0,4,0,0"/>
-
-                                    <Border Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="4" Padding="4">
-
-                                        <StackPanel Spacing="2">
-
-                                            <TextBlock Text="Command: UpdateImage" FontSize="10" Foreground="#475569"/>
-
-                                            <TextBlock Text="Parameter: -1" FontSize="10" Foreground="#475569"/>
-
-                                        </StackPanel>
-
-                                    </Border>
-
-
-
                                     <!-- MotorList for IMAQ -->
 
                                     <TextBlock Text="MotorList For IMAQ" FontWeight="Bold" FontSize="11" Foreground="#334155" Margin="0,4,0,0"/>
 
-                                    <ListBox x:Name="LstCaptureMotors" Height="70" Background="#F8FAFC" BorderBrush="#CBD5E1" BorderThickness="1"/>
+                                    <ListBox x:Name="LstCaptureMotors" Height="280" Background="#F8FAFC" BorderBrush="#CBD5E1" BorderThickness="1"/>
 
                                 </StackPanel>
 
@@ -2281,6 +2025,13 @@
 
                 </Grid>
 
+            </TabItem>
+
+            <!-- ========================================================= -->
+            <!-- 6. CSVI STUDIO (內嵌式 IDE 與動態 MCP Server) -->
+            <!-- ========================================================= -->
+            <TabItem x:Name="TabStudio" Header="CSVI STUDIO: MCP 48800">
+                <studio:CsviStudioControl x:Name="StudioControl"/>
             </TabItem>
 
         </TabControl>

@@ -47,6 +47,10 @@ public partial class MainWindow : Window
     private object? _defaultSubPanelContent;
     private ARCOS.Core.Csvi.CsviPackage? _activeUserPanelPackage;
     private object? _cachedIoFrontPanel;
+    private string _selectedCameraName = "CamTop";
+    private DispatcherTimer? _snapLiveTimer;
+    private bool _isContinuousLive = false;
+    private DateTime _lastSnapClickTime = DateTime.MinValue;
 
     public BasicEngines Engines => _engines;
     public DriverManager DriverManager => _driverManager;
@@ -194,6 +198,13 @@ public partial class MainWindow : Window
             {
                 mainTab.SelectedIndex = 0;
             }
+
+            var studio = this.FindControl<ARCOS.CsviStudio.Controls.CsviStudioControl>("StudioControl");
+            var tabStudio = this.FindControl<TabItem>("TabStudio");
+            if (studio != null && tabStudio != null)
+            {
+                tabStudio.Header = $"CSVI STUDIO: MCP {studio.McpPort}";
+            }
         });
     }
 
@@ -208,8 +219,13 @@ public partial class MainWindow : Window
         {
             Dispatcher.UIThread.Post(() =>
             {
-                if (category.Equals("Capture", StringComparison.OrdinalIgnoreCase))
+                if (category.Equals("IO", StringComparison.OrdinalIgnoreCase))
                 {
+                    RefreshIoTab();
+                }
+                else if (category.Equals("Capture", StringComparison.OrdinalIgnoreCase))
+                {
+                    RefreshCaptureTab();
                     var lstCam = this.FindControl<ListBox>("LstCaptureCameras");
                     if (lstCam != null && !lstCam.Items.Contains(deviceName))
                     {
@@ -218,11 +234,16 @@ public partial class MainWindow : Window
                 }
                 else if (category.Equals("Motion", StringComparison.OrdinalIgnoreCase))
                 {
+                    RefreshMotionTab();
                     var lstMot = this.FindControl<ListBox>("LstCaptureMotors");
                     if (lstMot != null && !lstMot.Items.Contains(deviceName))
                     {
                         lstMot.Items.Add(deviceName);
                     }
+                }
+                else if (category.Equals("DAQ", StringComparison.OrdinalIgnoreCase))
+                {
+                    RefreshDaqTab();
                 }
                 _vm.MainThreads[0].Log($"[DriverManager] Dynamic Device Attached: [{category}] {deviceName}");
             });
@@ -232,15 +253,25 @@ public partial class MainWindow : Window
         {
             Dispatcher.UIThread.Post(() =>
             {
-                if (category.Equals("Capture", StringComparison.OrdinalIgnoreCase))
+                if (category.Equals("IO", StringComparison.OrdinalIgnoreCase))
                 {
+                    RefreshIoTab();
+                }
+                else if (category.Equals("Capture", StringComparison.OrdinalIgnoreCase))
+                {
+                    RefreshCaptureTab();
                     var lstCam = this.FindControl<ListBox>("LstCaptureCameras");
                     lstCam?.Items.Remove(deviceName);
                 }
                 else if (category.Equals("Motion", StringComparison.OrdinalIgnoreCase))
                 {
+                    RefreshMotionTab();
                     var lstMot = this.FindControl<ListBox>("LstCaptureMotors");
                     lstMot?.Items.Remove(deviceName);
+                }
+                else if (category.Equals("DAQ", StringComparison.OrdinalIgnoreCase))
+                {
+                    RefreshDaqTab();
                 }
                 _vm.MainThreads[0].Log($"[DriverManager] Dynamic Device Detached: [{category}] {deviceName}");
             });
@@ -302,43 +333,7 @@ public partial class MainWindow : Window
 
     private void RegisterDefaultMockDrivers()
     {
-        try
-        {
-            _driverManager.AddDevice("IO", "StationIO", "MockIO", "StartPort=P0.0,BitCount=64,Interval=25", _engines);
-        }
-        catch (Exception ex)
-        {
-            _vm.MainThreads[0].Log($"[WARN] Failed to load dynamic MockIO: {ex.Message}", isError: true);
-        }
-
-        try
-        {
-            _driverManager.AddDevice("Motion", "RobotGantry", "MockMotion", "Mechanism=Gantry6Axis", _engines);
-        }
-        catch (Exception ex)
-        {
-            _vm.MainThreads[0].Log($"[WARN] Failed to load dynamic MockMotion: {ex.Message}", isError: true);
-        }
-
-        try
-        {
-            _driverManager.AddDevice("Capture", "CamTop", "MockCamera", "CamIndex=0,Res=640x480", _engines);
-        }
-        catch (Exception ex)
-        {
-            _vm.MainThreads[0].Log($"[WARN] Failed to load dynamic MockCamera: {ex.Message}", isError: true);
-        }
-
-        try
-        {
-            _driverManager.AddDevice("DAQ", "PressSensor", "MockDAQ", "Rate=1000,Channels=1", _engines);
-            _driverManager.AddDevice("DAQ", "Daq0", "MockDAQ", "Rate=1000,Count=500,Wave=Press", _engines);
-        }
-        catch (Exception ex)
-        {
-            _vm.MainThreads[0].Log($"[WARN] Failed to load dynamic MockDAQ: {ex.Message}", isError: true);
-        }
-
+        // 遵循微核心宿主與模組解耦規範：開機啟動階段不預載入硬體 Mock 驅動，等待指令（如 IO@AddIODriver, Capture@AddCam 等）動態掛載
 
         // 設定預設教導點位
         _engines.Point.SetPoint("P_PICK", new MachinePoint(100.0, 200.0, -50.0, 0, 0, 0));
@@ -353,12 +348,7 @@ public partial class MainWindow : Window
             new MachinePoint(100, 100, 0.05, 0, 0, 0)
         });
 
-        // 填入 Capture 清單
-        var lstCam = this.FindControl<ListBox>("LstCaptureCameras");
-        lstCam?.Items.Add("CAM0 (CamTop)");
-
-        var lstMot = this.FindControl<ListBox>("LstCaptureMotors");
-        lstMot?.Items.Add("RobotGantry");
+        // Capture 裝置清單初始為空，待動態掛載時由 DriverManager 事件自動填入
 
         var cmbPts = this.FindControl<ComboBox>("CmbMotionPoints");
         if (cmbPts != null)
@@ -936,26 +926,24 @@ public partial class MainWindow : Window
     private void RefreshIoTab()
     {
         var lstDrivers = this.FindControl<ListBox>("LstIoDrivers");
+        var driverContainer = this.FindControl<ContentControl>("DriverViewContainer");
+        var devices = _driverManager.GetDevicesByCategory("IO");
+
+        if (devices.Count == 0)
+        {
+            if (lstDrivers != null) lstDrivers.ItemsSource = new List<string>();
+            if (driverContainer != null)
+            {
+                driverContainer.Content = CreateDriverNotMountedPlaceholder("IO", "IO@AddIODriver StationIO, MockIO");
+            }
+            return;
+        }
+
         if (lstDrivers != null)
         {
-            if (lstDrivers.ItemsSource == null || !(lstDrivers.ItemsSource as System.Collections.IEnumerable)!.Cast<object>().Any())
-            {
-                var available = _driverManager.Loader.GetAvailableDrivers("IO");
-                var devices = _driverManager.GetDevicesByCategory("IO");
-                var driverList = new List<string>();
-                foreach (var dev in devices)
-                {
-                    driverList.Add($"{dev.DeviceName} ({dev.DriverType})");
-                }
-                foreach (var drv in available)
-                {
-                    if (!driverList.Contains(drv)) driverList.Add(drv);
-                }
-                if (driverList.Count == 0) driverList.Add("MockIO");
-                lstDrivers.ItemsSource = driverList;
-            }
-
-            if (lstDrivers.SelectedIndex < 0 && (lstDrivers.ItemsSource as System.Collections.IEnumerable)?.Cast<object>().Any() == true)
+            var driverList = devices.Select(dev => $"{dev.DeviceName} ({dev.DriverType})").ToList();
+            lstDrivers.ItemsSource = driverList;
+            if (lstDrivers.SelectedIndex < 0 && driverList.Count > 0)
             {
                 lstDrivers.SelectedIndex = 0;
             }
@@ -999,12 +987,7 @@ public partial class MainWindow : Window
                     }
                     else
                     {
-                        var newDriver = _driverManager.Loader.LoadDriver("Capture", driverName);
-                        if (newDriver != null)
-                        {
-                            newDriver.Init(driverName, "", _engines);
-                            host.Content = newDriver.CreateDriverView();
-                        }
+                        host.Content = CreateDriverNotMountedPlaceholder("Capture", "Capture@AddCam CamTop, MockCamera");
                     }
                 }
             };
@@ -1014,25 +997,27 @@ public partial class MainWindow : Window
     private void RefreshCaptureTab()
     {
         var lstDrivers = this.FindControl<ListBox>("LstCaptureDrivers");
-        if (lstDrivers != null)
-        {
-            var available = _driverManager.Loader.GetAvailableDrivers("Capture");
-            var devices = _driverManager.GetDevicesByCategory("Capture");
-            var driverList = new List<string>();
-            foreach (var dev in devices)
-            {
-                driverList.Add($"{dev.DeviceName} ({dev.DriverType})");
-            }
-            foreach (var drv in available)
-            {
-                if (!driverList.Contains(drv)) driverList.Add(drv);
-            }
-            if (driverList.Count == 0) driverList.Add("MockCamera");
+        var host = this.FindControl<ContentControl>("PnlCaptureDriverSubPanelHost");
+        var devices = _driverManager.GetDevicesByCategory("Capture");
 
-            lstDrivers.ItemsSource = driverList;
-            if (lstDrivers.SelectedIndex < 0 && driverList.Count > 0)
+        if (devices.Count == 0)
+        {
+            if (lstDrivers != null) lstDrivers.ItemsSource = new List<string>();
+            if (host != null)
             {
-                lstDrivers.SelectedIndex = 0;
+                host.Content = CreateDriverNotMountedPlaceholder("Capture", "Capture@AddCam CamTop, MockCamera");
+            }
+        }
+        else
+        {
+            if (lstDrivers != null)
+            {
+                var driverList = devices.Select(dev => $"{dev.DeviceName} ({dev.DriverType})").ToList();
+                lstDrivers.ItemsSource = driverList;
+                if (lstDrivers.SelectedIndex < 0 && driverList.Count > 0)
+                {
+                    lstDrivers.SelectedIndex = 0;
+                }
             }
         }
 
@@ -1075,12 +1060,7 @@ public partial class MainWindow : Window
                     }
                     else
                     {
-                        var newDriver = _driverManager.Loader.LoadDriver("Motion", driverName);
-                        if (newDriver != null)
-                        {
-                            newDriver.Init(driverName, "", _engines);
-                            host.Content = newDriver.CreateDriverView();
-                        }
+                        host.Content = CreateDriverNotMountedPlaceholder("Motion", "Motion@AddMotion RobotGantry, MockMotion");
                     }
                 }
             };
@@ -1090,25 +1070,27 @@ public partial class MainWindow : Window
     private void RefreshMotionTab()
     {
         var lstDrivers = this.FindControl<ListBox>("LstMotionDrivers");
-        if (lstDrivers != null)
-        {
-            var available = _driverManager.Loader.GetAvailableDrivers("Motion");
-            var devices = _driverManager.GetDevicesByCategory("Motion");
-            var driverList = new List<string>();
-            foreach (var dev in devices)
-            {
-                driverList.Add($"{dev.DeviceName} ({dev.DriverType})");
-            }
-            foreach (var drv in available)
-            {
-                if (!driverList.Contains(drv)) driverList.Add(drv);
-            }
-            if (driverList.Count == 0) driverList.Add("MockMotion");
+        var host = this.FindControl<ContentControl>("PnlMotionDriverSubPanelHost");
+        var devices = _driverManager.GetDevicesByCategory("Motion");
 
-            lstDrivers.ItemsSource = driverList;
-            if (lstDrivers.SelectedIndex < 0 && driverList.Count > 0)
+        if (devices.Count == 0)
+        {
+            if (lstDrivers != null) lstDrivers.ItemsSource = new List<string>();
+            if (host != null)
             {
-                lstDrivers.SelectedIndex = 0;
+                host.Content = CreateDriverNotMountedPlaceholder("Motion", "Motion@AddMotion RobotGantry, MockMotion");
+            }
+        }
+        else
+        {
+            if (lstDrivers != null)
+            {
+                var driverList = devices.Select(dev => $"{dev.DeviceName} ({dev.DriverType})").ToList();
+                lstDrivers.ItemsSource = driverList;
+                if (lstDrivers.SelectedIndex < 0 && driverList.Count > 0)
+                {
+                    lstDrivers.SelectedIndex = 0;
+                }
             }
         }
     }
@@ -1149,12 +1131,7 @@ public partial class MainWindow : Window
                     }
                     else
                     {
-                        var newDriver = _driverManager.Loader.LoadDriver("DAQ", driverName);
-                        if (newDriver != null)
-                        {
-                            newDriver.Init(driverName, "", _engines);
-                            host.Content = newDriver.CreateDriverView();
-                        }
+                        host.Content = CreateDriverNotMountedPlaceholder("DAQ", "DAQ@AddDAQ Daq0, MockDAQ");
                     }
                 }
             };
@@ -1164,25 +1141,27 @@ public partial class MainWindow : Window
     private void RefreshDaqTab()
     {
         var lstDrivers = this.FindControl<ListBox>("LstDaqDrivers");
-        if (lstDrivers != null)
-        {
-            var available = _driverManager.Loader.GetAvailableDrivers("DAQ");
-            var devices = _driverManager.GetDevicesByCategory("DAQ");
-            var driverList = new List<string>();
-            foreach (var dev in devices)
-            {
-                driverList.Add($"{dev.DeviceName} ({dev.DriverType})");
-            }
-            foreach (var drv in available)
-            {
-                if (!driverList.Contains(drv)) driverList.Add(drv);
-            }
-            if (driverList.Count == 0) driverList.Add("MockDAQ");
+        var host = this.FindControl<ContentControl>("PnlDaqDriverSubPanelHost");
+        var devices = _driverManager.GetDevicesByCategory("DAQ");
 
-            lstDrivers.ItemsSource = driverList;
-            if (lstDrivers.SelectedIndex < 0 && driverList.Count > 0)
+        if (devices.Count == 0)
+        {
+            if (lstDrivers != null) lstDrivers.ItemsSource = new List<string>();
+            if (host != null)
             {
-                lstDrivers.SelectedIndex = 0;
+                host.Content = CreateDriverNotMountedPlaceholder("DAQ", "DAQ@AddDAQ Daq0, MockDAQ");
+            }
+        }
+        else
+        {
+            if (lstDrivers != null)
+            {
+                var driverList = devices.Select(dev => $"{dev.DeviceName} ({dev.DriverType})").ToList();
+                lstDrivers.ItemsSource = driverList;
+                if (lstDrivers.SelectedIndex < 0 && driverList.Count > 0)
+                {
+                    lstDrivers.SelectedIndex = 0;
+                }
             }
         }
 
@@ -1206,39 +1185,21 @@ public partial class MainWindow : Window
         var driverContainer = this.FindControl<ContentControl>("DriverViewContainer");
         if (lstDrivers == null) return;
 
-        var available = _driverManager.Loader.GetAvailableDrivers("IO");
-        var devices = _driverManager.GetDevicesByCategory("IO");
-        var driverList = new List<string>();
-        foreach (var dev in devices)
-        {
-            driverList.Add($"{dev.DeviceName} ({dev.DriverType})");
-        }
-        foreach (var drv in available)
-        {
-            if (!driverList.Contains(drv)) driverList.Add(drv);
-        }
-        if (driverList.Count == 0) driverList.Add("MockIO");
-
-        lstDrivers.ItemsSource = driverList;
+        RefreshIoTab();
 
         lstDrivers.SelectionChanged += (_, _) =>
         {
             if (lstDrivers.SelectedItem is string rawName && driverContainer != null)
             {
-                string driverName = rawName.Split(' ')[0]; // 支援 "StationIO (MockIO)" 或 "MockIO"
-                var driver = _driverManager.GetDevice("IO", driverName) ?? _driverManager.GetDevice("IO", "StationIO");
+                string driverName = rawName.Split(' ')[0];
+                var driver = _driverManager.GetDevice("IO", driverName);
                 if (driver != null)
                 {
                     driverContainer.Content = driver.CreateDriverView();
                 }
                 else
                 {
-                    var newDriver = _driverManager.Loader.LoadDriver("IO", driverName);
-                    if (newDriver != null)
-                    {
-                        newDriver.Init(driverName, "", _engines);
-                        driverContainer.Content = newDriver.CreateDriverView();
-                    }
+                    driverContainer.Content = CreateDriverNotMountedPlaceholder("IO", "IO@AddIODriver StationIO, MockIO");
                 }
             }
         };
@@ -1247,11 +1208,83 @@ public partial class MainWindow : Window
 
     private void BindCaptureTabControls()
     {
-        // 1. Snap 拍照按鈕
+        // 0. CamList 相機切換 (藍框需求：點選相機清單立即切換並預覽該相機)
+        var lstCam = this.FindControl<ListBox>("LstCaptureCameras");
+        if (lstCam != null)
+        {
+            lstCam.SelectionChanged += (_, _) =>
+            {
+                if (lstCam.SelectedItem is string raw)
+                {
+                    string camName = raw.Contains("(") && raw.Contains(")")
+                        ? raw.Substring(raw.IndexOf('(') + 1).TrimEnd(')').Trim()
+                        : raw.Trim();
+                    _selectedCameraName = camName;
+                    PerformSnap(_selectedCameraName);
+                }
+            };
+        }
+
+        // 1. Snap 拍照按鈕 (需求：單擊拍單張，Double Click 切換 5fps 連續擷取，再單擊退回單張)
         var btnSnap = this.FindControl<Button>("BtnCaptureSnap");
         if (btnSnap != null)
         {
-            btnSnap.Click += (_, _) => PerformSnap();
+            Action triggerLive = () =>
+            {
+                _isContinuousLive = true;
+                btnSnap.Content = "● LIVE (5fps)";
+                btnSnap.Background = new SolidColorBrush(Color.Parse("#10B981"));
+                btnSnap.Foreground = Brushes.White;
+
+                if (_snapLiveTimer == null)
+                {
+                    _snapLiveTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(200) };
+                    _snapLiveTimer.Tick += (_, _) =>
+                    {
+                        if (_isContinuousLive)
+                        {
+                            PerformSnap(_selectedCameraName);
+                        }
+                    };
+                }
+                _snapLiveTimer.Start();
+            };
+
+            Action stopLive = () =>
+            {
+                _isContinuousLive = false;
+                _snapLiveTimer?.Stop();
+                btnSnap.Content = "Snap";
+                btnSnap.Background = new SolidColorBrush(Color.Parse("#0284C7"));
+                btnSnap.Foreground = Brushes.White;
+            };
+
+            btnSnap.DoubleTapped += (_, e) =>
+            {
+                e.Handled = true;
+                triggerLive();
+            };
+
+            btnSnap.Click += (_, _) =>
+            {
+                var now = DateTime.Now;
+                if ((now - _lastSnapClickTime).TotalMilliseconds < 500)
+                {
+                    _lastSnapClickTime = DateTime.MinValue;
+                    triggerLive();
+                    return;
+                }
+                _lastSnapClickTime = now;
+
+                if (_isContinuousLive)
+                {
+                    stopLive();
+                }
+                else
+                {
+                    PerformSnap(_selectedCameraName);
+                }
+            };
         }
 
         // 2. 寸動控制 (Jog Minus / Plus)
@@ -1357,21 +1390,27 @@ public partial class MainWindow : Window
             };
         }
 
-        // 觸發初始單幀預覽
-        PerformSnap();
+        // 若已有相機驅動掛載，觸發初始單幀預覽
+        if (_driverManager.GetDevicesByCategory("Capture").Count > 0)
+        {
+            PerformSnap();
+        }
     }
 
-    private async void PerformSnap()
+    private async void PerformSnap(string? camName = null)
     {
-        var driver = _driverManager.GetDriver("Capture", "CamTop");
-        if (driver != null)
+        string targetCam = !string.IsNullOrEmpty(camName) ? camName : _selectedCameraName;
+        var driver = _driverManager.GetDriver("Capture", targetCam) ?? _driverManager.GetDevicesByCategory("Capture").FirstOrDefault();
+        if (driver == null) return;
+
+        try
         {
             var ticket = new DriverTicket("Snap");
             driver.PostTicket(ticket);
             var res = await ticket.Task;
             if (res.Success)
             {
-                var frame = _engines.Image.GetFrame("CamTop");
+                var frame = _engines.Image.GetFrame(targetCam);
                 if (frame != null && !frame.Image.IsDisposed)
                 {
                     var imgView = this.FindControl<Image>("ImgLivePreview");
@@ -1383,6 +1422,10 @@ public partial class MainWindow : Window
                     }
                 }
             }
+        }
+        catch (Exception ex)
+        {
+            _vm.MainThreads[0].Log($"[Capture] Snap warning: {ex.Message}");
         }
     }
 
