@@ -16,6 +16,11 @@ public class McpServer
     private readonly CsviCompilerService _compiler = new();
     private readonly SandboxExecutor _sandbox = new();
 
+    /// <summary>
+    /// 當 MCP 請求載入或編譯 CSVI 時，通知 UI 主執行緒載入至 Studio 編輯器
+    /// </summary>
+    public Action<string>? OnLoadFileRequested { get; set; }
+
     public async Task RunAsync(CancellationToken cancellationToken = default)
     {
         var utf8NoBom = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
@@ -242,6 +247,20 @@ public class McpServer
             },
             new JsonObject
             {
+                ["name"] = "csvi_load_in_studio",
+                ["description"] = "在 CSVI Studio 編輯器介面載入指定的 .csvi 檔案，立即更新代碼編輯器 (Logic.cs, Wizard.axaml, Panel.axaml) 與即時 XAML 預覽畫面",
+                ["inputSchema"] = new JsonObject
+                {
+                    ["type"] = "object",
+                    ["properties"] = new JsonObject
+                    {
+                        ["csviPath"] = new JsonObject { ["type"] = "string", ["description"] = ".csvi 檔案路徑" }
+                    },
+                    ["required"] = new JsonArray { "csviPath" }
+                }
+            },
+            new JsonObject
+            {
                 ["name"] = "csvi_sandbox_execute",
                 ["description"] = "在隔離沙盒中以微秒級速度執行指定 .csvi 的 Execute() 邏輯，回傳執行耗時與狀態",
                 ["inputSchema"] = new JsonObject
@@ -439,6 +458,8 @@ public class McpServer
 
                     File.WriteAllBytes(outPath, compRes.AssemblyBytes);
 
+                    try { OnLoadFileRequested?.Invoke(Path.GetFullPath(outPath)); } catch { }
+
                     var ret = new JsonObject
                     {
                         ["success"] = true,
@@ -510,6 +531,21 @@ public class McpServer
                         ["error"] = captureError
                     };
 
+                    content.Add(new JsonObject { ["type"] = "text", ["text"] = ret.ToJsonString() });
+                    break;
+                }
+
+                case "csvi_load_in_studio":
+                {
+                    string path = args["csviPath"]?.GetValue<string>() ?? throw new ArgumentException("Missing csviPath");
+                    if (!File.Exists(path)) throw new FileNotFoundException("CSVI file not found", path);
+                    OnLoadFileRequested?.Invoke(Path.GetFullPath(path));
+                    var ret = new JsonObject
+                    {
+                        ["success"] = true,
+                        ["filePath"] = Path.GetFullPath(path),
+                        ["message"] = $"Successfully loaded {Path.GetFileName(path)} into CSVI Studio."
+                    };
                     content.Add(new JsonObject { ["type"] = "text", ["text"] = ret.ToJsonString() });
                     break;
                 }

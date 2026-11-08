@@ -688,6 +688,7 @@ public class IoSetPortGuidance : IParameterGuidance, IModuleHandler
 
         if (_mcpListener != null)
         {
+            _mcpServer.OnLoadFileRequested = path => { Dispatcher.UIThread.Post(() => LoadFile(path)); };
             _mcpCts = new CancellationTokenSource();
             if (McpStatusBlock != null)
             {
@@ -721,10 +722,11 @@ public class IoSetPortGuidance : IParameterGuidance, IModuleHandler
 
     private async Task HandleMcpClientAsync(System.Net.Sockets.TcpClient client, CancellationToken ct)
     {
+        var utf8NoBom = new System.Text.UTF8Encoding(false);
         using (client)
         using (var stream = client.GetStream())
-        using (var reader = new StreamReader(stream, System.Text.Encoding.UTF8))
-        using (var writer = new StreamWriter(stream, System.Text.Encoding.UTF8) { AutoFlush = true })
+        using (var reader = new StreamReader(stream, utf8NoBom))
+        using (var writer = new StreamWriter(stream, utf8NoBom) { AutoFlush = true })
         {
             while (!ct.IsCancellationRequested && client.Connected)
             {
