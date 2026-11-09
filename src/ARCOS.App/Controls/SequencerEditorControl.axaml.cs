@@ -59,15 +59,7 @@ public partial class SequencerEditorControl : UserControl
             grid.ItemsSource = _rows;
         }
 
-        var progSel = this.FindControl<ComboBox>("ProgSelector");
-        if (progSel != null)
-        {
-            var items = new List<string> { "Main" };
-            for (int i = 1; i <= 12; i++) items.Add($"Thread {i}");
-            progSel.ItemsSource = items;
-            progSel.SelectedIndex = 0;
-            progSel.SelectionChanged += ProgSelector_SelectionChanged;
-        }
+        RefreshProgSelector(0);
 
         BindToolbarButtons();
         BindSearchControls();
@@ -96,7 +88,7 @@ public partial class SequencerEditorControl : UserControl
             int threadId = i;
             _vm.MainThreads[i].OnProgIndexNoticed += (pc) =>
             {
-                if (_currentProgNo == threadId)
+                if (_vm.MainThreads[threadId].Program?.ProgramNumber == _currentProgNo)
                 {
                     Interlocked.Exchange(ref _latestNoticedPC, pc);
                 }
@@ -108,10 +100,12 @@ public partial class SequencerEditorControl : UserControl
             {
                 var txtTitle = this.FindControl<TextBox>("TxtScriptTitle");
                 if (txtTitle != null) txtTitle.Text = System.IO.Path.GetFileName(path);
+                RefreshProgSelector(0);
                 LoadCurrentProgramToUI();
             });
         };
 
+        RefreshProgSelector(0);
         EnsureDefaultSampleSequence();
         LoadCurrentProgramToUI();
         UpdateMachineStatus("IDLE");
@@ -979,13 +973,33 @@ public partial class SequencerEditorControl : UserControl
         if (grid != null) grid.IsReadOnly = _isLocked;
     }
 
+    public void RefreshProgSelector(int? selectedSlot = null)
+    {
+        var progSel = this.FindControl<ComboBox>("ProgSelector");
+        if (progSel == null) return;
+
+        int targetSlot = selectedSlot ?? _currentProgNo;
+        var slots = ProgramSlotItem.BuildStandardSlotList(_vm);
+
+        progSel.SelectionChanged -= ProgSelector_SelectionChanged;
+        progSel.ItemsSource = slots;
+
+        int matchIdx = slots.FindIndex(s => s.SlotNumber == targetSlot);
+        progSel.SelectedIndex = matchIdx >= 0 ? matchIdx : 0;
+
+        if (progSel.SelectedItem is ProgramSlotItem selected)
+        {
+            _currentProgNo = selected.SlotNumber;
+        }
+        progSel.SelectionChanged += ProgSelector_SelectionChanged;
+    }
+
     private void ChangeProg(int delta)
     {
         var progSel = this.FindControl<ComboBox>("ProgSelector");
-        if (progSel != null)
+        if (progSel != null && progSel.ItemsSource is System.Collections.IList list)
         {
-            int maxIdx = (progSel.ItemsSource as System.Collections.IList)?.Count ?? 13;
-            int next = Math.Clamp(progSel.SelectedIndex + delta, 0, maxIdx - 1);
+            int next = Math.Clamp(progSel.SelectedIndex + delta, 0, list.Count - 1);
             progSel.SelectedIndex = next;
         }
     }
@@ -993,18 +1007,12 @@ public partial class SequencerEditorControl : UserControl
     private void ProgSelector_SelectionChanged(object? sender, SelectionChangedEventArgs e)
     {
         var progSel = this.FindControl<ComboBox>("ProgSelector");
-        if (progSel != null && progSel.SelectedIndex >= 0)
+        if (progSel?.SelectedItem is ProgramSlotItem slotItem)
         {
             SyncUIToProgram();
-            _currentProgNo = progSel.SelectedIndex;
+            _currentProgNo = slotItem.SlotNumber;
             LoadCurrentProgramToUI();
             UpdateUndoRedoButtonState();
-
-            var txtTitle = this.FindControl<TextBox>("TxtScriptTitle");
-            if (txtTitle != null)
-            {
-                txtTitle.Text = _currentProgNo == 0 ? "Master_V1.pro" : $"Thread_{_currentProgNo}.pro";
-            }
         }
     }
 
@@ -1015,7 +1023,18 @@ public partial class SequencerEditorControl : UserControl
         if (_vm == null) return;
 
         var prog = _vm.GetProgram(_currentProgNo);
-        var ctx = _vm.MainThreads[_currentProgNo < 13 ? _currentProgNo : 0];
+        ExecutionContext? runningCtx = null;
+        for (int t = 0; t < 13; t++)
+        {
+            if (_vm.MainThreads[t].Program?.ProgramNumber == _currentProgNo && _vm.MainThreads[t].IsRunning)
+            {
+                runningCtx = _vm.MainThreads[t];
+                break;
+            }
+        }
+
+        int activePC = runningCtx?.ProgIndex ?? 1;
+        bool isRunning = runningCtx?.IsRunning ?? false;
 
         for (int i = 0; i < prog.Count; i++)
         {
@@ -1025,17 +1044,21 @@ public partial class SequencerEditorControl : UserControl
                 LineNumber = i,
                 Command = item.Command,
                 Parameter = item.RawParameter,
-                IsCurrentPC = (i == ctx.ProgIndex && ctx.IsRunning)
+                IsCurrentPC = (i == activePC && isRunning)
             });
         }
-        UpdatePCPointer(ctx.ProgIndex);
+        UpdatePCPointer(activePC);
         DrainPCPointer();
     }
 
     public void SyncUIToProgram()
     {
         if (_vm == null) return;
-        var prog = new ProgramTable { ProgramNumber = _currentProgNo, Name = $"Program_{_currentProgNo}" };
+        var existingProg = _vm.GetProgram(_currentProgNo);
+        string name = (!string.IsNullOrWhiteSpace(existingProg?.Name) && !existingProg.Name.Equals($"Program_{_currentProgNo}", StringComparison.OrdinalIgnoreCase))
+            ? existingProg.Name
+            : ProgramSlotItem.GetDefaultName(_currentProgNo);
+        var prog = new ProgramTable { ProgramNumber = _currentProgNo, Name = name };
         for (int i = 0; i < _rows.Count; i++)
         {
             var row = _rows[i];
@@ -1043,8 +1066,11 @@ public partial class SequencerEditorControl : UserControl
             prog.Add(CommandItem.Parse($"{row.Command}\t{row.Parameter}", i));
         }
         _vm.LoadProgram(_currentProgNo, prog);
-        var ctx = _vm.MainThreads[_currentProgNo < 13 ? _currentProgNo : 0];
-        ctx.Program = prog;
+        var ctx = GetActiveContext();
+        if (ctx.Program?.ProgramNumber == _currentProgNo)
+        {
+            ctx.Program = prog;
+        }
         SyncIoDefinitionsFromRows();
     }
 
@@ -1082,6 +1108,16 @@ public partial class SequencerEditorControl : UserControl
 
     private ExecutionContext GetActiveContext()
     {
+        if (_vm != null)
+        {
+            for (int t = 0; t < 13; t++)
+            {
+                if (_vm.MainThreads[t].Program?.ProgramNumber == _currentProgNo && _vm.MainThreads[t].IsRunning)
+                {
+                    return _vm.MainThreads[t];
+                }
+            }
+        }
         int tIdx = _currentProgNo < 13 ? _currentProgNo : 0;
         return _vm!.MainThreads[tIdx];
     }
@@ -1271,6 +1307,7 @@ public partial class SequencerEditorControl : UserControl
             UpdateUndoRedoButtonState();
             var txtTitle = this.FindControl<TextBox>("TxtScriptTitle");
             if (txtTitle != null) txtTitle.Text = System.IO.Path.GetFileName(path);
+            RefreshProgSelector(0);
             LoadCurrentProgramToUI();
             _vm.MainThreads[0].Log($"[PRO] Loaded project '{path}' with {progs.Count} programs");
         }
@@ -1339,6 +1376,7 @@ public partial class SequencerEditorControl : UserControl
             _vm.LoadProgram(_currentProgNo, prog);
             var txtTitle = this.FindControl<TextBox>("TxtScriptTitle");
             if (txtTitle != null) txtTitle.Text = System.IO.Path.GetFileName(path);
+            RefreshProgSelector(_currentProgNo);
             LoadCurrentProgramToUI();
             _vm.MainThreads[0].Log($"[INIT] Loaded script '{path}' into Program slot {_currentProgNo}");
         }

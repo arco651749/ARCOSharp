@@ -36,7 +36,7 @@
         <!-- ========================================================= -->
         <Border Grid.Row="0" Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="0,0,0,1" Padding="4,3" Margin="0,0,0,2">
             <Grid RowDefinitions="Auto,Auto">
-                <Grid Grid.Row="0" ColumnDefinitions="*,Auto,110" Margin="0,0,0,3">
+                <Grid Grid.Row="0" ColumnDefinitions="*,Auto,150" Margin="0,0,0,3">
                     <TextBox x:Name="TxtScriptTitle" Grid.Column="0" Watermark="(Test Program - click READ .PRO)" 
                              FontSize="11" Height="25" VerticalContentAlignment="Center"
                              Background="#FFFFFF" Foreground="#0F172A" BorderBrush="#CBD5E1" Margin="0,0,4,0"/>

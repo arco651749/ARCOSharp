@@ -110,6 +110,7 @@ public partial class TestThreadWindow : Window
                 {
                     var txtTitle = this.FindControl<TextBox>("TxtScriptTitle");
                     if (txtTitle != null) txtTitle.Text = System.IO.Path.GetFileName(path);
+                    RefreshProgSelector(_currentProgNo);
                     LoadProgramSlotToUI(_currentProgNo);
                 });
             };
@@ -164,25 +165,39 @@ public partial class TestThreadWindow : Window
         }, DispatcherPriority.Input);
     }
 
-    private void InitProgSelector()
+    public void RefreshProgSelector(int? selectedSlot = null)
     {
         var progSel = this.FindControl<ComboBox>("ProgSelector");
-        if (progSel != null)
+        if (progSel == null) return;
+
+        int targetSlot = selectedSlot ?? _currentProgNo;
+        var slots = ProgramSlotItem.BuildStandardSlotList(_vm);
+
+        progSel.SelectionChanged -= ProgSelector_SelectionChanged;
+        progSel.ItemsSource = slots;
+
+        int matchIdx = slots.FindIndex(s => s.SlotNumber == targetSlot);
+        progSel.SelectedIndex = matchIdx >= 0 ? matchIdx : 0;
+
+        if (progSel.SelectedItem is ProgramSlotItem selected)
         {
-            var items = new List<string> { "Main" };
-            for (int i = 1; i <= 12; i++) items.Add($"Thread {i}");
-            items.Add("Test Slot (99)");
-            progSel.ItemsSource = items;
-            progSel.SelectedIndex = 0;
-            progSel.SelectionChanged += (s, e) =>
-            {
-                if (progSel.SelectedIndex >= 0)
-                {
-                    int slot = progSel.SelectedIndex == 13 ? 99 : progSel.SelectedIndex;
-                    LoadProgramSlotToUI(slot);
-                }
-            };
+            _currentProgNo = selected.SlotNumber;
         }
+        progSel.SelectionChanged += ProgSelector_SelectionChanged;
+    }
+
+    private void ProgSelector_SelectionChanged(object? sender, SelectionChangedEventArgs e)
+    {
+        var progSel = this.FindControl<ComboBox>("ProgSelector");
+        if (progSel?.SelectedItem is ProgramSlotItem slotItem)
+        {
+            LoadProgramSlotToUI(slotItem.SlotNumber);
+        }
+    }
+
+    private void InitProgSelector()
+    {
+        RefreshProgSelector(0);
 
         var btnPrev = this.FindControl<Button>("BtnProgPrev");
         var btnNext = this.FindControl<Button>("BtnProgNext");
@@ -524,7 +539,8 @@ public partial class TestThreadWindow : Window
                 UpdateUndoRedoButtonState();
                 var txtTitle = this.FindControl<TextBox>("TxtScriptTitle");
                 if (txtTitle != null) txtTitle.Text = System.IO.Path.GetFileName(path);
-                LoadProgramSlotToUI(_currentProgNo);
+                RefreshProgSelector(0);
+                LoadProgramSlotToUI(0);
                 _vm.NotifyProgramLoaded(path, true);
             }
         };
