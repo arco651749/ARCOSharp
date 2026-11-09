@@ -699,6 +699,13 @@ public static class ArcosMcpServer
             return JsonSerializer.Serialize(new { success = true, clicked = toggle.GetType().Name, name = toggle.Name, isChecked = toggle.IsChecked });
         }
 
+        if (target is ComboBox cb)
+        {
+            cb.IsDropDownOpen = !cb.IsDropDownOpen;
+            mainWin.UpdateLayout();
+            return JsonSerializer.Serialize(new { success = true, clicked = "ComboBox", name = cb.Name ?? "", isDropDownOpen = cb.IsDropDownOpen });
+        }
+
         if (target is Button btn)
         {
             string btnLabel = ExtractControlText(btn);
@@ -1224,6 +1231,65 @@ public static class ArcosMcpServer
                 using var roiDst = new Mat(mainMat, new OpenCvSharp.Rect(x, y, w, h));
                 using var roiSrc = new Mat(dlgMat, new OpenCvSharp.Rect(0, 0, w, h));
                 roiSrc.CopyTo(roiDst);
+            }
+        }
+
+        // 若有開啟的 ComboBox 下拉選單，將其下拉列表視覺合成在 mainMat 之上
+        var openCombos = EnumerateControlsRecursive(mainWin).OfType<ComboBox>().Where(c => c.IsDropDownOpen).ToList();
+        foreach (var oc in openCombos)
+        {
+            var origin = oc.TranslatePoint(new Avalonia.Point(0, oc.Bounds.Height), mainWin) ?? new Avalonia.Point(oc.Bounds.X, oc.Bounds.Y + oc.Bounds.Height);
+            int px = (int)origin.X;
+            int py = (int)origin.Y;
+            int pw = (int)Math.Max(oc.Bounds.Width > 50 ? oc.Bounds.Width : 120, 100);
+
+            var itemsList = new List<string>();
+            if (oc.ItemsSource != null)
+            {
+                foreach (var item in oc.ItemsSource)
+                {
+                    string s = (item as ComboBoxItem)?.Content?.ToString() ?? item?.ToString() ?? "";
+                    itemsList.Add(s);
+                }
+            }
+            else if (oc.Items != null)
+            {
+                foreach (var item in oc.Items)
+                {
+                    string s = (item as ComboBoxItem)?.Content?.ToString() ?? item?.ToString() ?? "";
+                    itemsList.Add(s);
+                }
+            }
+
+            if (itemsList.Count > 0)
+            {
+                int itemH = 24;
+                int maxVisibleItems = Math.Min(itemsList.Count, 13);
+                int ph = maxVisibleItems * itemH + 6;
+
+                using var dropMat = new Mat(ph, pw, MatType.CV_8UC3, new Scalar(255, 255, 255));
+                Cv2.Rectangle(dropMat, new OpenCvSharp.Rect(0, 0, pw - 1, ph - 1), new Scalar(2, 132, 199), 1);
+
+                for (int i = 0; i < maxVisibleItems; i++)
+                {
+                    int iy = 3 + i * itemH;
+                    bool isSel = (i == oc.SelectedIndex);
+                    if (isSel)
+                    {
+                        Cv2.Rectangle(dropMat, new OpenCvSharp.Rect(1, iy, pw - 2, itemH), new Scalar(240, 249, 255), -1);
+                    }
+                    var textColor = isSel ? new Scalar(199, 132, 2) : new Scalar(51, 65, 85);
+                    Cv2.PutText(dropMat, itemsList[i], new OpenCvSharp.Point(8, iy + 17), HersheyFonts.HersheySimplex, 0.42, textColor, isSel ? 2 : 1, LineTypes.AntiAlias);
+                }
+
+                int renderW = Math.Min(dropMat.Width, mainMat.Width - px);
+                int renderH = Math.Min(dropMat.Height, mainMat.Height - py);
+                if (renderW > 0 && renderH > 0 && px >= 0 && py >= 0)
+                {
+                    using var dstRoi = new Mat(mainMat, new OpenCvSharp.Rect(px, py, renderW, renderH));
+                    using var srcRoi = new Mat(dropMat, new OpenCvSharp.Rect(0, 0, renderW, renderH));
+                    srcRoi.CopyTo(dstRoi);
+                }
             }
         }
 
