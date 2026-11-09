@@ -300,40 +300,18 @@ public partial class MainWindow : Window
 
         // 8. 監聽執行緒即時日誌流，推送到 USER TAB 與 SYSTEM 模組的 Log 視窗
 
-        _vm.MainThreads[0].OnLog += (entry, isErr) =>
-
+        _engines.Record.Recorded += (recName, ts, msg) =>
         {
-
+            if (!string.Equals(recName, "SYSTEMLOG", StringComparison.OrdinalIgnoreCase)) return;
             Dispatcher.UIThread.Post(() =>
-
             {
-
                 var txtLogs = this.FindControl<TextBox>("TxtUserLogs");
-
                 if (txtLogs != null)
-
                 {
-
-                    txtLogs.Text += entry + Environment.NewLine;
-
+                    txtLogs.Text += $"[{ts}] {msg}" + Environment.NewLine;
                     txtLogs.CaretIndex = txtLogs.Text.Length;
-
                 }
-
-                var txtSysLogs = this.FindControl<TextBox>("TxtSystemLogs");
-
-                if (txtSysLogs != null)
-
-                {
-
-                    txtSysLogs.Text += entry + Environment.NewLine;
-
-                    txtSysLogs.CaretIndex = txtSysLogs.Text.Length;
-
-                }
-
             }, DispatcherPriority.Background);
-
         };
 
 
@@ -1598,10 +1576,15 @@ public partial class MainWindow : Window
 
 
 
+        bool suppressPull = false;
+
         Action refreshChannels = () =>
 
         {
 
+            suppressPull = true;
+            try
+            {
             var names = _engines.Record.GetAllRecordNames();
 
             string? prev = lstChannels?.SelectedItem as string;
@@ -1621,7 +1604,8 @@ public partial class MainWindow : Window
                     lstChannels.SelectedIndex = 0;
 
             }
-
+            }
+            finally { suppressPull = false; }
         };
 
 
@@ -1649,7 +1633,12 @@ public partial class MainWindow : Window
 
         if (btnGetRecords != null) btnGetRecords.Click += (_, _) => refreshChannels();
 
-        if (lstChannels != null) lstChannels.SelectionChanged += (_, _) => updateSelectedChannel();
+        if (lstChannels != null)
+        {
+            // 選取變更（含 Get RecordS 重建清單）不拉取；僅使用者點選清單項目才拉取該 Record 內容
+            lstChannels.SelectionChanged += (_, _) => { if (!suppressPull) updateSelectedChannel(); };
+            lstChannels.Tapped += (_, _) => { if (lstChannels.SelectedItem != null) updateSelectedChannel(); };
+        }
 
 
 

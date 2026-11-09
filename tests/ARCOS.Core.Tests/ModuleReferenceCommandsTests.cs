@@ -55,7 +55,7 @@ System@LogRecordCycleTime::TEST,Elapsed:;
 
         double elapsedRecord = engines.Record.GetRecordElapsedSeconds("TEST");
         Assert.True(elapsedRecord >= 0.04);
-        Assert.Contains(ctx.SysLogEntries, l => l.Contains("Elapsed:"));
+        Assert.Contains(ctx.Engines.Record.GetOrCreateChannel("SYSTEMLOG").Entries, e => e.Message.Contains("Elapsed:"));
     }
 
     [Fact]
@@ -634,7 +634,7 @@ Python@GetVariable::BootTestVar,ARCOSName=BootResult;
         Assert.Equal("ReadyToRun", engines.Variable.Get("BootResult"));
 
         // 4. 驗證系統日誌中包含 Init.csvi 調用紀錄
-        Assert.Contains(ctx.SysLogEntries, l => l.Contains("[IncludeModule]") && l.Contains("Python"));
+        Assert.Contains(ctx.Engines.Record.GetOrCreateChannel("SYSTEMLOG").Entries, e => e.Message.Contains("[IncludeModule]") && e.Message.Contains("Python"));
     }
 
 

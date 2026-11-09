@@ -66,14 +66,13 @@ public class SystemModuleHandler : IModuleHandler
 
         if (action.Equals("Clear Message", StringComparison.OrdinalIgnoreCase))
         {
-            ctx.SysLogEntries.Clear();
             ctx.Engines.Record.Record("SYSTEMLOG", "CLEAR");
             return CommandResult.Done();
         }
 
         if (action.Equals("Clear Error", StringComparison.OrdinalIgnoreCase))
         {
-            ctx.SysLogEntries.RemoveAll(x => x.Contains("[ERROR]"));
+            ctx.Engines.Record.GetOrCreateChannel("SYSTEMLOG").ClearMatching(m => m.Contains("[ERROR]"));
             return CommandResult.Done();
         }
 

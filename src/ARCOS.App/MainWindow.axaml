@@ -253,7 +253,7 @@
 
                     <!-- 下方主內容區：第 1 欄硬體/指令 (150px)，第 2 欄無限 IO (235px)，第 3 欄影像與運動 (*) -->
 
-                    <Grid ColumnDefinitions="150,235,*">
+                    <Grid Grid.Row="1" ColumnDefinitions="150,235,*">
 
                         <!-- 第 1 欄：硬體快捷清單、ROI STRING 與 CaptureCMD 快速指令 -->
 

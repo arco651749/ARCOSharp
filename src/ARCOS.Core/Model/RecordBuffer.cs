@@ -70,6 +70,34 @@ public class RecordChannel
     /// <summary>
     /// 清空所有槽位並重設 Index 為 0 (對應 System@Record $Record,CLEAR 或 Clear 按鈕)
     /// </summary>
+    public void ClearMatching(Func<string, bool> predicate)
+    {
+        lock (_lock)
+        {
+            int count = Math.Min(Index, Capacity);
+            int start = Index > Capacity ? Index % Capacity : 0;
+            var keep = new List<RecordEntry>(count);
+            for (int i = 0; i < count; i++)
+            {
+                var e = _entries[(start + i) % Capacity];
+                if (!predicate(e.Message)) keep.Add(new RecordEntry(e.Timestamp, e.Message));
+            }
+            Index = 0;
+            for (int i = 0; i < Capacity; i++)
+            {
+                _entries[i].Timestamp = "00:00:00.000";
+                _entries[i].Message = string.Empty;
+            }
+            foreach (var e in keep)
+            {
+                int slot = Index % Capacity;
+                Index++;
+                _entries[slot].Timestamp = e.Timestamp;
+                _entries[slot].Message = e.Message;
+            }
+        }
+    }
+
     public void Clear()
     {
         lock (_lock)

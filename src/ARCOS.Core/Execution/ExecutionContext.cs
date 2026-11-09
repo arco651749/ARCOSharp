@@ -59,10 +59,6 @@ public sealed class ExecutionContext
     public bool IsMuted { get; set; }
     public bool IsRunning { get; set; } = true;
     public bool IsBypassPause => ThreadName.EndsWith('&');
-    public List<string> SysLogEntries { get; } = new();
-
-    public event Action<string, bool>? OnLog;
-
     public ExecutionContext(int threadId, string threadName, ProgramTable program, BasicEngines engines, DriverManager drivers)
     {
         ThreadId = threadId;
@@ -78,8 +74,6 @@ public sealed class ExecutionContext
     {
         string timestamp = DateTime.Now.ToString("HH:mm:ss.fff");
         string entry = $"[{timestamp}] [Thread {ThreadId}:{ThreadName}] {(isError ? "[ERROR] " : "")}{message}";
-        SysLogEntries.Add(entry);
-        OnLog?.Invoke(entry, isError);
 
         // 同步寫入系統日誌旗標與 RecordEngine SYSTEMLOG 通道
         if (isError)

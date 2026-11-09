@@ -45,8 +45,16 @@ public class RecordEngine
             channel.StartTicks = Stopwatch.GetTimestamp();
         }
 
-        channel.Add(message);
+        string ts = DateTime.Now.ToString("HH:mm:ss.fff");
+        channel.Add(message, ts);
+        Recorded?.Invoke(recordName, ts, message);
     }
+
+    /// <summary>
+    /// 可選觀察者事件 (recordName, timestamp, message)。無訂閱者時零成本；
+    /// 僅供 USER TAB 即時 LOG 等明確需要即時顯示的 UI 訂閱，Module Info 仍採 On-Demand Pull。
+    /// </summary>
+    public event Action<string, string, string>? Recorded;
 
     /// <summary>
     /// 計算並取得指定 Record 的 Cycle Time 耗時秒數 (對應 System@LogRecordCycleTime)
