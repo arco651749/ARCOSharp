@@ -3618,15 +3618,6 @@ public partial class MainWindow : Window
             var pnlSystem = this.FindControl<Grid>("PnlModuleSystem");
             if (pnlSystem != null && pnlSystem.IsVisible)
             {
-                var txtSysState = this.FindControl<TextBlock>("TxtSystemRunState");
-                if (txtSysState != null)
-                {
-                    bool isRunning = _vm.MainThreads[0].IsRunning;
-                    txtSysState.Text = isRunning ? "RUNNING" : "IDLE";
-                    txtSysState.Foreground = isRunning 
-                        ? new SolidColorBrush(Color.Parse("#10B981")) 
-                        : new SolidColorBrush(Color.Parse("#0284C7"));
-                }
                 // RecordIndex 與表格遵循 On-Demand Pull 原則，僅在點擊 Get RecordS 或選單時更新
                 return;
             }
