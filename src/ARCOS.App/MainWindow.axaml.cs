@@ -88,7 +88,6 @@ public partial class MainWindow : Window
 
     private readonly ObservableCollection<ModuleListItem> _loadedModules = new();
 
-    private double _systemCycleTime = 0.0;
 
     private object? _defaultSubPanelContent;
 
@@ -3620,7 +3619,6 @@ public partial class MainWindow : Window
             if (pnlSystem != null && pnlSystem.IsVisible)
             {
                 var txtSysState = this.FindControl<TextBlock>("TxtSystemRunState");
-                var txtSysCycle = this.FindControl<TextBlock>("TxtSystemCycleTime");
                 if (txtSysState != null)
                 {
                     bool isRunning = _vm.MainThreads[0].IsRunning;
@@ -3628,14 +3626,6 @@ public partial class MainWindow : Window
                     txtSysState.Foreground = isRunning 
                         ? new SolidColorBrush(Color.Parse("#10B981")) 
                         : new SolidColorBrush(Color.Parse("#0284C7"));
-                }
-                if (_vm.MainThreads[0].IsRunning)
-                {
-                    _systemCycleTime += 0.05;
-                }
-                if (txtSysCycle != null)
-                {
-                    txtSysCycle.Text = $"{_systemCycleTime:F2} s";
                 }
                 // RecordIndex 與表格遵循 On-Demand Pull 原則，僅在點擊 Get RecordS 或選單時更新
                 return;

@@ -876,7 +876,7 @@
                             <!-- 1. SYSTEM 面板 (RecordS 統一環狀生產記錄與日誌台) -->
                             <Grid x:Name="PnlModuleSystem" RowDefinitions="Auto,*" Margin="6" IsVisible="True">
                                 <Border Grid.Row="0" Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="6" Padding="12,8" Margin="0,0,0,8">
-                                    <Grid ColumnDefinitions="*,Auto,Auto,Auto">
+                                    <Grid ColumnDefinitions="*,Auto,Auto">
                                         <StackPanel Grid.Column="0" VerticalAlignment="Center">
                                             <StackPanel Orientation="Horizontal" Spacing="8">
                                                 <TextBlock Text="SYSTEM MODULE (CORE)" FontWeight="Black" FontSize="14" Foreground="#0F172A"/>
@@ -884,7 +884,7 @@
                                                     <TextBlock Text="ONLINE / HEALTHY" FontSize="9" FontWeight="Bold" Foreground="White"/>
                                                 </Border>
                                             </StackPanel>
-                                            <TextBlock Text="系統執行日誌、Cycle Time、生產週期打卡與健康監控" FontSize="11" Foreground="#64748B" Margin="0,2,0,0"/>
+                                            <TextBlock Text="系統執行日誌、生產週期打卡與健康監控" FontSize="11" Foreground="#64748B" Margin="0,2,0,0"/>
                                         </StackPanel>
                                         <Border Grid.Column="1" Background="White" BorderBrush="#CBD5E1" BorderThickness="1" Padding="12,4" Margin="6,0" CornerRadius="4">
                                             <StackPanel>
@@ -892,13 +892,7 @@
                                                 <TextBlock x:Name="TxtSystemRunState" Text="IDLE" FontSize="14" FontWeight="Black" Foreground="#0284C7" HorizontalAlignment="Center"/>
                                             </StackPanel>
                                         </Border>
-                                        <Border Grid.Column="2" Background="White" BorderBrush="#CBD5E1" BorderThickness="1" Padding="12,4" Margin="6,0" CornerRadius="4">
-                                            <StackPanel>
-                                                <TextBlock Text="CYCLE TIME" FontSize="9.5" FontWeight="SemiBold" Foreground="#64748B" HorizontalAlignment="Center"/>
-                                                <TextBlock x:Name="TxtSystemCycleTime" Text="0.00 s" FontSize="14" FontWeight="Black" Foreground="#F59E0B" HorizontalAlignment="Center"/>
-                                            </StackPanel>
-                                        </Border>
-                                        <Button x:Name="BtnClearSystemLog" Grid.Column="3" Content="🧹 Clear (CLEAR)" Height="28" Padding="10,0" Margin="6,0,0,0" Background="#F1F5F9" Foreground="#475569" FontSize="11" FontWeight="SemiBold" CornerRadius="4"/>
+                                        <Button x:Name="BtnClearSystemLog" Grid.Column="2" Content="🧹 Clear (CLEAR)" Height="28" Padding="10,0" Margin="6,0,0,0" Background="#F1F5F9" Foreground="#475569" FontSize="11" FontWeight="SemiBold" CornerRadius="4"/>
                                     </Grid>
                                 </Border>
                                 <!-- 2000 槽位 RecordS 核心工作區 (左欄 Channels 清單，右欄 2000 槽位雙欄事件表) -->
