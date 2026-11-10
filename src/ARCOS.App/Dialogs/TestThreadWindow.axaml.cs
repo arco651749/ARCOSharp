@@ -1104,6 +1104,28 @@ public partial class TestThreadWindow : Window
     private async void OnCommandCellPointerPressed(object? sender, PointerPressedEventArgs e)
     {
         var row = (sender as Control)?.DataContext as SequencerRowViewModel;
+
+        // Ctrl + Click 在指令欄：執行插入指令動作 (同點選欄位後按「+」按鈕)
+        var props = e.GetCurrentPoint(this).Properties;
+        if (props.IsLeftButtonPressed && e.KeyModifiers == KeyModifiers.Control)
+        {
+            e.Handled = true;
+            ClearRangeSelection();
+            PushUndoSnapshot();
+            int cur = row?.LineNumber ?? (this.FindControl<DataGrid>("GridCommands")?.SelectedIndex ?? (_rows.Count - 1));
+            int ins = (cur >= 0 && cur < _rows.Count) ? cur + 1 : _rows.Count;
+            _rows.Insert(ins, new SequencerRowViewModel { LineNumber = ins, Command = "System@Delay", Parameter = "0.1" });
+            for (int i = 0; i < _rows.Count; i++) _rows[i].LineNumber = i;
+            UpdateUndoRedoButtonState();
+            var grid = this.FindControl<DataGrid>("GridCommands");
+            if (grid != null && ins < _rows.Count)
+            {
+                grid.SelectedIndex = ins;
+                grid.ScrollIntoView(_rows[ins], null);
+            }
+            return;
+        }
+
         if (HandleShortcutPointerAction(row, e)) return;
 
         if (row != null)

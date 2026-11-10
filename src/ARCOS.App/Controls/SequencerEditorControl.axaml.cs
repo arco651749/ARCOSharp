@@ -205,6 +205,19 @@ public partial class SequencerEditorControl : UserControl
         if (topLevel == null) return;
 
         var row = (sender as Control)?.DataContext as SequencerRowViewModel;
+
+        // Ctrl + Click 在指令欄：執行插入指令動作 (同點選欄位後按「+」按鈕)
+        var props = e.GetCurrentPoint(this).Properties;
+        if (props.IsLeftButtonPressed && e.KeyModifiers == KeyModifiers.Control)
+        {
+            e.Handled = true;
+            ClearRangeSelection();
+            int cur = row?.LineNumber ?? (this.FindControl<DataGrid>("GridCommands")?.SelectedIndex ?? (_rows.Count - 1));
+            int ins = (cur >= 0 && cur < _rows.Count) ? cur + 1 : _rows.Count;
+            TriggerAddRow(ins);
+            return;
+        }
+
         if (HandleShortcutPointerAction(row, e)) return;
         if (row == null) return;
 
@@ -1199,21 +1212,7 @@ public partial class SequencerEditorControl : UserControl
     private void BtnAdd_Click(object? sender, RoutedEventArgs e)
     {
         ClearRangeSelection();
-        PushUndoSnapshot();
-        var grid = this.FindControl<DataGrid>("GridCommands");
-        int insertIndex = (grid?.SelectedIndex ?? -1) + 1;
-        if (insertIndex < 0 || insertIndex > _rows.Count) insertIndex = _rows.Count;
-
-        _rows.Insert(insertIndex, new SequencerRowViewModel
-        {
-            LineNumber = insertIndex,
-            Command = "System@Delay",
-            Parameter = "0.1"
-        });
-
-        RenumberRows();
-        SyncUIToProgram();
-        NavigateToRow(insertIndex);
+        TriggerAddRow();
     }
 
     private void BtnDelete_Click(object? sender, RoutedEventArgs e)
