@@ -198,6 +198,35 @@ public partial class SequencerEditorControl : UserControl
 
     private bool _isOpeningCommandSelect = false;
 
+    public async Task<bool> EditCommandForRowAsync(SequencerRowViewModel row, Window topLevel)
+    {
+        if (_isOpeningCommandSelect) return false;
+        try
+        {
+            _isOpeningCommandSelect = true;
+            string? selectedCmd = await ComSelectWindow.SelectCommandAsync(topLevel, _vm?.Executor.Registry);
+            if (string.IsNullOrWhiteSpace(selectedCmd)) return false;
+
+            SyncIoDefinitionsFromRows();
+            string initialParam = row.Command.Equals(selectedCmd, StringComparison.OrdinalIgnoreCase) ? row.Parameter : "";
+            string? confirmedParam = await ParameterGuidanceManager.Instance.RequestGuidanceAsync(selectedCmd, initialParam, _vm?.Engines, topLevel, newCmd => { selectedCmd = newCmd; });
+            if (confirmedParam != null)
+            {
+                PushUndoSnapshot();
+                row.Command = selectedCmd;
+                row.Parameter = confirmedParam;
+                SyncUIToProgram();
+                SyncIoDefinitionsFromRows();
+                return true;
+            }
+            return false;
+        }
+        finally
+        {
+            _isOpeningCommandSelect = false;
+        }
+    }
+
     private async void OnCommandCellPointerPressed(object? sender, PointerPressedEventArgs e)
     {
         if (_isLocked || _isOpeningCommandSelect) return;
@@ -206,7 +235,7 @@ public partial class SequencerEditorControl : UserControl
 
         var row = (sender as Control)?.DataContext as SequencerRowViewModel;
 
-        // Ctrl + Click 在指令欄：執行插入指令動作 (同點選欄位後按「+」按鈕)
+        // Ctrl + Click 在指令欄：執行插入指令動作並自動帶出指令編輯 (同點選欄位後按「+」按鈕)
         var props = e.GetCurrentPoint(this).Properties;
         if (props.IsLeftButtonPressed && e.KeyModifiers == KeyModifiers.Control)
         {
@@ -214,34 +243,18 @@ public partial class SequencerEditorControl : UserControl
             ClearRangeSelection();
             int cur = row?.LineNumber ?? (this.FindControl<DataGrid>("GridCommands")?.SelectedIndex ?? (_rows.Count - 1));
             int ins = (cur >= 0 && cur < _rows.Count) ? cur + 1 : _rows.Count;
-            TriggerAddRow(ins);
+            var newRow = TriggerAddRow(ins);
+            if (newRow != null)
+            {
+                await EditCommandForRowAsync(newRow, topLevel);
+            }
             return;
         }
 
         if (HandleShortcutPointerAction(row, e)) return;
         if (row == null) return;
 
-        try
-        {
-            _isOpeningCommandSelect = true;
-            string? selectedCmd = await ComSelectWindow.SelectCommandAsync(topLevel, _vm?.Executor.Registry);
-            if (string.IsNullOrWhiteSpace(selectedCmd)) return;
-
-            SyncIoDefinitionsFromRows();
-            string? confirmedParam = await ParameterGuidanceManager.Instance.RequestGuidanceAsync(selectedCmd, row.Parameter, _vm?.Engines, topLevel, newCmd => { selectedCmd = newCmd; });
-            if (confirmedParam != null)
-            {
-                PushUndoSnapshot();
-                row.Command = selectedCmd;
-                row.Parameter = confirmedParam;
-                SyncUIToProgram();
-                SyncIoDefinitionsFromRows();
-            }
-        }
-        finally
-        {
-            _isOpeningCommandSelect = false;
-        }
+        await EditCommandForRowAsync(row, topLevel);
     }
 
     private DateTime _lastShiftDoubleStepTime = DateTime.MinValue;
@@ -738,23 +751,25 @@ public partial class SequencerEditorControl : UserControl
         BtnJump_Click(null, new RoutedEventArgs());
     }
 
-    public void TriggerAddRow(int? atIndex = null, string command = "System@Delay", string parameter = "0.1")
+    public SequencerRowViewModel TriggerAddRow(int? atIndex = null, string command = "System@Delay", string parameter = "0.1")
     {
         PushUndoSnapshot();
         var grid = this.FindControl<DataGrid>("GridCommands");
         int insertIndex = atIndex ?? ((grid?.SelectedIndex ?? -1) + 1);
         if (insertIndex < 0 || insertIndex > _rows.Count) insertIndex = _rows.Count;
 
-        _rows.Insert(insertIndex, new SequencerRowViewModel
+        var newRow = new SequencerRowViewModel
         {
             LineNumber = insertIndex,
             Command = command,
             Parameter = parameter
-        });
+        };
+        _rows.Insert(insertIndex, newRow);
 
         RenumberRows();
         SyncUIToProgram();
         NavigateToRow(insertIndex);
+        return newRow;
     }
 
     public void TriggerDeleteRow(int? atIndex = null)
@@ -1209,10 +1224,15 @@ public partial class SequencerEditorControl : UserControl
         }
     }
 
-    private void BtnAdd_Click(object? sender, RoutedEventArgs e)
+    private async void BtnAdd_Click(object? sender, RoutedEventArgs e)
     {
         ClearRangeSelection();
-        TriggerAddRow();
+        var newRow = TriggerAddRow();
+        var topLevel = TopLevel.GetTopLevel(this) as Window;
+        if (newRow != null && topLevel != null)
+        {
+            await EditCommandForRowAsync(newRow, topLevel);
+        }
     }
 
     private void BtnDelete_Click(object? sender, RoutedEventArgs e)

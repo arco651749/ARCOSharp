@@ -413,20 +413,27 @@ public partial class TestThreadWindow : Window
             };
         }
 
-        // Add Row
+        // Add Row (插入新行並自動開啟指令編輯)
         var btnAdd = this.FindControl<Button>("BtnAdd");
         if (btnAdd != null)
         {
-            btnAdd.Click += (_, _) =>
+            btnAdd.Click += async (_, _) =>
             {
                 ClearRangeSelection();
                 PushUndoSnapshot();
                 var grid = this.FindControl<DataGrid>("GridCommands");
                 int cur = grid?.SelectedIndex ?? (_rows.Count - 1);
                 int ins = cur >= 0 ? cur + 1 : _rows.Count;
-                _rows.Insert(ins, new SequencerRowViewModel { LineNumber = ins, Command = "System@Delay", Parameter = "0.1" });
+                var newRow = new SequencerRowViewModel { LineNumber = ins, Command = "System@Delay", Parameter = "0.1" };
+                _rows.Insert(ins, newRow);
                 for (int i = 0; i < _rows.Count; i++) _rows[i].LineNumber = i;
                 UpdateUndoRedoButtonState();
+                if (grid != null && ins < _rows.Count)
+                {
+                    grid.SelectedIndex = ins;
+                    grid.ScrollIntoView(_rows[ins], null);
+                }
+                await EditCommandForRowAsync(newRow);
             };
         }
 
@@ -1101,11 +1108,45 @@ public partial class TestThreadWindow : Window
         ExecuteLocalDelete(null);
     }
 
+    private async Task EditCommandForRowAsync(SequencerRowViewModel row)
+    {
+        SyncIoDefinitionsFromRows();
+        bool wasTopmost = this.Topmost;
+        string? selectedCmd = null;
+        string? confirmedParam = null;
+        try
+        {
+            this.Topmost = false;
+            selectedCmd = await ComSelectWindow.SelectCommandAsync(this, _vm?.Executor.Registry);
+            if (string.IsNullOrWhiteSpace(selectedCmd)) return;
+
+            string initialParam = row.Command.Equals(selectedCmd, StringComparison.OrdinalIgnoreCase) ? row.Parameter : "";
+            confirmedParam = await ParameterGuidanceManager.Instance.RequestGuidanceAsync(selectedCmd, initialParam, _vm?.Engines, this);
+        }
+        finally
+        {
+            this.Topmost = wasTopmost;
+        }
+
+        if (!string.IsNullOrWhiteSpace(selectedCmd))
+        {
+            PushUndoSnapshot();
+            row.Command = selectedCmd;
+            if (confirmedParam != null)
+            {
+                row.Parameter = confirmedParam;
+            }
+            SyncUIToProgram();
+            SyncIoDefinitionsFromRows();
+            UpdateUndoRedoButtonState();
+        }
+    }
+
     private async void OnCommandCellPointerPressed(object? sender, PointerPressedEventArgs e)
     {
         var row = (sender as Control)?.DataContext as SequencerRowViewModel;
 
-        // Ctrl + Click 在指令欄：執行插入指令動作 (同點選欄位後按「+」按鈕)
+        // Ctrl + Click 在指令欄：執行插入指令動作並自動開啟指令編輯 (同點選欄位後按「+」按鈕)
         var props = e.GetCurrentPoint(this).Properties;
         if (props.IsLeftButtonPressed && e.KeyModifiers == KeyModifiers.Control)
         {
@@ -1114,7 +1155,8 @@ public partial class TestThreadWindow : Window
             PushUndoSnapshot();
             int cur = row?.LineNumber ?? (this.FindControl<DataGrid>("GridCommands")?.SelectedIndex ?? (_rows.Count - 1));
             int ins = (cur >= 0 && cur < _rows.Count) ? cur + 1 : _rows.Count;
-            _rows.Insert(ins, new SequencerRowViewModel { LineNumber = ins, Command = "System@Delay", Parameter = "0.1" });
+            var newRow = new SequencerRowViewModel { LineNumber = ins, Command = "System@Delay", Parameter = "0.1" };
+            _rows.Insert(ins, newRow);
             for (int i = 0; i < _rows.Count; i++) _rows[i].LineNumber = i;
             UpdateUndoRedoButtonState();
             var grid = this.FindControl<DataGrid>("GridCommands");
@@ -1123,6 +1165,7 @@ public partial class TestThreadWindow : Window
                 grid.SelectedIndex = ins;
                 grid.ScrollIntoView(_rows[ins], null);
             }
+            await EditCommandForRowAsync(newRow);
             return;
         }
 
@@ -1130,36 +1173,7 @@ public partial class TestThreadWindow : Window
 
         if (row != null)
         {
-            SyncIoDefinitionsFromRows();
-            bool wasTopmost = this.Topmost;
-            string? selectedCmd = null;
-            string? confirmedParam = null;
-            try
-            {
-                this.Topmost = false;
-                selectedCmd = await ComSelectWindow.SelectCommandAsync(this, _vm?.Executor.Registry);
-                if (string.IsNullOrWhiteSpace(selectedCmd)) return;
-
-                confirmedParam = await ParameterGuidanceManager.Instance.RequestGuidanceAsync(selectedCmd, row.Parameter, _vm?.Engines, this);
-            }
-            finally
-            {
-                this.Topmost = wasTopmost;
-            }
-
-            if (!string.IsNullOrWhiteSpace(selectedCmd))
-            {
-                PushUndoSnapshot();
-                row.Command = selectedCmd;
-                if (confirmedParam != null)
-                {
-                    row.Parameter = confirmedParam;
-                }
-                SyncUIToProgram();
-                SyncIoDefinitionsFromRows();
-                UpdateUndoRedoButtonState();
-                e.Handled = true;
-            }
+            await EditCommandForRowAsync(row);
         }
     }
 
