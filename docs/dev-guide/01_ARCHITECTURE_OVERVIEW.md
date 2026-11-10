@@ -117,7 +117,7 @@ sequenceDiagram
     VM-->>MainWin: VM 實例就緒
     deactivate VM
 
-    MainWin->>MainWin: 自動載入預設專案 (Master.pro 或 Master_V1.pro)
+    MainWin->>MainWin: 自動載入預設專案 (Master.prog 或相容之 Master.pro)
     MainWin->>Panel: LoadUserPanelFromCsvi("UserPanel.csvi")
     activate Panel
     Panel->>Panel: 載入 CSVI、實例化 Control、呼叫 Init(engines)
@@ -254,7 +254,7 @@ dist/ARCOS_Runtime/
 ├── ARCOS.App.exe                  # 主程式主控台
 ├── ARCOS.Core.dll                 # 核心執行引擎
 ├── UserPanel.csvi                 # 預設自訂操作面板 (4-in-1 組件)
-├── Master.pro                     # 預設全機自動化專案腳本
+├── Master.prog                    # 預設全機自動化專案腳本 (舊版相容 .pro)
 ├── MODULES/                       # 8 大核心功能模組目錄
 │   ├── IO/
 │   │   ├── IO.Module.dll          # IO 指令直譯處理器 (IModuleHandler)

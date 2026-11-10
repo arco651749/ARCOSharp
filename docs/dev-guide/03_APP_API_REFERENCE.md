@@ -119,16 +119,31 @@ flowchart TD
 
 ## 4. 編輯器快捷鍵與操作規範 (Shortcuts & Gestures)
 
+### 鍵盤與滑鼠互動矩陣
+
 | 動作 / 快捷鍵 | 作用範圍 | 行為說明 |
 |---|---|---|
 | **`Ctrl + T`** | 全域視窗 | 喚起或切換 `TestThreadWindow`（測試執行緒編輯器）。 |
 | **`滑鼠左鍵單擊`** | Command 欄位 | 開啟 `ComSelectWindow`（可依分類挑選 8 大模組之指令）。 |
-| **`滑鼠左鍵雙擊`** | Parameters 欄位 | 啟動對應指令之參數導引對話框（如 IO 點位下拉選單）。 |
-| **`Shift + 滑鼠單擊`** | 行號 / 單元格 | 連續區間反白選取（設定 `IsRangeSelected`）。 |
-| **`Ctrl + 滑鼠單擊`** | 行號 / 單元格 | 單行選取反轉（切換單獨一行之選取狀態）。 |
+| **`Ctrl + 滑鼠單擊`** | Command 欄位 | **高速插入新指令**：行為等同點擊工具列之 `+` 按鈕，在當前列上方插入空白列，並自動彈出 `ComSelectWindow` 與接續啟動 `ParameterGuidance`。 |
+| **`滑鼠左鍵雙擊`** | Parameters 欄位 | 啟動對應指令之參數導引對話框（如 IO 點位下拉選單、延遲設定等）。 |
+| **`Shift + 滑鼠單擊`** | 資料列 | **連續區間反白多選**：高亮標記（淺藍底色 `#E0F2FE`）**嚴格限定只作用於 Command 與 Parameters 兩欄**，`i` 索引欄絕對不染藍。 |
+| **`Ctrl + 滑鼠單擊`** | 行號 / 非指令格 | 單行選取反轉（切換單獨一行之選取狀態）。 |
 | **`Ctrl + Z`** | 編輯器 | 復原上一動（`BtnUndo`）。 |
 | **`Ctrl + Y`** | 編輯器 | 重做動作（`BtnRedo`）。 |
 | **`Ctrl + F`** | 編輯器 | 開啟即時關鍵字搜尋浮動列。 |
+
+### 視覺空間正交解耦規範 (Visual Decoupling Invariant)
+1. **PC 游標光棒（紅底粉色膠囊 `#FFE4E6`、加粗紅字）**：**嚴格限定於 `i` 索引欄**，指令與參數欄絕對不染紅。
+2. **範圍選取高亮（淺藍底色 `#E0F2FE`、上下邊框 `#BAE6FD`）**：**嚴格限定於 `Command` 與 `Parameters` 兩欄**，`i` 索引欄絕對不染藍。
+3. 兩者在欄位維度上徹底解耦，即使操作員進行多行選取，PC 游標依然能在 `i` 欄自由穿梭跳躍，清晰可見！
+
+### 專案與程式區管理介面 (Project & Section UI Buttons)
+- **`[ 📁 READ .PROG ]`**：將磁碟中的全專案檔（`*.prog` 或舊版相容 `*.pro`）讀入至 0~99 程式區槽位中。
+- **`[ 💾 SAVE .PROG ]`**：將當前 100 個程式區段整體序列化寫入 `.prog` 專案檔。
+- **`[ 📗 READ .INIT ]`**：載入單一程式區腳本（二進制 $N \times 2$ 格式）至當前選定之 Program Section。
+- **`[ 💾 SAVE .INIT ]`**：將目前選定之單一 Program Section 導出為獨立 `.init` 二進制腳本（供 SubThread 或 UI 調用）。
+- **`ProgSelector` 下拉選單**：支援 `System@ProgramSection` 動態命名，格式化顯示 `0: Main`, `1: SectionName`, `94: Pause Off`, `99: EMG Stop`。
 
 ---
 

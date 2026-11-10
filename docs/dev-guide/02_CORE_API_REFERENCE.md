@@ -436,7 +436,8 @@ public static class ArcosPaths
 
     public static string ResolveUserPanelCsviPath(string fileNameOrPath);
     public static string ResolveExternalModuleCsviPath(string targetName);
-    public static string ResolveProPath(string proFileName);
+    public static string ResolveProgPath(string progFileName);
+    public static string ResolveProPath(string proFileName); // 向後相容別名
     public static string ResolveInitPath(string initFileName);
     public static string GetTodayLogFilePath();
 }
@@ -448,14 +449,26 @@ public static class ArcosPaths
 
 - **命名空間**：`ARCOS.Core.Serialization`
 - **原始碼路徑**：[`src/ARCOS.Core/Serialization/ScriptSerializer.cs`](../../src/ARCOS.Core/Serialization/ScriptSerializer.cs)
-- **用途說明**：專案與腳本檔案讀寫工具。
+- **用途說明**：專案與腳本檔案讀寫工具，完整支援 `.prog`（全專案 INI 集合）與 `.init`（單一程式區二進制 N×2 封裝）。
 
 ```csharp
 public static class ScriptSerializer
 {
-    public static List<ProgramTable> LoadProFile(string filePath);
-    public static void SaveProFile(string filePath, IEnumerable<ProgramTable> programs);
+    // === .prog 全專案檔案 (0~99 程式區段集合，標準 INI 格式) ===
+    public static void SaveProgFile(string filePath, IEnumerable<ProgramTable> programs);
+    public static List<ProgramTable> LoadProgFile(string filePath);
+    public static Dictionary<int, ProgramTable> DeserializeProg(string content);
+
+    // === .init 單一程式區檔案 (二進制 N×2 字串陣列封裝，供 SubThread 或 UI 調用) ===
     public static ProgramTable LoadInitFile(string filePath, int progNo = 0, string? progName = null);
     public static void SaveInitFile(string filePath, ProgramTable program);
+
+    // === 純指令腳本預覽與比對 ===
+    public static string ProgramToCleanScript(ProgramTable prog);
+
+    // === 向後相容舊版 .pro 介面 ===
+    public static void SaveProFile(string filePath, IEnumerable<ProgramTable> programs);
+    public static List<ProgramTable> LoadProFile(string filePath);
+    public static Dictionary<int, ProgramTable> DeserializePro(string content);
 }
 ```

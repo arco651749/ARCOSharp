@@ -147,7 +147,98 @@ ARCOSharp 的本質是一套專注於工業級自動化機台的高吞吐、低�
 
 ---
 
-## 6. 標準程式碼範例與實作模式 (Best Practice Code Patterns)
+### 🎨 三、視覺解耦與指標隔離律 (PC Pointer & Range Selection Decoupling Invariant)
+
+在排程編輯器（`SequencerEditorControl`）與測試視窗（`TestThreadWindow`）中，為了徹底避免**指令執行指針（PC Pointer）**與**滑鼠範圍選取（Range Selection）**相互混淆覆蓋，系統強制實施**「欄位正交視覺隔離」**鐵律：
+
+| 視覺語意元件 | 允許呈現之欄位 | 樣式規範 | 職責與互動邊界 |
+| :--- | :--- | :--- | :--- |
+| **PC 執行指針**<br>(`IsCurrentPC`) | **僅限 `i` 索引欄**<br>(Strictly Column `i`) | 紅底粉色圓角膠囊（`#FFE4E6`）<br>加粗紅色字體（`#DC2626`, Bold）<br>紅色外邊框（`#F87171`） | 代表 VM 直譯器**下一個即將執行之微步指令**。<br>指令與參數欄絕對不染紅，保持程式代碼之純淨可讀性與對比度。 |
+| **範圍選取高亮**<br>(`IsRangeSelected`) | **僅限 `Command` 與 `Parameters` 欄**<br>(Strictly Command & Param) | 淺藍色背景（`#E0F2FE`）<br>藍色上下邊框（`#BAE6FD`）<br>深深色文字保持高對比 | 代表操作員選取之指令區塊，供複製、移動、整段刪除。<br>`i` 索引欄絕對不染藍，確保 PC 紅色游標即使在選取區內仍清晰可見。 |
+
+```
+┌───────┬─────────────────────────┬──────────────────────┐
+│   i   │         Command         │      Parameters      │
+├───────┼─────────────────────────┼──────────────────────┤
+│ [ 1 ] │ System@Log Message      │ 1                    │  <-- PC 游標僅在此膠囊中 (紅底紅字)
+├───────┼─────────────────────────┼──────────────────────┤
+│   2   │ █ System@Log Message    │ █ 2                  │  <-- Shift+Click 範圍選取 (淺藍色底)
+├───────┼─────────────────────────┼──────────────────────┤
+│   3   │ █ System@Log Message    │ █ 3                  │  <-- 兩者完全正交解耦，互不覆蓋
+└───────┴─────────────────────────┴──────────────────────┘
+```
+
+#### 🎯 關鍵架構守衛：
+1. **空間正交性 (Spatial Orthogonality)**：PC 游標與範圍選取在 X 軸欄位上完全隔離，從根本上杜絕「整列染色導致 PC 消失」或「操作員無法辨識到底選了哪幾行」的 UI 混淆。
+2. **零干擾運行**：即便操作員在編輯器內選取數十行指令進行搬移或複製，背景全速運轉的執行緒 PC 指針依然在 `i` 欄自由穿梭跳躍，人機協同零衝突。
+
+---
+
+## 6. 專案檔格式與程式區架構 (.prog 與 .init 雙層架構)
+
+ARCOSharp 將自動化腳本的儲存與生命週期明確劃分為「**全專案檔 (`.prog`)**」與「**單一程式區檔案 (`.init`)**」兩層架構：
+
+```mermaid
+flowchart TD
+    subgraph ProjectLevel["專案層級：.prog (Project Script File)"]
+        PROG["Master.prog (INI 格式)"]
+        PROG --> Sec0["[0] Main (主管理行程)"]
+        PROG --> Sec1["[1] Station_Feeder (工位子腳本)"]
+        PROG --> Sec94["[94] Pause Off (UI 按鈕回呼)"]
+        PROG --> Sec96["[96] Execute On (Run 按鈕回呼)"]
+        PROG --> Sec99["[99] EMG Stop (急停回呼)"]
+    end
+
+    subgraph SectionLevel["區段層級：.init (Single Section Script File)"]
+        INIT["Subroutine.init (Binary N×2 陣列)"]
+        INIT --> SubThread["供 SUBTHREAD 獨立加載<br/>或 UI 自訂按鈕直接調用"]
+    end
+
+    PROG -.->|以 Thread@Run 調度執行| SectionLevel
+```
+
+### 📁 一、.prog 全專案腳本檔案規範 (Project Script File)
+
+- **檔案副檔名**：`.prog`（預設檔名：`Master.prog`，向後相容舊版 `.pro`）。
+- **架構定義**：代表**整個機台專案**的所有程式區集合（0~99 區段，共 100 個槽位）。
+- **底層格式**：採用標準 Windows INI 格式儲存（`[0]`, `[1]`, ..., `[99]`），內含區段 `Name`、`Type`、`Size` 與各行指令。
+- **UI 交互按鈕**：
+  - `[ 📁 READ .PROG ]`：將磁碟中的 `.prog` 載入至記憶體與當前專案。
+  - `[ 💾 SAVE .PROG ]`：將當前 100 個程式區段整體序列化並寫入 `.prog`。
+- **路徑解析**：透過 `ArcosPaths.ResolveProgPath(fileName)` 自動定位於應用程式根目錄，若找不到 `.prog` 則自動嘗試同名 `.pro` 舊檔。
+
+### 📄 二、.init 獨立單一程式區檔案 (Standalone Section Script File)
+
+- **檔案副檔名**：`.init`。
+- **架構定義**：代表**單一獨立程式區段**的封裝，主要用於子執行緒（SubThread）或 UI 自訂按鈕獨立掛載調用。
+- **底層格式**：採用高效能二進位（Binary $N \times 2$ 字串陣列）封裝，包含總列數與各指令/參數之長度標頭與原始字串。
+- **UI 交互按鈕**：
+  - `[ 📗 READ .INIT ]`：載入單一腳本至當前選中之 Program Section。
+  - `[ 💾 SAVE .INIT ]`：將當前選中之單一 Program Section 導出為獨立 `.init`。
+
+### 🏷️ 三、System@ProgramSection 動態程式區命名與 ProgSelector
+
+ARCOSharp 支援在腳本執行時或載入時動態變更程式區段的語意化名稱：
+
+1. **指令語法**：
+   - `System@ProgramSection, $no, $name`：指定將第 `$no` 區段命名為 `$name`（例如：`System@ProgramSection, 1, Station_Feeder`）。
+   - `System@ProgramSection, $name`：單一參數模式，將**目前執行中之區段**直接命名為 `$name`。
+2. **UI ProgSelector 即時聯動**：
+   - 排程編輯器之程式區下拉選單（`ProgSelector`）即時呈現格式化標籤：
+     `0: Main`、`1: Station_Feeder`、`94: Pause Off`、`96: Execute On`、`99: EMG Stop`。
+   - 若區段未自訂名稱，則依慣例顯示預設編號（如 `12: Prog 12`）。
+
+### ⚡ 四、排程器高速編輯互動規範 (Ctrl+Click Insertion Acceleration)
+
+為大幅加速工程師編輯與測試腳本，排程器實作快捷交互守衛：
+- **`Ctrl + 滑鼠單擊 Command 欄位`**：
+  - 功能完全等同於工具列之 `+` 插入按鈕。
+  - 自動在目前游標所在列**上方插入一行全新空白指令**。
+  - 插入後**自動彈出指令選擇視窗（`ComSelectWindow`）**；若選定指令，則無縫接續開啟**參數導引視窗（`ParameterGuidance`）**，實現一氣呵成的零鍵盤指令建構體驗。
+
+---
+
+## 7. 標準程式碼範例與實作模式 (Best Practice Code Patterns)
 
 ### ✅ 模式 1：UI 定時器之 Active 守衛模式 (Active Guard Pattern)
 
@@ -230,7 +321,7 @@ public void Record(string recordName, string message)
 
 ---
 
-## 6. Code Review 檢核清單 (Pull Request & Development Checklist)
+## 8. Code Review 檢核清單 (Pull Request & Development Checklist)
 
 在提交任何 ARCOSharp 程式碼變更前，必須自檢以下項目：
 
@@ -238,11 +329,13 @@ public void Record(string recordName, string message)
 - [ ] **非 Active 不更新**：所有 UI 更新定時器或事件處理常式，均具備 `IsVisible` 與 `ActiveTab` 守衛檢查。
 - [ ] **低頻與背景優先級**：自動更新定時器頻率限制於 5~10 Hz（100~200ms），調度一律指定 `DispatcherPriority.Background`。
 - [ ] **按需拉取與無高頻動態記憶體配置**：高頻日誌與記錄使用預分配環狀緩衝區，七大資訊清單（Record/Var/Point/Cam/Motion/Daq/Wf）一律採使用者點擊按需拉取快照。
+- [ ] **視覺空間正交解耦**：PC 執行指標紅色高亮僅限欄位 `i`，多選範圍選取淺藍色高亮僅限欄位 `Command` 與 `Parameters`，兩者不可混用或整列通染。
+- [ ] **專案檔與單一腳本分離**：全專案存取使用 `.prog`（相容相容 `.pro`），單一子執行緒或按鍵腳本使用 `.init`。
 - [ ] **異常降級保護**：即使 UI 發生例外或重繪延遲，背景腳本執行緒與硬體通訊完全不受干擾、繼續全速執行。
 
 ---
 
-## 7. 詳細技術白皮書與章節目錄
+## 9. 詳細技術白皮書與章節目錄
 
 進一步的架構細節與各子系統規格，請參閱 `docs/dev-guide/` 目錄下各專題文檔：
 
