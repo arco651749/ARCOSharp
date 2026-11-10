@@ -1086,6 +1086,26 @@ public partial class SequencerEditorControl : UserControl
         string name = (!string.IsNullOrWhiteSpace(existingProg?.Name) && !existingProg.Name.Equals($"Program_{_currentProgNo}", StringComparison.OrdinalIgnoreCase))
             ? existingProg.Name
             : ProgramSlotItem.GetDefaultName(_currentProgNo);
+
+        // 支援 System@ProgramSection 指令動態重命名程式區
+        foreach (var r in _rows)
+        {
+            if (r.Command.Equals("System@ProgramSection", StringComparison.OrdinalIgnoreCase))
+            {
+                var parts = r.Parameter.Split(',', StringSplitOptions.TrimEntries);
+                if (parts.Length > 1 && !string.IsNullOrWhiteSpace(parts[1]))
+                {
+                    name = parts[1];
+                }
+                else if (parts.Length == 1 && !string.IsNullOrWhiteSpace(parts[0]))
+                {
+                    name = parts[0];
+                }
+                break;
+            }
+        }
+
+        bool nameChanged = existingProg != null && existingProg.Name != name;
         var prog = new ProgramTable { ProgramNumber = _currentProgNo, Name = name };
         for (int i = 0; i < _rows.Count; i++)
         {
@@ -1100,6 +1120,11 @@ public partial class SequencerEditorControl : UserControl
             ctx.Program = prog;
         }
         SyncIoDefinitionsFromRows();
+
+        if (nameChanged)
+        {
+            RefreshProgSelector(_currentProgNo);
+        }
     }
 
     public void UpdatePCPointer(int progIndex1Based)

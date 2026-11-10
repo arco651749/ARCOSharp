@@ -194,11 +194,21 @@ public class SystemModuleHandler : IModuleHandler
             if (parts.Length > 1)
             {
                 ctx.CurrentSection = parts[0];
-                ctx.Program.Name = parts[1];
+                string sectionName = parts[1];
+                if (int.TryParse(parts[0], out int targetSlot) && ctx.VM != null)
+                {
+                    var targetProg = ctx.VM.GetProgram(targetSlot);
+                    if (targetProg != null) targetProg.Name = sectionName;
+                }
+                else
+                {
+                    ctx.Program.Name = sectionName;
+                }
             }
             else if (parts.Length == 1)
             {
                 ctx.CurrentSection = parts[0];
+                ctx.Program.Name = parts[0];
             }
             return CommandResult.Done();
         }

@@ -314,7 +314,25 @@ public partial class TestThreadWindow : Window
 
     public void SyncUIToProgram()
     {
-        var prog = new ProgramTable { ProgramNumber = _currentProgNo, Name = $"Program_{_currentProgNo}" };
+        string name = ProgramSlotItem.GetDefaultName(_currentProgNo);
+        foreach (var r in _rows)
+        {
+            if (r.Command.Equals("System@ProgramSection", StringComparison.OrdinalIgnoreCase))
+            {
+                var parts = r.Parameter.Split(',', StringSplitOptions.TrimEntries);
+                if (parts.Length > 1 && !string.IsNullOrWhiteSpace(parts[1]))
+                {
+                    name = parts[1];
+                }
+                else if (parts.Length == 1 && !string.IsNullOrWhiteSpace(parts[0]))
+                {
+                    name = parts[0];
+                }
+                break;
+            }
+        }
+
+        var prog = new ProgramTable { ProgramNumber = _currentProgNo, Name = name };
         for (int i = 0; i < _rows.Count; i++)
         {
             var r = _rows[i];
