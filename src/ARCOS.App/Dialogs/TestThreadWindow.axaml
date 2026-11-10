@@ -111,16 +111,16 @@
                         <Setter Property="BorderThickness" Value="0,0,1,1"/>
                     </Style>
                     <Style Selector="DataGridRow:selected /template/ Rectangle#BackgroundRectangle">
-                        <Setter Property="Fill" Value="#E0F2FE"/>
+                        <Setter Property="Fill" Value="Transparent"/>
                     </Style>
                 </DataGrid.Styles>
                 <DataGrid.Columns>
-                    <!-- 行號 # -->
-                    <DataGridTemplateColumn Header="#" Width="40">
+                    <!-- 行號 i (專屬指示運行位置 PC，完全獨立於範圍選取) -->
+                    <DataGridTemplateColumn Header="i" Width="40">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate>
                                 <Panel HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
-                                       Background="{Binding CellBackground}"
+                                       Background="Transparent"
                                        PointerPressed="OnCellPointerPressed">
                                     <Border IsVisible="{Binding IsCurrentPC}" 
                                             Background="#FFE4E6" BorderBrush="#EF4444" BorderThickness="1.5" 
@@ -128,15 +128,9 @@
                                         <TextBlock Text="{Binding LineNumber}" FontWeight="Black" FontSize="10"
                                                    Foreground="#DC2626" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                     </Border>
-                                    <Border IsVisible="{Binding IsRangeSelectedAndNotPC}" 
-                                            Background="#BAE6FD" BorderBrush="#0284C7" BorderThickness="1" 
-                                            CornerRadius="2" Margin="1,0">
-                                        <TextBlock Text="{Binding LineNumber}" FontWeight="Bold" FontSize="10"
-                                                   Foreground="#0284C7" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                    </Border>
-                                    <Border IsVisible="{Binding IsDefaultState}" Background="#F1F5F9" Margin="1,0">
+                                    <Border IsVisible="{Binding !IsCurrentPC}" Background="Transparent" Margin="1,0">
                                         <TextBlock Text="{Binding LineNumber}" FontWeight="SemiBold" FontSize="10"
-                                                   Foreground="#0284C7" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                   Foreground="#64748B" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                     </Border>
                                 </Panel>
                             </DataTemplate>

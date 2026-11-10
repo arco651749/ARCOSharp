@@ -131,33 +131,26 @@
                         <Setter Property="BorderThickness" Value="0,0,1,1"/>
                     </Style>
                     <Style Selector="DataGridRow:selected /template/ Rectangle#BackgroundRectangle">
-                        <Setter Property="Fill" Value="#E0F2FE"/>
+                        <Setter Property="Fill" Value="Transparent"/>
                     </Style>
                 </DataGrid.Styles>
                 <DataGrid.Columns>
-                    <!-- 行號 # (粉色系反白指示運行位置，完全非同步解耦) -->
-                    <DataGridTemplateColumn Header="#" Width="44">
+                    <!-- 行號 i (專屬指示運行位置 PC，完全獨立於範圍選取) -->
+                    <DataGridTemplateColumn Header="i" Width="44">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate>
                                 <Panel HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
-                                       Background="{Binding CellBackground}"
+                                       Background="Transparent"
                                        PointerPressed="OnCellPointerPressed">
-                                    <!-- 運行中：柔和粉色系反白膠囊 (柔和粉桃/粉杏 #FFE4E6，邊框 #FDA4AF，深酒紅對比字 #9F1239，長時間監控舒適不刺眼) -->
+                                    <!-- 運行中：柔和粉色系反白膠囊 (PC 執行指標) -->
                                     <Border IsVisible="{Binding IsCurrentPC}" 
                                             Background="#FFE4E6" BorderBrush="#EF4444" BorderThickness="1.5" 
                                             CornerRadius="3" Margin="2,1">
                                         <TextBlock Text="{Binding LineNumber}" FontWeight="Black" FontSize="11"
                                                    Foreground="#DC2626" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                     </Border>
-                                    <!-- 選取範圍：天空藍反白膠囊 -->
-                                    <Border IsVisible="{Binding IsRangeSelectedAndNotPC}" 
-                                            Background="#BAE6FD" BorderBrush="#0284C7" BorderThickness="1" 
-                                            CornerRadius="3" Margin="2,1">
-                                        <TextBlock Text="{Binding LineNumber}" FontWeight="Bold" FontSize="11"
-                                                   Foreground="#0284C7" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                    </Border>
-                                    <!-- 待命中：一般沉穩灰底透明字 -->
-                                    <Border IsVisible="{Binding IsDefaultState}" 
+                                    <!-- 待命中：一般沉穩灰底透明字 (不受範圍選取影響) -->
+                                    <Border IsVisible="{Binding !IsCurrentPC}" 
                                             Background="Transparent" Margin="2,1">
                                         <TextBlock Text="{Binding LineNumber}" FontWeight="SemiBold" FontSize="11"
                                                    Foreground="#64748B" HorizontalAlignment="Center" VerticalAlignment="Center"/>
