@@ -1,253 +1,270 @@
-using System.Text;
-using ARCOS.Core.Execution;
-
-namespace ARCOS.Core.Serialization;
-
-/// <summary>
-/// ARCOS ?�本?��?案�?序�??�器
-/// ?�援 .pro (Windows INI 標�?多�?段�?案�?) ??.init (?��?程�??�本) 讀寫�?
-/// 並�??�支?��?�?Parameter (?�容 Motion@ExtraCMD ?��?多�??�本??Python ?��?�???
-/// </summary>
-public static class ScriptSerializer
-{
-    /// <summary>
-    /// 將�???ProgramTable ?��???.pro 檔�? (INI ?��?)
-    /// </summary>
-    public static void SaveProFile(string filePath, IEnumerable<ProgramTable> programs)
-    {
-        var sb = new StringBuilder();
-        foreach (var prog in programs)
-        {
-            sb.AppendLine($"[Program {prog.ProgramNumber}]");
-            sb.AppendLine($"Name=\"{prog.Name}\"");
-            sb.AppendLine("Type=\"0\"");
-            sb.AppendLine($"Size=\"{prog.Count}\"");
-
-            for (int i = 1; i <= prog.Count; i++)
-            {
-                var item = prog[i];
-                // 轉義?��?符�?以相容單�?INI
-                string escapedParam = item.RawParameter
-                    .Replace("\r\n", "\\n")
-                    .Replace("\n", "\\n");
-
-                sb.AppendLine($"{i}=\"{item.Command}\t{escapedParam}\"");
-            }
-            sb.AppendLine();
-        }
-
-        File.WriteAllText(filePath, sb.ToString(), Encoding.UTF8);
-    }
-
-    /// <summary>
-    /// �?.pro 檔�?載入?�?��?式�?�?
-    /// </summary>
-    public static List<ProgramTable> LoadProFile(string filePath)
-    {
-        var result = new List<ProgramTable>();
-        if (!File.Exists(filePath)) return result;
-
-        var lines = File.ReadAllLines(filePath, Encoding.UTF8);
-        ProgramTable? currentProg = null;
-
-        foreach (var rawLine in lines)
-        {
-            string line = rawLine.Trim();
-            if (string.IsNullOrEmpty(line) || line.StartsWith(';')) continue;
-
-            if (line.StartsWith("[Program ") && line.EndsWith(']'))
-            {
-                string numStr = line.Substring(9, line.Length - 10).Trim();
-                if (int.TryParse(numStr, out int pNo))
-                {
-                    currentProg = new ProgramTable { ProgramNumber = pNo };
-                    result.Add(currentProg);
-                }
-                continue;
-            }
-
-            if (currentProg == null) continue;
-
-            int eqIdx = line.IndexOf('=');
-            if (eqIdx <= 0) continue;
-
-            string key = line.Substring(0, eqIdx).Trim();
-            string val = line.Substring(eqIdx + 1).Trim().Trim('\"');
-
-            if (key.Equals("Name", StringComparison.OrdinalIgnoreCase))
-            {
-                currentProg.Name = val;
-            }
-            else if (int.TryParse(key, out int lineNum))
-            {
-                // ?��??��?符�?
-                string unescaped = val.Replace("\\n", "\n");
-                currentProg.Add(CommandItem.Parse(unescaped, lineNum));
-            }
-        }
-
-        return result;
-    }
-
-    /// <summary>
-    /// �??字串?�容?��???.pro 檔�???Dictionary(int, ProgramTable)
-    /// </summary>
-    public static Dictionary<int, ProgramTable> DeserializePro(string content)
-    {
-        var result = new Dictionary<int, ProgramTable>();
-        if (string.IsNullOrWhiteSpace(content)) return result;
-
-        var lines = content.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);
-        ProgramTable? currentProg = null;
-
-        foreach (var rawLine in lines)
-        {
-            string line = rawLine.Trim();
-            if (string.IsNullOrEmpty(line) || line.StartsWith(';')) continue;
-
-            if (line.StartsWith("[Program ", StringComparison.OrdinalIgnoreCase) && line.EndsWith(']'))
-            {
-                string numStr = line.Substring(9, line.Length - 10).Trim();
-                if (int.TryParse(numStr, out int pNo))
-                {
-                    currentProg = new ProgramTable { ProgramNumber = pNo };
-                    result[pNo] = currentProg;
-                }
-                continue;
-            }
-
-            if (currentProg == null) continue;
-
-            int eqIdx = line.IndexOf('=');
-            if (eqIdx <= 0) continue;
-
-            string key = line.Substring(0, eqIdx).Trim();
-            string val = line.Substring(eqIdx + 1).Trim().Trim('\"');
-
-            if (key.Equals("Name", StringComparison.OrdinalIgnoreCase))
-            {
-                currentProg.Name = val;
-            }
-            else if (int.TryParse(key, out int lineNum))
-            {
-                string unescaped = val.Replace("\\n", "\n");
-                currentProg.Add(CommandItem.Parse(unescaped, lineNum));
-            }
-        }
-
-        return result;
-    }
-
-    /// <summary>
-    /// �?ProgramTable 轉為乾淨?�無 INI 行�??�支?��?行�??��?純�?令腳??(�?Meld 比�??�編輯�??��?)
-    /// </summary>
-    public static string ProgramToCleanScript(ProgramTable prog)
-    {
-        var sb = new StringBuilder();
-        for (int i = 1; i <= prog.Count; i++)
-        {
-            var item = prog[i];
-            if (item.IsEmpty) continue;
-            if (item.IsComment)
-            {
-                sb.AppendLine($"// {item.RawParameter}");
-            }
-            else if (string.IsNullOrEmpty(item.RawParameter))
-            {
-                sb.AppendLine($"{item.Command}::;");
-            }
-            else
-            {
-                sb.AppendLine($"{item.Command}::{item.RawParameter};");
-            }
-        }
-        return sb.ToString();
-    }
-
-    /// <summary>
-    /// �?Meld 編輯後�?純�?令腳?��??�解?�並?��?編�???ProgramTable (Meld 編輯後�??��???
-    /// </summary>
-    public static ProgramTable CleanScriptToProgram(string scriptText, int progNumber, string progName = "")
-    {
-        var prog = new ProgramTable { ProgramNumber = progNumber, Name = progName };
-        var lines = scriptText.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);
-        int lineNum = 1;
-        foreach (var raw in lines)
-        {
-            if (string.IsNullOrWhiteSpace(raw)) continue;
-            string trimmed = raw.Trim();
-            if (trimmed.StartsWith("//") || trimmed.StartsWith(';'))
-            {
-                prog.Add(new CommandItem(lineNum, raw, "", "System", "#Comment", trimmed.TrimStart('/', ';', ' '), true, false));
-                lineNum++;
-            }
-            else
-            {
-                var item = CommandItem.Parse(raw, lineNum);
-                if (!item.IsEmpty)
-                {
-                    prog.Add(item);
-                    lineNum++;
-                }
-            }
-        }
-        return prog;
-    }
-
-    /// <summary>
-    /// 將單一程�?段寫?��??�制 .init 檔�?
-    /// 二進制規�?：Row Count (int32) + Col Count (int32 = 2) + ?��?串長度�??�容
-    /// </summary>
-    public static void SaveInitFile(string filePath, ProgramTable program)
-    {
-        using var fs = new FileStream(filePath, FileMode.Create, FileAccess.Write);
-        using var bw = new BinaryWriter(fs, Encoding.UTF8);
-
-        // 1. Header: Row Count + Col Count (2)
-        bw.Write(program.Count);
-        bw.Write(2);
-
-        // 2. Data Blocks
-        for (int i = 1; i <= program.Count; i++)
-        {
-            var item = program[i];
-            byte[] cmdBytes = Encoding.UTF8.GetBytes(item.Command);
-            bw.Write(cmdBytes.Length);
-            bw.Write(cmdBytes);
-
-            byte[] paramBytes = Encoding.UTF8.GetBytes(item.RawParameter);
-            bw.Write(paramBytes.Length);
-            bw.Write(paramBytes);
-        }
-    }
-
-    /// <summary>
-    /// 從�??�制 .init 檔�?載入?��?程�?�?
-    /// </summary>
-    public static ProgramTable LoadInitFile(string filePath, int progNo = 0, string name = "")
-    {
-        var prog = new ProgramTable { ProgramNumber = progNo, Name = name };
-        if (!File.Exists(filePath)) return prog;
-
-        using var fs = new FileStream(filePath, FileMode.Open, FileAccess.Read);
-        using var br = new BinaryReader(fs, Encoding.UTF8);
-
-        if (fs.Length < 8) return prog;
-
-        int rowCount = br.ReadInt32();
-        int colCount = br.ReadInt32(); // ?��???2
-
-        for (int i = 0; i < rowCount; i++)
-        {
-            int cmdLen = br.ReadInt32();
-            string cmd = cmdLen > 0 ? Encoding.UTF8.GetString(br.ReadBytes(cmdLen)) : "";
-
-            int paramLen = br.ReadInt32();
-            string param = paramLen > 0 ? Encoding.UTF8.GetString(br.ReadBytes(paramLen)) : "";
-
-            prog.Add(new CommandItem(i + 1, $"{cmd}\t{param}", cmd, "", "", param, false, false));
-        }
-
-        return prog;
-    }
-}
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Text;
+using ARCOS.Core.Execution;
+
+namespace ARCOS.Core.Serialization;
+
+/// <summary>
+/// ARCOS 專案與腳本檔案序列化處理器
+/// 支援 .prog (及相容 .pro，Windows INI 格式多程式區段專案檔) 與 .init (單一程式區二進制檔) 讀寫，
+/// 並完整支援多行 Parameter (相容 Motion@ExtraCMD 內嵌多行腳本與 Python 程式碼)。
+/// </summary>
+public static class ScriptSerializer
+{
+    /// <summary>
+    /// 將多個 ProgramTable 儲存為 .prog 專案檔 (INI 格式)
+    /// </summary>
+    public static void SaveProgFile(string filePath, IEnumerable<ProgramTable> programs)
+    {
+        var sb = new StringBuilder();
+        foreach (var prog in programs)
+        {
+            sb.AppendLine($"[Program {prog.ProgramNumber}]");
+            sb.AppendLine($"Name=\"{prog.Name}\"");
+            sb.AppendLine("Type=\"0\"");
+            sb.AppendLine($"Size=\"{prog.Count}\"");
+
+            for (int i = 1; i <= prog.Count; i++)
+            {
+                var item = prog[i];
+                // 轉義換行符號以相容單行 INI
+                string escapedParam = item.RawParameter
+                    .Replace("\r\n", "\\n")
+                    .Replace("\n", "\\n");
+
+                sb.AppendLine($"{i}=\"{item.Command}\t{escapedParam}\"");
+            }
+            sb.AppendLine();
+        }
+
+        File.WriteAllText(filePath, sb.ToString(), Encoding.UTF8);
+    }
+
+    /// <summary>
+    /// 將多個 ProgramTable 儲存為 .pro 專案檔 (向後相容別名)
+    /// </summary>
+    public static void SaveProFile(string filePath, IEnumerable<ProgramTable> programs) => SaveProgFile(filePath, programs);
+
+    /// <summary>
+    /// 從 .prog (或 .pro) 專案檔載入所有程式區段
+    /// </summary>
+    public static List<ProgramTable> LoadProgFile(string filePath)
+    {
+        var result = new List<ProgramTable>();
+        if (!File.Exists(filePath)) return result;
+
+        var lines = File.ReadAllLines(filePath, Encoding.UTF8);
+        ProgramTable? currentProg = null;
+
+        foreach (var rawLine in lines)
+        {
+            string line = rawLine.Trim();
+            if (string.IsNullOrEmpty(line) || line.StartsWith(';')) continue;
+
+            if (line.StartsWith("[Program ", StringComparison.OrdinalIgnoreCase) && line.EndsWith(']'))
+            {
+                string numStr = line.Substring(9, line.Length - 10).Trim();
+                if (int.TryParse(numStr, out int pNo))
+                {
+                    currentProg = new ProgramTable { ProgramNumber = pNo };
+                    result.Add(currentProg);
+                }
+                continue;
+            }
+
+            if (currentProg == null) continue;
+
+            int eqIdx = line.IndexOf('=');
+            if (eqIdx <= 0) continue;
+
+            string key = line.Substring(0, eqIdx).Trim();
+            string val = line.Substring(eqIdx + 1).Trim().Trim('\"');
+
+            if (key.Equals("Name", StringComparison.OrdinalIgnoreCase))
+            {
+                currentProg.Name = val;
+            }
+            else if (int.TryParse(key, out int lineNum))
+            {
+                string unescaped = val.Replace("\\n", "\n");
+                currentProg.Add(CommandItem.Parse(unescaped, lineNum));
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// 從 .pro 專案檔載入所有程式區段 (向後相容別名)
+    /// </summary>
+    public static List<ProgramTable> LoadProFile(string filePath) => LoadProgFile(filePath);
+
+    /// <summary>
+    /// 從純字串內容解析 .prog 專案檔至 Dictionary(int, ProgramTable)
+    /// </summary>
+    public static Dictionary<int, ProgramTable> DeserializeProg(string content)
+    {
+        var result = new Dictionary<int, ProgramTable>();
+        if (string.IsNullOrWhiteSpace(content)) return result;
+
+        var lines = content.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);
+        ProgramTable? currentProg = null;
+
+        foreach (var rawLine in lines)
+        {
+            string line = rawLine.Trim();
+            if (string.IsNullOrEmpty(line) || line.StartsWith(';')) continue;
+
+            if (line.StartsWith("[Program ", StringComparison.OrdinalIgnoreCase) && line.EndsWith(']'))
+            {
+                string numStr = line.Substring(9, line.Length - 10).Trim();
+                if (int.TryParse(numStr, out int pNo))
+                {
+                    currentProg = new ProgramTable { ProgramNumber = pNo };
+                    result[pNo] = currentProg;
+                }
+                continue;
+            }
+
+            if (currentProg == null) continue;
+
+            int eqIdx = line.IndexOf('=');
+            if (eqIdx <= 0) continue;
+
+            string key = line.Substring(0, eqIdx).Trim();
+            string val = line.Substring(eqIdx + 1).Trim().Trim('\"');
+
+            if (key.Equals("Name", StringComparison.OrdinalIgnoreCase))
+            {
+                currentProg.Name = val;
+            }
+            else if (int.TryParse(key, out int lineNum))
+            {
+                string unescaped = val.Replace("\\n", "\n");
+                currentProg.Add(CommandItem.Parse(unescaped, lineNum));
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// 從純字串內容解析 .pro 專案檔至 Dictionary(int, ProgramTable) (向後相容別名)
+    /// </summary>
+    public static Dictionary<int, ProgramTable> DeserializePro(string content) => DeserializeProg(content);
+
+    /// <summary>
+    /// 將 ProgramTable 轉為乾淨的無 INI 行號、支援多行展開的純指令腳本 (供 Meld 比對或編輯器預覽)
+    /// </summary>
+    public static string ProgramToCleanScript(ProgramTable prog)
+    {
+        var sb = new StringBuilder();
+        for (int i = 1; i <= prog.Count; i++)
+        {
+            var item = prog[i];
+            if (item.IsEmpty) continue;
+            if (item.IsComment)
+            {
+                sb.AppendLine($"// {item.RawParameter}");
+            }
+            else if (string.IsNullOrEmpty(item.RawParameter))
+            {
+                sb.AppendLine($"{item.Command}::;");
+            }
+            else
+            {
+                sb.AppendLine($"{item.Command}::{item.RawParameter};");
+            }
+        }
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// 將 Meld 編輯後的純指令腳本重新解析並重新編號為 ProgramTable
+    /// </summary>
+    public static ProgramTable CleanScriptToProgram(string scriptText, int progNumber, string progName = "")
+    {
+        var prog = new ProgramTable { ProgramNumber = progNumber, Name = progName };
+        var lines = scriptText.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);
+        int lineNum = 1;
+        foreach (var raw in lines)
+        {
+            if (string.IsNullOrWhiteSpace(raw)) continue;
+            string trimmed = raw.Trim();
+            if (trimmed.StartsWith("//") || trimmed.StartsWith(';'))
+            {
+                prog.Add(new CommandItem(lineNum, raw, "", "System", "#Comment", trimmed.TrimStart('/', ';', ' '), true, false));
+                lineNum++;
+            }
+            else
+            {
+                var item = CommandItem.Parse(raw, lineNum);
+                if (!item.IsEmpty)
+                {
+                    prog.Add(item);
+                    lineNum++;
+                }
+            }
+        }
+        return prog;
+    }
+
+    /// <summary>
+    /// 將單一程式區段寫入二進制 .init 檔案
+    /// 二進制規格：Row Count (int32) + Col Count (int32 = 2) + 各字串長度與內容
+    /// </summary>
+    public static void SaveInitFile(string filePath, ProgramTable program)
+    {
+        using var fs = new FileStream(filePath, FileMode.Create, FileAccess.Write);
+        using var bw = new BinaryWriter(fs, Encoding.UTF8);
+
+        // 1. Header: Row Count + Col Count (2)
+        bw.Write(program.Count);
+        bw.Write(2);
+
+        // 2. Data Blocks
+        for (int i = 1; i <= program.Count; i++)
+        {
+            var item = program[i];
+            byte[] cmdBytes = Encoding.UTF8.GetBytes(item.Command);
+            bw.Write(cmdBytes.Length);
+            bw.Write(cmdBytes);
+
+            byte[] paramBytes = Encoding.UTF8.GetBytes(item.RawParameter);
+            bw.Write(paramBytes.Length);
+            bw.Write(paramBytes);
+        }
+    }
+
+    /// <summary>
+    /// 從二進制 .init 檔案載入單一程式區
+    /// </summary>
+    public static ProgramTable LoadInitFile(string filePath, int progNo = 0, string name = "")
+    {
+        var prog = new ProgramTable { ProgramNumber = progNo, Name = name };
+        if (!File.Exists(filePath)) return prog;
+
+        using var fs = new FileStream(filePath, FileMode.Open, FileAccess.Read);
+        using var br = new BinaryReader(fs, Encoding.UTF8);
+
+        if (fs.Length < 8) return prog;
+
+        int rowCount = br.ReadInt32();
+        int colCount = br.ReadInt32();
+
+        for (int i = 0; i < rowCount; i++)
+        {
+            int cmdLen = br.ReadInt32();
+            string cmd = cmdLen > 0 ? Encoding.UTF8.GetString(br.ReadBytes(cmdLen)) : "";
+
+            int paramLen = br.ReadInt32();
+            string param = paramLen > 0 ? Encoding.UTF8.GetString(br.ReadBytes(paramLen)) : "";
+
+            prog.Add(new CommandItem(i + 1, $"{cmd}\t{param}", cmd, "", "", param, false, false));
+        }
+
+        return prog;
+    }
+}

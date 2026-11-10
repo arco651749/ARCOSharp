@@ -28,7 +28,7 @@ public partial class GitDiffWindow : Window
     public bool ReloadRequested { get; private set; } = false;
     public int? ReloadProgNo { get; private set; } = null;
 
-    public GitDiffWindow() : this(System.IO.Path.Combine(ArcosPaths.RootDirectory, "Master.pro"), null, 0)
+    public GitDiffWindow() : this(System.IO.Path.Combine(ArcosPaths.RootDirectory, "Master.prog"), null, 0)
     {
     }
 

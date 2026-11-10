@@ -107,17 +107,34 @@ public static class ArcosPaths
     }
 
     /// <summary>
-    /// 解析 .pro 檔案路徑（預設在根目錄）
+    /// 解析 .prog (或向後相容 .pro) 專案檔案路徑（預設在根目錄）
     /// </summary>
-    public static string ResolveProPath(string proFileName)
+    public static string ResolveProgPath(string progFileName)
     {
-        if (Path.IsPathRooted(proFileName)) return proFileName;
-        string rootCandidate = Path.Combine(RootDirectory, proFileName);
+        if (Path.IsPathRooted(progFileName)) return progFileName;
+
+        // 1. 若已有副檔名，優先直接尋找
+        string rootCandidate = Path.Combine(RootDirectory, progFileName);
         if (File.Exists(rootCandidate)) return rootCandidate;
-        string scriptCandidate = Path.Combine(ScriptDirectory, proFileName);
+        string scriptCandidate = Path.Combine(ScriptDirectory, progFileName);
         if (File.Exists(scriptCandidate)) return scriptCandidate;
-        return rootCandidate;
+
+        // 2. 若未帶副檔名，依序嘗試 .prog 與 .pro
+        string withProg = Path.HasExtension(progFileName) ? progFileName : $"{progFileName}.prog";
+        rootCandidate = Path.Combine(RootDirectory, withProg);
+        if (File.Exists(rootCandidate)) return rootCandidate;
+
+        string withPro = Path.HasExtension(progFileName) ? progFileName : $"{progFileName}.pro";
+        rootCandidate = Path.Combine(RootDirectory, withPro);
+        if (File.Exists(rootCandidate)) return rootCandidate;
+
+        return Path.Combine(RootDirectory, withProg);
     }
+
+    /// <summary>
+    /// 解析 .pro 檔案路徑（向後相容別名）
+    /// </summary>
+    public static string ResolveProPath(string proFileName) => ResolveProgPath(proFileName);
 
     /// <summary>
     /// 解析 .init 檔案路徑（預設在 SCRIPT 目錄）

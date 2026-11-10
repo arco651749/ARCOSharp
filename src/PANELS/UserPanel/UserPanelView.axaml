@@ -15,7 +15,7 @@
                             <TextBlock Text="CSVI 3.0 USER HMI" FontSize="10" FontWeight="Bold" Foreground="White"/>
                         </Border>
                     </StackPanel>
-                    <TextBlock Text="Model: ARCOS-PROD-2026 | Recipe: Master_V1.pro | SubPanel Canvas Mounted" FontSize="11" Foreground="#64748B"/>
+                    <TextBlock Text="Model: ARCOS-PROD-2026 | Recipe: Master_V1.prog | SubPanel Canvas Mounted" FontSize="11" Foreground="#64748B"/>
                 </StackPanel>
 
                 <!-- 運行狀態標籤 -->

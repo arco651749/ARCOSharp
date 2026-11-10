@@ -1050,12 +1050,16 @@ public static class ArcosMcpServer
                 if (cmb != null) cmb.SelectedItem = sec;
             }
         }
-        else if (action.Equals("load_pro", StringComparison.OrdinalIgnoreCase))
+        else if (action.Equals("load_prog", StringComparison.OrdinalIgnoreCase) || action.Equals("load_pro", StringComparison.OrdinalIgnoreCase))
         {
-            string proPath = args?["path"]?.GetValue<string>() ?? Path.Combine(ArcosPaths.RootDirectory, "Master.pro");
+            string proPath = args?["path"]?.GetValue<string>() ?? Path.Combine(ArcosPaths.RootDirectory, "Master.prog");
+            if (!File.Exists(proPath) && File.Exists(Path.Combine(ArcosPaths.RootDirectory, "Master.pro")))
+            {
+                proPath = Path.Combine(ArcosPaths.RootDirectory, "Master.pro");
+            }
             if (File.Exists(proPath) && mainWin.VM != null)
             {
-                var progs = ScriptSerializer.LoadProFile(proPath);
+                var progs = ScriptSerializer.LoadProgFile(proPath);
                 foreach (var p in progs)
                 {
                     mainWin.VM.LoadProgram(p.ProgramNumber, p);

@@ -32,12 +32,12 @@
 
     <Grid RowDefinitions="Auto,*,Auto,Auto,Auto" Margin="3">
         <!-- ========================================================= -->
-        <!-- 1. 頂部路徑與槽位選擇器 + .PRO / .INIT 讀存工具列 -->
+        <!-- 1. 頂部路徑與槽位選擇器 + .PROG / .INIT 讀存工具列 -->
         <!-- ========================================================= -->
         <Border Grid.Row="0" Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="0,0,0,1" Padding="4,3" Margin="0,0,0,2">
             <Grid RowDefinitions="Auto,Auto">
                 <Grid Grid.Row="0" ColumnDefinitions="*,Auto,150" Margin="0,0,0,3">
-                    <TextBox x:Name="TxtScriptTitle" Grid.Column="0" Watermark="(Test Program - click READ .PRO)" 
+                    <TextBox x:Name="TxtScriptTitle" Grid.Column="0" Watermark="(Test Program - click READ .PROG)" 
                              FontSize="11" Height="25" VerticalContentAlignment="Center"
                              Background="#FFFFFF" Foreground="#0F172A" BorderBrush="#CBD5E1" Margin="0,0,4,0"/>
                     
@@ -63,12 +63,12 @@
                     <Button x:Name="BtnReadPro" Grid.Column="0" Height="22" Margin="1,0" Padding="2,0"
                             Background="#0284C7" Foreground="White" FontWeight="Bold" FontSize="9"
                             HorizontalContentAlignment="Center" VerticalContentAlignment="Center" CornerRadius="3">
-                        <TextBlock Text="READ .PRO" VerticalAlignment="Center"/>
+                        <TextBlock Text="READ .PROG" VerticalAlignment="Center"/>
                     </Button>
                     <Button x:Name="BtnSavePro" Grid.Column="1" Height="22" Margin="1,0" Padding="2,0"
                             Background="#0369A1" Foreground="White" FontWeight="Bold" FontSize="9"
                             HorizontalContentAlignment="Center" VerticalContentAlignment="Center" CornerRadius="3">
-                        <TextBlock Text="SAVE .PRO" VerticalAlignment="Center"/>
+                        <TextBlock Text="SAVE .PROG" VerticalAlignment="Center"/>
                     </Button>
                     <Button x:Name="BtnReadInit" Grid.Column="2" Height="22" Margin="1,0" Padding="2,0"
                             Background="#059669" Foreground="White" FontWeight="Bold" FontSize="9"

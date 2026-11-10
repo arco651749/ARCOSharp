@@ -304,7 +304,7 @@ public partial class TestThreadWindow : Window
         var txtTitle = this.FindControl<TextBox>("TxtScriptTitle");
         if (txtTitle != null)
         {
-            txtTitle.Text = _currentProgNo == 0 ? "Master_V1.pro" : $"Program_{_currentProgNo}.pro";
+            txtTitle.Text = _currentProgNo == 0 ? "Master_V1.prog" : $"Program_{_currentProgNo}.prog";
         }
 
         UpdateUndoRedoButtonState();
@@ -543,18 +543,18 @@ public partial class TestThreadWindow : Window
             var rootFolder = await topLevel.StorageProvider.TryGetFolderFromPathAsync(new Uri(System.IO.Path.GetFullPath(ArcosPaths.RootDirectory)));
             var files = await topLevel.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
             {
-                Title = "讀取 .pro 專案檔 (Read .pro Project)",
+                Title = "讀取 .prog 專案檔 (Read .prog Project)",
                 SuggestedStartLocation = rootFolder,
                 AllowMultiple = false,
                 FileTypeFilter = new[]
                 {
-                    new FilePickerFileType("ARCOSharp Project (*.pro)") { Patterns = new[] { "*.pro" } }
+                    new FilePickerFileType("ARCOSharp Project (*.prog, *.pro)") { Patterns = new[] { "*.prog", "*.pro" } }
                 }
             });
             if (files.Count > 0)
             {
                 string path = files[0].Path.LocalPath;
-                var progs = ScriptSerializer.LoadProFile(path);
+                var progs = ScriptSerializer.LoadProgFile(path);
                 _undoStacks.Clear();
                 _redoStacks.Clear();
                 foreach (var p in progs)
@@ -584,14 +584,18 @@ public partial class TestThreadWindow : Window
                 var rootFolder = await topLevel.StorageProvider.TryGetFolderFromPathAsync(new Uri(System.IO.Path.GetFullPath(ArcosPaths.RootDirectory)));
                 var file = await topLevel.StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
                 {
-                    Title = "儲存 .pro 專案檔 (Save .pro Project)",
+                    Title = "儲存 .prog 專案檔 (Save .prog Project)",
                     SuggestedStartLocation = rootFolder,
-                    DefaultExtension = "pro"
+                    DefaultExtension = "prog",
+                    FileTypeChoices = new[]
+                    {
+                        new FilePickerFileType("ARCOSharp Project (*.prog)") { Patterns = new[] { "*.prog" } }
+                    }
                 });
                 if (file != null)
                 {
                     string path = file.Path.LocalPath;
-                    ScriptSerializer.SaveProFile(path, CollectProgramsToSave());
+                    ScriptSerializer.SaveProgFile(path, CollectProgramsToSave());
                 }
             };
         }
@@ -657,7 +661,8 @@ public partial class TestThreadWindow : Window
         {
             btnGit.Click += async (_, _) =>
             {
-                string target = Path.Combine(ArcosPaths.RootDirectory, "Master.pro");
+                string target = Path.Combine(ArcosPaths.RootDirectory, "Master.prog");
+                if (!File.Exists(target)) target = Path.Combine(ArcosPaths.RootDirectory, "Master.pro");
                 SyncUIToProgram();
                 var dlg = new GitDiffWindow(target, _vm, _currentProgNo);
                 await dlg.ShowDialog(this);

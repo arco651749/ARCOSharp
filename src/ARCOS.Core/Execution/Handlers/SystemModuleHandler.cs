@@ -223,7 +223,7 @@ public class SystemModuleHandler : IModuleHandler
             {
                 proPath = isInit 
                     ? ARCOS.Core.Common.ArcosPaths.ResolveInitPath(inputPath)
-                    : ARCOS.Core.Common.ArcosPaths.ResolveProPath(inputPath);
+                    : ARCOS.Core.Common.ArcosPaths.ResolveProgPath(inputPath);
             }
 
             if (File.Exists(proPath))
@@ -246,7 +246,7 @@ public class SystemModuleHandler : IModuleHandler
                         }
                     }
                     ctx.VM?.NotifyProgramLoaded(proPath, true);
-                    ctx.Log($"Loaded .pro project '{proPath}' with {progs.Count} programs");
+                    ctx.Log($"Loaded .prog project '{proPath}' with {progs.Count} programs");
                 }
             }
             else

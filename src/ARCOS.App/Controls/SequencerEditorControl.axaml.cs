@@ -1297,8 +1297,8 @@ public partial class SequencerEditorControl : UserControl
         var file = await topLevel.StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
         {
             Title = "Save Program Table",
-            DefaultExtension = "pro",
-            SuggestedFileName = "Master_V1.pro"
+            DefaultExtension = "prog",
+            SuggestedFileName = "Master_V1.prog"
         });
 
         if (file != null)
@@ -1329,19 +1329,19 @@ public partial class SequencerEditorControl : UserControl
         var rootFolder = await topLevel.StorageProvider.TryGetFolderFromPathAsync(new Uri(System.IO.Path.GetFullPath(ARCOS.Core.Common.ArcosPaths.RootDirectory)));
         var files = await topLevel.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
         {
-            Title = "讀取 .pro 專案檔 (Read .pro Project)",
+            Title = "讀取 .prog 專案檔 (Read .prog Project)",
             SuggestedStartLocation = rootFolder,
             AllowMultiple = false,
             FileTypeFilter = new[]
             {
-                new FilePickerFileType("ARCOSharp Project (*.pro)") { Patterns = new[] { "*.pro" } }
+                new FilePickerFileType("ARCOSharp Project (*.prog, *.pro)") { Patterns = new[] { "*.prog", "*.pro" } }
             }
         });
 
         if (files.Count > 0)
         {
             string path = files[0].Path.LocalPath;
-            var progs = ScriptSerializer.LoadProFile(path);
+            var progs = ScriptSerializer.LoadProgFile(path);
             _undoStacks.Clear();
             _redoStacks.Clear();
             foreach (var p in progs)
@@ -1353,7 +1353,7 @@ public partial class SequencerEditorControl : UserControl
             if (txtTitle != null) txtTitle.Text = System.IO.Path.GetFileName(path);
             RefreshProgSelector(0);
             LoadCurrentProgramToUI();
-            _vm.MainThreads[0].Log($"[PRO] Loaded project '{path}' with {progs.Count} programs");
+            _vm.MainThreads[0].Log($"[PROG] Loaded project '{path}' with {progs.Count} programs");
         }
     }
 
@@ -1365,19 +1365,19 @@ public partial class SequencerEditorControl : UserControl
         SyncUIToProgram();
         var rootFolder = await topLevel.StorageProvider.TryGetFolderFromPathAsync(new Uri(System.IO.Path.GetFullPath(ARCOS.Core.Common.ArcosPaths.RootDirectory)));
         var txtTitle = this.FindControl<TextBox>("TxtScriptTitle");
-        string suggested = (!string.IsNullOrWhiteSpace(txtTitle?.Text) && txtTitle.Text.EndsWith(".pro", StringComparison.OrdinalIgnoreCase))
+        string suggested = (!string.IsNullOrWhiteSpace(txtTitle?.Text) && (txtTitle.Text.EndsWith(".prog", StringComparison.OrdinalIgnoreCase) || txtTitle.Text.EndsWith(".pro", StringComparison.OrdinalIgnoreCase)))
             ? txtTitle.Text
-            : "Master.pro";
+            : "Master.prog";
 
         var file = await topLevel.StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
         {
-            Title = "儲存 .pro 專案檔 (Save .pro Project)",
+            Title = "儲存 .prog 專案檔 (Save .prog Project)",
             SuggestedStartLocation = rootFolder,
-            DefaultExtension = "pro",
+            DefaultExtension = "prog",
             SuggestedFileName = suggested,
             FileTypeChoices = new[]
             {
-                new FilePickerFileType("ARCOSharp Project (*.pro)") { Patterns = new[] { "*.pro" } }
+                new FilePickerFileType("ARCOSharp Project (*.prog)") { Patterns = new[] { "*.prog" } }
             }
         });
 
@@ -1390,9 +1390,9 @@ public partial class SequencerEditorControl : UserControl
                 var prog = _vm.GetProgram(i);
                 if (prog.Count > 0) progsToSave.Add(prog);
             }
-            ScriptSerializer.SaveProFile(path, progsToSave);
+            ScriptSerializer.SaveProgFile(path, progsToSave);
             if (txtTitle != null) txtTitle.Text = System.IO.Path.GetFileName(path);
-            _vm.MainThreads[0].Log($"[PRO] Saved {progsToSave.Count} programs to '{path}'");
+            _vm.MainThreads[0].Log($"[PROG] Saved {progsToSave.Count} programs to '{path}'");
         }
     }
 

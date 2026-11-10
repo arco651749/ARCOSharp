@@ -36,13 +36,13 @@
 
     <Grid RowDefinitions="Auto,*,Auto,Auto" Margin="2">
         <!-- ========================================================= -->
-        <!-- 1. 頂部路徑與 Thread / Program 選擇器 + .PRO / .INIT 專案讀存工具列 -->
+        <!-- 1. 頂部路徑與 Thread / Program 選擇器 + .PROG / .INIT 專案讀存工具列 -->
         <!-- ========================================================= -->
         <Border Grid.Row="0" Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="0,0,0,1" Padding="4,4" Margin="0,0,0,2">
             <Grid RowDefinitions="Auto,Auto">
                 <Grid Grid.Row="0" ColumnDefinitions="*,Auto,150" Margin="0,0,0,3">
                     <!-- 腳本名稱 / 路徑顯示條 -->
-                    <TextBox x:Name="TxtScriptTitle" Grid.Column="0" Watermark="(No Program Loaded - click READ .PRO)" 
+                    <TextBox x:Name="TxtScriptTitle" Grid.Column="0" Watermark="(No Program Loaded - click READ .PROG)" 
                              FontSize="11" Height="26" VerticalContentAlignment="Center"
                              Background="#FFFFFF" Foreground="#0F172A" BorderBrush="#CBD5E1" Margin="0,0,4,0"/>
                     
@@ -66,24 +66,24 @@
                               BorderBrush="#0284C7" BorderThickness="1"/>
                 </Grid>
 
-                <!-- PRO & INIT 專用操作工具列 -->
+                <!-- PROG & INIT 專用操作工具列 -->
                 <Grid Grid.Row="1" ColumnDefinitions="*,*,*,*" Margin="0,1,0,1">
                     <Button x:Name="BtnReadPro" Grid.Column="0" Height="23" Margin="1,0" Padding="4,0"
                             Background="#0284C7" Foreground="White" FontWeight="Bold" FontSize="9.5"
                             HorizontalContentAlignment="Center" VerticalContentAlignment="Center" CornerRadius="3"
-                            ToolTip.Tip="從 ARCOSharp 根目錄讀取 .pro 專案檔">
+                            ToolTip.Tip="從 ARCOSharp 根目錄讀取 .prog 專案檔">
                         <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Center" VerticalAlignment="Center">
                             <Path Data="{StaticResource IconFolderOpen}" Fill="White" Width="10" Height="10" Stretch="Uniform"/>
-                            <TextBlock Text="READ .PRO" FontSize="9.5" FontWeight="Bold" Foreground="White" VerticalAlignment="Center"/>
+                            <TextBlock Text="READ .PROG" FontSize="9.5" FontWeight="Bold" Foreground="White" VerticalAlignment="Center"/>
                         </StackPanel>
                     </Button>
                     <Button x:Name="BtnSavePro" Grid.Column="1" Height="23" Margin="1,0" Padding="4,0"
                             Background="#0369A1" Foreground="White" FontWeight="Bold" FontSize="9.5"
                             HorizontalContentAlignment="Center" VerticalContentAlignment="Center" CornerRadius="3"
-                            ToolTip.Tip="儲存至 ARCOSharp 根目錄 .pro 專案檔">
+                            ToolTip.Tip="儲存至 ARCOSharp 根目錄 .prog 專案檔">
                         <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Center" VerticalAlignment="Center">
                             <Path Data="{StaticResource IconFloppySave}" Fill="White" Width="10" Height="10" Stretch="Uniform"/>
-                            <TextBlock Text="SAVE .PRO" FontSize="9.5" FontWeight="Bold" Foreground="White" VerticalAlignment="Center"/>
+                            <TextBlock Text="SAVE .PROG" FontSize="9.5" FontWeight="Bold" Foreground="White" VerticalAlignment="Center"/>
                         </StackPanel>
                     </Button>
                     <Button x:Name="BtnReadInit" Grid.Column="2" Height="23" Margin="1,0" Padding="4,0"
@@ -269,7 +269,7 @@
                         <!-- 第二列：小文件鍵 + 大顆 Run + 即時動態狀態看板 (IDLE) -->
                         <Grid Grid.Row="1" ColumnDefinitions="Auto,Auto,*" Margin="0,1">
                             <Button x:Name="BtnDocOp" Grid.Column="0" Width="28" Height="46" Margin="0,0,6,0"
-                                    Background="#FFFFFF" BorderBrush="#CBD5E1" BorderThickness="1" CornerRadius="3" ToolTip.Tip="讀取專案檔 (.pro) [Operator 快速載入]">
+                                    Background="#FFFFFF" BorderBrush="#CBD5E1" BorderThickness="1" CornerRadius="3" ToolTip.Tip="讀取專案檔 (.prog) [Operator 快速載入]">
                                 <Path Data="{StaticResource IconFolderOpen}" Fill="#0284C7" Width="13" Height="13" Stretch="Uniform"/>
                             </Button>
 
@@ -319,7 +319,7 @@
                                 <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="2" HorizontalAlignment="Right">
                                     <Button x:Name="BtnGit" Height="22" Padding="6,0" 
                                             Foreground="#0284C7" Background="#F0F9FF" BorderBrush="#BAE6FD" BorderThickness="1" CornerRadius="2"
-                                            ToolTip.Tip="比對目前 .pro 與 Git 上一個版本之差異 (Git Diff &amp; Reload)">
+                                            ToolTip.Tip="比對目前 .prog 與 Git 上一個版本之差異 (Git Diff &amp; Reload)">
                                         <StackPanel Orientation="Horizontal" Spacing="4">
                                             <Path Data="{StaticResource IconFileCode}" Fill="#0284C7" Width="10" Height="10" Stretch="Uniform"/>
                                             <TextBlock Text="Git Diff" FontSize="10" FontWeight="Bold" Foreground="#0284C7" VerticalAlignment="Center"/>
