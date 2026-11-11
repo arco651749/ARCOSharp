@@ -61,7 +61,28 @@ public partial class ComSelectWindow : Window
 
     private void InitializeDefaultCommands()
     {
-        var csviModules = new[] { "System", "Thread", "Variable", "IO", "Motion", "Capture", "DAQ", "Python" };
+        var csviModules = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "System", "Thread", "Variable", "Point&Path", "IO", "Motion", "Capture", "DAQ", "Python"
+        };
+        try
+        {
+            foreach (var modRoot in ModuleRegistry.GetCandidateModulesRoots())
+            {
+                if (!Directory.Exists(modRoot)) continue;
+                foreach (var dir in Directory.GetDirectories(modRoot))
+                {
+                    string dName = Path.GetFileName(dir);
+                    if (!dName.Equals("DRIVER", StringComparison.OrdinalIgnoreCase) &&
+                        Directory.GetFiles(dir, "*.csvi").Length > 0)
+                    {
+                        csviModules.Add(dName);
+                    }
+                }
+            }
+        }
+        catch { }
+
         foreach (var mod in csviModules)
         {
             var csviCmds = ModuleRegistry.GetCsviCommandsForModule(mod);

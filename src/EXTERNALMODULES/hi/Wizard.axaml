@@ -1,0 +1,21 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Width="600" Height="400">
+    <Grid RowDefinitions="Auto,*,Auto" Margin="16" Background="#F8FAFC">
+        <Border Grid.Row="0" Background="#1E293B" CornerRadius="6" Padding="14,10" Margin="0,0,0,12">
+            <TextBlock Text="Call@hi.csvi — 參數導引" Foreground="#F8FAFC" FontSize="15" FontWeight="Bold"/>
+        </Border>
+        <Border Grid.Row="1" Background="White" BorderBrush="#CBD5E1" BorderThickness="1" CornerRadius="6" Padding="16">
+            <StackPanel Spacing="12">
+                <TextBlock Text="訊息參數：" FontWeight="SemiBold" Foreground="#334155"/>
+                <TextBox Name="TxtCallInput" Text="hi"/>
+                <TextBlock Text="組合預覽：" FontWeight="SemiBold" Foreground="#334155" Margin="0,8,0,0"/>
+                <TextBox Name="TxtParamOut" IsReadOnly="True" Background="#F1F5F9" Text="hi"/>
+            </StackPanel>
+        </Border>
+        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="10" Margin="0,12,0,0">
+            <Button Name="BtnCancel" Content="取消" Width="88"/>
+            <Button Name="BtnOk" Content="確定" Width="100" Background="#2563EB" Foreground="White"/>
+        </StackPanel>
+    </Grid>
+</UserControl>

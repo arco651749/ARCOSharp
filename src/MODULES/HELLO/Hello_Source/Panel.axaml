@@ -1,0 +1,21 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Width="680" Height="440">
+    <Grid RowDefinitions="Auto,*" Margin="12" Background="#F8FAFC">
+        <Border Grid.Row="0" Background="#0F172A" CornerRadius="6" Padding="14,10" Margin="0,0,0,10">
+            <Grid ColumnDefinitions="*,Auto">
+                <StackPanel>
+                    <TextBlock Text="Hello Master Module FrontPanel" Foreground="#F8FAFC" FontWeight="Bold" FontSize="14"/>
+                    <TextBlock Text="Hello 模組狀態監控與手動測試儀表板" Foreground="#94A3B8" FontSize="11"/>
+                </StackPanel>
+                <TextBlock Name="TxtHelloStatus" Grid.Column="1" Text="Ready" Foreground="#38BDF8" VerticalAlignment="Center" FontSize="12"/>
+            </Grid>
+        </Border>
+        <Border Grid.Row="1" Background="White" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="6" Padding="16">
+            <StackPanel Spacing="12">
+                <TextBlock Text="Hello 模組手動控制區" FontWeight="SemiBold" Foreground="#1E293B"/>
+                <Button Name="BtnTestHello" Content="手動觸發測試 (記錄到 SYSTEMLOG)" Background="#0284C7" Foreground="White" Padding="14,8"/>
+            </StackPanel>
+        </Border>
+    </Grid>
+</UserControl>

@@ -1,0 +1,9 @@
+{
+  "FormatVersion": "3.0",
+  "ComponentType": 0,
+  "PackagingMode": 0,
+  "Module": "Hello",
+  "CommandKey": "Hello@Init",
+  "Author": "ARCOS",
+  "RevisionSummary": "Standard CSVI 3.0 Init package for Hello module"
+}

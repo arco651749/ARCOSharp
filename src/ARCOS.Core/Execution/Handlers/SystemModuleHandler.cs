@@ -363,7 +363,12 @@ public class SystemModuleHandler : IModuleHandler
             if (initCsvi != null)
             {
                 ctx.Log($"[IncludeModule] Found Init.csvi at '{initCsvi}'. Executing initialization...");
-                if (handler != null && handler.GetSupportedCommands().Contains("Init", StringComparer.OrdinalIgnoreCase))
+                var initCsviHandler = ctx.Registry?.LoadCommandCsviHandler(initCsvi);
+                if (initCsviHandler != null)
+                {
+                    initCsviHandler.Execute("Init", "", ctx);
+                }
+                else if (handler != null && handler.GetSupportedCommands().Contains("Init", StringComparer.OrdinalIgnoreCase))
                 {
                     handler.Execute("Init", "", ctx);
                 }

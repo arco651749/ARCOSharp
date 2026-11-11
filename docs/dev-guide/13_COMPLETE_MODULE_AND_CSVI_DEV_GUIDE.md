@@ -393,6 +393,7 @@ string? pose = loaded.GetHValue("Pose");   // "Right"
 | `void Record(string recordName, string message)` | 向指定通道寫入一筆帶 `HH:mm:ss.fff` 時間戳的紀錄。<br>• 若 `message` 為 `"CLEAR"`（不分大小寫），清空該通道。<br>• 若 `message` 為 `"Start"`（不分大小寫），重置該通道的 CycleTime 起算時間戳。 |
 | `double GetRecordElapsedSeconds(string recordName)` | 計算該通道自上次記錄 `"Start"` 以來經過的秒數（對應 `System@LogRecordCycleTime`）。 |
 | `RecordChannel GetOrCreateChannel(string recordName, int capacity = 2000)` | 取得或建立指定的環狀緩衝通道。 |
+| `RecordChannel? GetChannel(string recordName)` | 取得指定的環狀緩衝通道（若尚未建立則回傳 `null`）。讀取通道內紀錄時，可使用 `channel.Entries.Take(channel.Index)`（未滿一圈時）或檢查 `e != null && !string.IsNullOrEmpty(e.Message)` 取得 `RecordEntry(Timestamp, Message)`。 |
 | `IReadOnlyList<string> GetAllRecordNames()` | 取得所有已建立的通道名稱清單（`"SYSTEMLOG"` 恆為第一項）。 |
 | `void FlushSystemLogToFile()` | 將 `"SYSTEMLOG"` 緩衝區內尚未寫入磁碟的日誌批次沖刷至當次 Session Log 檔 (`LOGS/yyyyMMdd-HHmmss.log`)。 |
 
@@ -436,19 +437,24 @@ string? pose = loaded.GetHValue("Pose");   // "Right"
 
 ```text
 MODULES/<MODULE_NAME>/
-├── <MODULE_NAME>.Module.dll     # (選配) 模組基底組件，實作 IModuleHandler
-├── <MODULE_NAME>.csvi           # 【必備】Module Info 專用的模組主前面板 CSVI (與模組同名)
+├── <MODULE_NAME>.csvi           # 【必備】Modules Info 專用的模組主前面板 CSVI (與模組同名，實作 IParameterGuidance, IModuleHandler)
 ├── <Action1>.csvi               # 【必備】單一指令 CSVI #1 (包含該指令的 Logic + Wizard + Panel)
 ├── <Action2>.csvi               # 【必備】單一指令 CSVI #2
-├── ...                          # 該模組支援的其餘所有指令 .csvi
+├── Init.csvi                    # (選配) 當執行 System@IncludeModule::<MODULE_NAME> 時自動觸發的模組初始化 CSVI
+├── <MODULE_NAME>.Module.dll     # (選配) 傳統 C# 模組基底組件；在 CSVI 3.0 純 CSVI 模組中可完全省略，系統會直接載入 <MODULE_NAME>.csvi 與 <Action>.csvi
 └── DRIVER/                      # (若該模組有硬體驅動) 驅動隔離子目錄
     ├── Mock<Module>.csvi        # 驅動 CSVI 組件 (ComponentType = Driver)
     └── <VendorDriver>/          # 實體廠商驅動目錄 (含第三方 Unmanaged DLL)
 ```
 
 > [!CAUTION]
-> **嚴禁再建立舊式 `USERPARAMETEREDITOR` 子目錄！**  
-> 在 CSVI 3.0 架構中，每個指令的參數導引視窗 (`Wizard.axaml`)、前面板 (`Panel.axaml`) 與執行邏輯 (`Logic.cs`) 都已經直接封裝在 `MODULES/<Module>/<Action>.csvi` 中。
+> 1. **嚴禁再建立舊式 `USERPARAMETEREDITOR` 子目錄！** 在 CSVI 3.0 架構中，每個指令的參數導引視窗 (`Wizard.axaml`)、前面板 (`Panel.axaml`) 與執行邏輯 (`Logic.cs`) 都已經直接封裝在 `MODULES/<Module>/<Action>.csvi` 中。
+> 2. **純 CSVI 模組免 `.Module.dll` 與 `.csproj` 衝突防範**：
+>    - `ModuleRegistry` 與 `CommandExecutor` 原生支援直接載入 `MODULES/<Module>/<Module>.csvi` 並自動將 `<Module>@<Action>` 派發給 `MODULES/<Module>/<Action>.csvi`，因此建立新模組時**不需要**再額外建立 `.csproj` 編譯 `<Module>.Module.dll`。
+>    - 若您仍在 `src/MODULES/<Module>/` 目錄下放置 `.csproj` 並同時保留 `*_Source/Logic.cs` 原始碼子目錄，**必須在 `.csproj` 中加入 `<ItemGroup><Compile Remove="*_Source\**" /></ItemGroup>`**，否則 MSBuild 預設會遞迴編譯子目錄中的 CSVI `Logic.cs` 而引發 `Avalonia` 命名空間缺失錯誤！
+> 3. **`ExecutionContext` 命名空間撞車防範**：
+>    - .NET BCL 的 `System.Threading` 內建有同名 `ExecutionContext`。在撰寫任何 CSVI `Logic.cs` 或測試檔時，請務必在檔案頂部加上別名宣告：
+>      `using ExecutionContext = ARCOS.Core.Execution.ExecutionContext;`
 
 ### 3.2 強制單一指令 `.csvi` 派發紀律（無靜默保底）
 
@@ -894,7 +900,7 @@ public class LaserSetPowerGuidance : IParameterGuidance, IModuleHandler
     // 3. 供 CSVI Studio 沙盒快速測試呼叫的轉發介面
     public bool Execute(BasicEngines engines, string parameter)
     {
-        var dummyProg = new ProgramTable(0, "GuidanceExec");
+        var dummyProg = new ProgramTable();
         var ctx = new ExecutionContext(0, "GuidanceExec", dummyProg, engines, new DriverManager(engines));
         return Execute("SetPower", parameter, ctx).Status != CommandStatus.Error;
     }
@@ -1124,6 +1130,10 @@ ARCOSharp 的 `.csvi` 編譯完全**不依賴外部 `dotnet build` 或 MSBuild**
     "d:\AntiGravity\ARCOSharp\src\MODULES\LASER\SetPower.csvi" `
     "MySecretPass123"
 ```
+
+> [!WARNING]
+> 1. **請務必帶上 `--compile` 參數**：若在自動化腳本或終端機中不帶參數直接執行 `dotnet CSVI_Studio.dll`，它會以獨立 GUI 視窗與背景 MCP TCP 伺服器模式常駐啟動，導致命令列工作階段等待視窗關閉而掛起。
+> 2. **完整 .NET SDK 路徑**：在本開發環境中，系統預設 `%PATH%` 下的 `dotnet` 可能僅為 Runtime Host；若需執行 `dotnet build` 或 `dotnet test`，請統一使用完整路徑 `& "D:\Users\arco0\.dotnet\dotnet.exe"`。
 
 - **編譯成功時**（Exit Code = `0`），終端機輸出：
   ```text

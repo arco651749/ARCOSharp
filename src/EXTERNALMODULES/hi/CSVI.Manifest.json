@@ -1,0 +1,9 @@
+{
+  "FormatVersion": "3.0",
+  "Module": "Call",
+  "CommandKey": "hi.csvi",
+  "ComponentType": 0,
+  "PackagingMode": 0,
+  "LastAuthor": "ARCOS",
+  "RevisionSummary": "External Call CSVI for hi command"
+}

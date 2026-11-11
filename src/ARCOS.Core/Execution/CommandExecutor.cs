@@ -287,18 +287,6 @@ public sealed class CommandExecutor
             }
             handler = csviHandler;
         }
-        else
-        {
-            string? csviPath = ModuleRegistry.ResolveCommandCsviPath(item.Module, item.Action);
-            if (csviPath != null)
-            {
-                var csviHandler = Registry.LoadCommandCsviHandler(csviPath);
-                if (csviHandler != null)
-                {
-                    handler = csviHandler;
-                }
-            }
-        }
 
         try
         {

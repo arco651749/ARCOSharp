@@ -273,9 +273,19 @@ public sealed class ModuleRegistry
                 };
 
                 string? foundDllPath = candidateDllPaths.FirstOrDefault(File.Exists);
-                if (foundDllPath == null) continue;
-
-                TryLoadHandlersFromAssembly(foundDllPath);
+                if (foundDllPath != null)
+                {
+                    TryLoadHandlersFromAssembly(foundDllPath);
+                }
+                else if (!HasModule(dirName) &&
+                         !dirName.Equals("CAPTURE", StringComparison.OrdinalIgnoreCase) &&
+                         !dirName.Equals("MOTION", StringComparison.OrdinalIgnoreCase) &&
+                         !dirName.Equals("DAQ", StringComparison.OrdinalIgnoreCase) &&
+                         !dirName.Equals("PYTHON", StringComparison.OrdinalIgnoreCase) &&
+                         Directory.GetFiles(moduleDir, "*.csvi").Length > 0)
+                {
+                    RegisterHandler(new CsviDynamicModuleHandler(dirName));
+                }
             }
 
             // 2. 亦支援直接散落在 EXTRACMD/ 根目錄下的獨立指令 DLL
@@ -399,6 +409,17 @@ public sealed class ModuleRegistry
             }
         }
 
+        // 若為自訂純 CSVI 模組 (無獨立 .Module.dll，但 MODULES/<mod>/ 下有 .csvi 指令檔)，自動註冊動態 CSVI 轉發處理器
+        if (!HasModule(mod))
+        {
+            var cmds = GetCsviCommandsForModule(mod, modulesRootPath);
+            if (cmds != null && cmds.Count > 0)
+            {
+                RegisterHandler(new CsviDynamicModuleHandler(mod));
+                return true;
+            }
+        }
+
         return HasModule(mod);
     }
 
@@ -472,5 +493,35 @@ public sealed class ModuleRegistry
         }
 
         return result;
+    }
+
+    private sealed class CsviDynamicModuleHandler : IModuleHandler
+    {
+        public string ModuleName { get; }
+
+        public CsviDynamicModuleHandler(string moduleName)
+        {
+            ModuleName = moduleName;
+        }
+
+        public IReadOnlyList<string> GetSupportedCommands() =>
+            GetCsviCommandsForModule(ModuleName) ?? Array.Empty<string>();
+
+        public CommandResult Execute(string action, string filteredParam, ExecutionContext ctx)
+        {
+            string? csviPath = ResolveCommandCsviPath(ModuleName, action);
+            if (csviPath == null)
+            {
+                return CommandResult.Fail($"Command CSVI file not found: MODULES/{ModuleName}/{action}.csvi");
+            }
+
+            var handler = (ctx.Registry ?? new ModuleRegistry()).LoadCommandCsviHandler(csviPath);
+            if (handler == null)
+            {
+                return CommandResult.Fail($"Failed to load command CSVI handler from: {csviPath}");
+            }
+
+            return handler.Execute(action, filteredParam, ctx);
+        }
     }
 }

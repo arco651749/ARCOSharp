@@ -1,0 +1,12 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Width="600" Height="360">
+    <Grid RowDefinitions="Auto,*" Margin="12" Background="#F8FAFC">
+        <Border Grid.Row="0" Background="#0F172A" CornerRadius="6" Padding="14,10" Margin="0,0,0,10">
+            <TextBlock Text="hi.csvi FrontPanel" Foreground="#F8FAFC" FontWeight="Bold" FontSize="14"/>
+        </Border>
+        <Border Grid.Row="1" Background="White" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="6" Padding="16">
+            <TextBlock Text="Call@hi.csvi Ready." Foreground="#1E293B"/>
+        </Border>
+    </Grid>
+</UserControl>
