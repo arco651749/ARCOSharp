@@ -24,6 +24,8 @@ using OpenCvSharp;
 using Window = Avalonia.Controls.Window;
 using ARCOS.Core.Common;
 using ARCOS.Core.Drivers;
+using ARCOS.Core.Execution;
+using ARCOS.Core.Model;
 using ARCOS.Core.Serialization;
 using ARCOS.App.Services;
 
@@ -355,6 +357,37 @@ public static class ArcosMcpServer
                         },
                         required = new[] { "outputPath" }
                     }
+                },
+                new
+                {
+                    name = "arcos_basic_engine",
+                    description = "Basic Read/Write/List access for all 8 ARCOS Basic Engines: SYSTEM (Record/Timer/Counter), THREAD (status, load program, start/stop), VARIABLE (list/get/set), POINT (list/get/set coordinates), IO (list/get/set), MOTION (list/get/set position), IMAQ (list/get/load/save image), WAVEFORM (list/get/set DAQ waveform).",
+                    inputSchema = new
+                    {
+                        type = "object",
+                        properties = new
+                        {
+                            engine = new { type = "string", description = "SYSTEM | THREAD | VARIABLE | POINT | IO | MOTION | IMAQ | WAVEFORM" },
+                            action = new { type = "string", description = "list | get | set | start | stop | set_program | load | save" },
+                            subType = new { type = "string", description = "For SYSTEM: Record | Timer | Counter" },
+                            name = new { type = "string", description = "Target item name (e.g. Variable key, Point name, IO port/alias, Timer/Counter/Record name, Motion device, IMAQ name, Waveform name)" },
+                            section = new { type = "string", description = "Section name for VARIABLE (default: Global)" },
+                            value = new { type = "string", description = "Value to write (Variable string, Record message, IO true/false, Timer seconds, Counter count, or file path)" },
+                            threadId = new { type = "integer", description = "Thread index (0..12) for THREAD" },
+                            progNo = new { type = "integer", description = "Program slot (0..99) for THREAD" },
+                            commands = new { type = "array", description = "Array of { command, parameter } or 'Cmd::Param' strings for THREAD set_program" },
+                            x = new { type = "number", description = "X coordinate for POINT / MOTION" },
+                            y = new { type = "number", description = "Y coordinate for POINT / MOTION" },
+                            z = new { type = "number", description = "Z coordinate for POINT / MOTION" },
+                            u = new { type = "number", description = "U coordinate for POINT / MOTION" },
+                            v = new { type = "number", description = "V coordinate for POINT / MOTION" },
+                            w = new { type = "number", description = "W coordinate for POINT / MOTION" },
+                            channel = new { type = "integer", description = "Channel index for WAVEFORM (default: 0)" },
+                            dt = new { type = "number", description = "Sampling interval dt for WAVEFORM set" },
+                            samples = new { type = "array", description = "Numeric array Y[] for WAVEFORM set" }
+                        },
+                        required = new[] { "engine" }
+                    }
                 }
             }
         };
@@ -381,6 +414,7 @@ public static class ArcosMcpServer
             "arcos_run_command" => await Dispatcher.UIThread.InvokeAsync(() => ToolRunCommand(_mainWindow, args)),
             "arcos_test_thread" => await Dispatcher.UIThread.InvokeAsync(() => ToolTestThread(_mainWindow, args)),
             "arcos_clipboard_action" => await Dispatcher.UIThread.InvokeAsync(() => ToolClipboardAction(_mainWindow, args)),
+            "arcos_basic_engine" => await Dispatcher.UIThread.InvokeAsync(() => ToolBasicEngine(_mainWindow, args)),
             "arcos_capture_ui" or "arcos_screenshot" => await Dispatcher.UIThread.InvokeAsync(() => ToolCaptureUi(_mainWindow, args)),
             _ => throw new InvalidOperationException($"Unknown tool: {toolName}")
         };
@@ -1179,6 +1213,487 @@ public static class ArcosMcpServer
             userRows,
             testRows
         });
+    }
+
+    /// <summary>
+    /// 8 大 Basic Engine 基礎資料讀寫與清單查詢 (SYSTEM, THREAD, VARIABLE, POINT, IO, MOTION, IMAQ, WAVEFORM)
+    /// </summary>
+    private static string ToolBasicEngine(MainWindow mainWin, JsonNode? args)
+    {
+        string engine = args?["engine"]?.GetValue<string>()?.Trim().ToUpperInvariant() ?? "SYSTEM";
+        string action = args?["action"]?.GetValue<string>()?.Trim().ToLowerInvariant() ?? "list";
+        string name = args?["name"]?.GetValue<string>()?.Trim() ?? "";
+        string section = args?["section"]?.GetValue<string>()?.Trim() ?? "Global";
+        string value = args?["value"]?.GetValue<string>() ?? "";
+
+        var engines = mainWin.Engines;
+        var vm = mainWin.VM;
+        var drivers = mainWin.DriverManager;
+
+        switch (engine)
+        {
+            // 1. SYSTEM (Record / Timer / Counter)
+            case "SYSTEM":
+            {
+                string subType = args?["subType"]?.GetValue<string>()?.Trim().ToUpperInvariant() ?? "RECORD";
+                if (subType == "TIMER")
+                {
+                    if (action == "set" || action == "write" || action == "reset")
+                    {
+                        double sec = double.TryParse(value, out double d) ? d : (args?["seconds"]?.GetValue<double>() ?? 1.0);
+                        engines.Timer.TimerReset(name, sec);
+                    }
+                    bool isTimeout = !string.IsNullOrEmpty(name) && engines.Timer.TimerCheck(name);
+                    long elapsedMs = !string.IsNullOrEmpty(name) ? engines.Timer.GetElapsedMs(name) : 0;
+                    return JsonSerializer.Serialize(new
+                    {
+                        success = true,
+                        engine = "SYSTEM",
+                        subType = "TIMER",
+                        name,
+                        elapsedMs,
+                        isTimeout,
+                        isSystemPaused = engines.Timer.IsSystemPaused
+                    });
+                }
+                if (subType == "COUNTER")
+                {
+                    if (action == "set" || action == "write" || action == "reset")
+                    {
+                        int countVal = int.TryParse(value, out int c) ? c : (args?["count"]?.GetValue<int>() ?? 0);
+                        engines.Timer.CounterReset(name, countVal);
+                    }
+                    int currentCount = !string.IsNullOrEmpty(name) ? engines.Timer.GetCount(name) : 0;
+                    bool isOver = !string.IsNullOrEmpty(name) && engines.Io.GetPort($"{name}#Over?");
+                    return JsonSerializer.Serialize(new
+                    {
+                        success = true,
+                        engine = "SYSTEM",
+                        subType = "COUNTER",
+                        name,
+                        count = currentCount,
+                        isOver
+                    });
+                }
+
+                // 預設：RECORD
+                string recName = string.IsNullOrEmpty(name) ? "SYSTEMLOG" : name;
+                if (action == "set" || action == "write")
+                {
+                    engines.Record.Record(recName, value);
+                }
+                var ch = engines.Record.GetChannel(recName);
+                var entries = ch?.Entries
+                    .Where(e => !string.IsNullOrEmpty(e.Message))
+                    .TakeLast(50)
+                    .Select(e => new { e.Timestamp, e.Message })
+                    .ToList();
+                return JsonSerializer.Serialize(new
+                {
+                    success = true,
+                    engine = "SYSTEM",
+                    subType = "RECORD",
+                    channels = engines.Record.GetAllRecordNames(),
+                    channel = recName,
+                    elapsedSeconds = Math.Round(engines.Record.GetRecordElapsedSeconds(recName), 4),
+                    entries
+                });
+            }
+
+            // 2. THREAD (狀態查詢、下程式 set_program、啟動 start、停止 stop)
+            case "THREAD":
+            {
+                int threadId = args?["threadId"]?.GetValue<int>() ?? 0;
+                int progNo = args?["progNo"]?.GetValue<int>() ?? threadId;
+                progNo = Math.Clamp(progNo, 0, 99);
+                threadId = Math.Clamp(threadId, 0, 12);
+
+                if (action == "set_program" || action == "set" || action == "write")
+                {
+                    var prog = new ProgramTable { ProgramNumber = progNo, Name = string.IsNullOrEmpty(name) ? $"Program_{progNo}" : name };
+                    if (args?["commands"] is JsonArray cmdArr)
+                    {
+                        int lineIdx = 0;
+                        foreach (var item in cmdArr)
+                        {
+                            if (item is JsonObject obj)
+                            {
+                                string c = obj["command"]?.GetValue<string>() ?? "";
+                                string p = obj["parameter"]?.GetValue<string>() ?? "";
+                                prog.Add(CommandItem.Parse($"{c}\t{p}", lineIdx++));
+                            }
+                            else if (item != null)
+                            {
+                                string raw = item.GetValue<string>();
+                                string normalized = raw.Contains("::") ? raw.Replace("::", "\t").TrimEnd(';') : raw;
+                                prog.Add(CommandItem.Parse(normalized, lineIdx++));
+                            }
+                        }
+                    }
+                    vm.LoadProgram(progNo, prog);
+                    if (mainWin.Sequencer?.CurrentProgramNumber == progNo)
+                    {
+                        mainWin.Sequencer.LoadCurrentProgramToUI();
+                    }
+                }
+                else if (action == "start" || action == "run")
+                {
+                    vm.StartThread(threadId, progNo, 1);
+                }
+                else if (action == "stop" || action == "suspend")
+                {
+                    vm.SuspendThread(threadId);
+                }
+                else if (action == "stop_all")
+                {
+                    vm.StopAll();
+                }
+
+                var targetProg = vm.GetProgram(progNo);
+                return JsonSerializer.Serialize(new
+                {
+                    success = true,
+                    engine = "THREAD",
+                    threads = vm.MainThreads.Select(t => new
+                    {
+                        t.ThreadId,
+                        t.ThreadName,
+                        t.IsRunning,
+                        t.ProgIndex,
+                        programNumber = t.Program?.ProgramNumber ?? 0
+                    }).ToList(),
+                    subThreads = vm.SubThreads.Values.Select(s => new
+                    {
+                        s.ThreadName,
+                        s.IsRunning,
+                        s.ProgIndex,
+                        programNumber = s.Program?.ProgramNumber ?? 0
+                    }).ToList(),
+                    program = new
+                    {
+                        progNo = targetProg.ProgramNumber,
+                        name = targetProg.Name,
+                        count = targetProg.Count,
+                        items = targetProg.Items.Select((it, idx) => new { line = idx, command = it.Command, parameter = it.RawParameter }).ToList()
+                    }
+                });
+            }
+
+            // 3. VARIABLE (list / get / set)
+            case "VARIABLE":
+            {
+                if (action == "set" || action == "write")
+                {
+                    engines.Variable.Set(name, value, section);
+                }
+                if (!string.IsNullOrEmpty(name) && (action == "get" || action == "read" || action == "set" || action == "write"))
+                {
+                    string val = "";
+                    string rawVal = "";
+                    try
+                    {
+                        val = engines.Variable.Get(name, section);
+                        rawVal = engines.Variable.GetRaw(name, section);
+                    }
+                    catch { }
+                    return JsonSerializer.Serialize(new
+                    {
+                        success = true,
+                        engine = "VARIABLE",
+                        section,
+                        name,
+                        value = val,
+                        rawValue = rawVal
+                    });
+                }
+
+                var sections = engines.Variable.GetAllSections();
+                var snapshot = engines.Variable.GetSectionSnapshot(section);
+                return JsonSerializer.Serialize(new
+                {
+                    success = true,
+                    engine = "VARIABLE",
+                    sections,
+                    section,
+                    variables = snapshot
+                });
+            }
+
+            // 4. POINT / POINT&PATH (list / get / set)
+            case "POINT":
+            case "POINT&PATH":
+            {
+                if (action == "set" || action == "write")
+                {
+                    double x = args?["x"]?.GetValue<double>() ?? 0;
+                    double y = args?["y"]?.GetValue<double>() ?? 0;
+                    double z = args?["z"]?.GetValue<double>() ?? 0;
+                    double u = args?["u"]?.GetValue<double>() ?? 0;
+                    double v = args?["v"]?.GetValue<double>() ?? 0;
+                    double w = args?["w"]?.GetValue<double>() ?? 0;
+                    engines.Point.SetPoint(name, new MachinePoint(x, y, z, u, v, w));
+                }
+
+                if (!string.IsNullOrEmpty(name) && action != "list")
+                {
+                    var pt = engines.Point.GetPoint(name);
+                    var arr = engines.Point.GetPointArray(name);
+                    return JsonSerializer.Serialize(new
+                    {
+                        success = true,
+                        engine = "POINT",
+                        name,
+                        current = new { pt.X, pt.Y, pt.Z, pt.U, pt.V, pt.W },
+                        count = arr.Count,
+                        points = arr.Select(p => new { p.X, p.Y, p.Z, p.U, p.V, p.W }).ToList()
+                    });
+                }
+
+                var allPts = engines.Point.GetAllPoints().ToDictionary(
+                    k => k.Key,
+                    k => new { k.Value.X, k.Value.Y, k.Value.Z, k.Value.U, k.Value.V, k.Value.W });
+                return JsonSerializer.Serialize(new
+                {
+                    success = true,
+                    engine = "POINT",
+                    names = engines.Point.GetAllNames(),
+                    points = allPts
+                });
+            }
+
+            // 5. IO (list / get / set / set_alias)
+            case "IO":
+            {
+                if (action == "set" || action == "write")
+                {
+                    bool bVal = args?["boolValue"]?.GetValue<bool>()
+                        ?? (value.Equals("true", StringComparison.OrdinalIgnoreCase) || value == "1" || value.Equals("on", StringComparison.OrdinalIgnoreCase));
+                    engines.Io.SetPort(name, bVal);
+                }
+                else if (action == "set_alias")
+                {
+                    engines.Io.SetPortName(name, value);
+                }
+
+                if (!string.IsNullOrEmpty(name) && action != "list")
+                {
+                    return JsonSerializer.Serialize(new
+                    {
+                        success = true,
+                        engine = "IO",
+                        name,
+                        value = engines.Io.GetPort(name)
+                    });
+                }
+
+                var snap = engines.Io.GetAllSnapshot()
+                    .Where(s => s.Value || !string.IsNullOrEmpty(s.Alias) || s.IsVirtual)
+                    .Select(s => new { s.Port, s.Alias, s.Value, s.IsVirtual })
+                    .ToList();
+                return JsonSerializer.Serialize(new
+                {
+                    success = true,
+                    engine = "IO",
+                    drivers = engines.Io.GetRegisteredDrivers(),
+                    activeOrNamedPorts = snap
+                });
+            }
+
+            // 6. MOTION (list / get / set position)
+            case "MOTION":
+            {
+                var motionDevices = drivers.GetDevicesByCategory("Motion");
+                if (!string.IsNullOrEmpty(name) && (action == "set" || action == "write" || action == "go" || action == "home" || action == "stop"))
+                {
+                    var dev = drivers.GetDevice("Motion", name);
+                    if (action == "home")
+                    {
+                        dev?.PostTicket(new DriverTicket("Home", "", "MCP"));
+                    }
+                    else if (action == "stop")
+                    {
+                        dev?.PostTicket(new DriverTicket("Stop", "", "MCP"));
+                    }
+                    else
+                    {
+                        double x = args?["x"]?.GetValue<double>() ?? 0;
+                        double y = args?["y"]?.GetValue<double>() ?? 0;
+                        double z = args?["z"]?.GetValue<double>() ?? 0;
+                        double u = args?["u"]?.GetValue<double>() ?? 0;
+                        double v = args?["v"]?.GetValue<double>() ?? 0;
+                        double w = args?["w"]?.GetValue<double>() ?? 0;
+                        engines.Point.SetPoint($"{name}_CurPos", new MachinePoint(x, y, z, u, v, w));
+                        dev?.PostTicket(new DriverTicket("Go", $"X={x},Y={y},Z={z},U={u},V={v},W={w}", "MCP"));
+                    }
+                }
+
+                var motionStates = motionDevices.Select(d =>
+                {
+                    MachinePoint cur = new();
+                    try { cur = engines.Point.GetPoint($"{d.DeviceName}_CurPos"); } catch { }
+                    return new
+                    {
+                        deviceName = d.DeviceName,
+                        driverType = d.DriverType,
+                        busy = engines.Io.GetPort($"{d.DeviceName}#Busy?"),
+                        done = engines.Io.GetPort($"{d.DeviceName}#Done?"),
+                        homed = engines.Io.GetPort($"{d.DeviceName}#Homed?"),
+                        alarm = engines.Io.GetPort($"{d.DeviceName}#Alarm?"),
+                        position = new { cur.X, cur.Y, cur.Z, cur.U, cur.V, cur.W }
+                    };
+                }).ToList();
+
+                return JsonSerializer.Serialize(new
+                {
+                    success = true,
+                    engine = "MOTION",
+                    devices = motionStates
+                });
+            }
+
+            // 7. IMAQ / CAPTURE (list / get / load / save / set_roi)
+            case "IMAQ":
+            case "CAPTURE":
+            {
+                if (!string.IsNullOrEmpty(name))
+                {
+                    if (action == "load" && !string.IsNullOrEmpty(value))
+                    {
+                        engines.Image.LoadImage(name, value);
+                    }
+                    else if (action == "save" && !string.IsNullOrEmpty(value))
+                    {
+                        engines.Image.SaveImage(name, value, includeOverlays: true);
+                    }
+                    else if (action == "set" || action == "set_roi")
+                    {
+                        engines.Image.SetRoi(name, value);
+                    }
+
+                    if (action != "list")
+                    {
+                        var frames = engines.Image.GetFrameArray(name);
+                        var curFrame = frames.Count > 0 ? engines.Image.GetFrame(name) : null;
+                        return JsonSerializer.Serialize(new
+                        {
+                            success = true,
+                            engine = "IMAQ",
+                            name,
+                            frameCount = frames.Count,
+                            width = curFrame?.Image.Width ?? 0,
+                            height = curFrame?.Image.Height ?? 0,
+                            roi = engines.Image.GetRoi(name),
+                            ok = engines.Io.GetPort($"{name}#OK?")
+                        });
+                    }
+                }
+
+                var allImaq = engines.Image.GetAllNames().Select(n =>
+                {
+                    var arr = engines.Image.GetFrameArray(n);
+                    var f = arr.Count > 0 ? engines.Image.GetFrame(n) : null;
+                    return new
+                    {
+                        name = n,
+                        frameCount = arr.Count,
+                        width = f?.Image.Width ?? 0,
+                        height = f?.Image.Height ?? 0,
+                        roi = engines.Image.GetRoi(n)
+                    };
+                }).ToList();
+
+                return JsonSerializer.Serialize(new
+                {
+                    success = true,
+                    engine = "IMAQ",
+                    images = allImaq
+                });
+            }
+
+            // 8. WAVEFORM / DAQ (list / get / set)
+            case "WAVEFORM":
+            case "DAQ":
+            {
+                int chIdx = args?["channel"]?.GetValue<int>() ?? 0;
+                if (!string.IsNullOrEmpty(name))
+                {
+                    if (action == "set" || action == "write")
+                    {
+                        double dt = args?["dt"]?.GetValue<double>() ?? 0.001;
+                        var yList = new List<double>();
+                        if (args?["samples"] is JsonArray sArr)
+                        {
+                            foreach (var s in sArr)
+                            {
+                                if (s != null && double.TryParse(s.ToString(), out double dv))
+                                    yList.Add(dv);
+                            }
+                        }
+                        else if (!string.IsNullOrEmpty(value))
+                        {
+                            foreach (var part in value.Split(',', ';'))
+                            {
+                                if (double.TryParse(part.Trim(), out double dv))
+                                    yList.Add(dv);
+                            }
+                        }
+                        engines.Daq.SetWaveform(name, DateTime.Now, dt, yList.ToArray(), chIdx);
+                    }
+
+                    if (action != "list")
+                    {
+                        try
+                        {
+                            var wf = engines.Daq.GetWaveform(name);
+                            var chData = wf.GetOrCreateChannel(chIdx);
+                            return JsonSerializer.Serialize(new
+                            {
+                                success = true,
+                                engine = "WAVEFORM",
+                                name,
+                                channel = chIdx,
+                                t0 = chData.T0.ToString("yyyy-MM-dd HH:mm:ss.fff"),
+                                dt = chData.Dt,
+                                count = chData.Y.Length,
+                                instantValue = engines.Daq.GetInstantValue(name, chIdx),
+                                samples = chData.Y
+                            });
+                        }
+                        catch
+                        {
+                            return JsonSerializer.Serialize(new { success = false, engine = "WAVEFORM", error = $"Waveform '{name}' not found." });
+                        }
+                    }
+                }
+
+                var wfNames = engines.Daq.GetAllNames();
+                var summaries = wfNames.Select(n =>
+                {
+                    var wf = engines.Daq.GetWaveform(n);
+                    return new
+                    {
+                        name = n,
+                        channels = wf.Channels.Select(c => new
+                        {
+                            channel = c.Key,
+                            dt = c.Value.Dt,
+                            sampleCount = c.Value.Y.Length,
+                            instantValue = c.Value.Y.Length > 0 ? c.Value.Y[^1] : 0.0
+                        }).ToList()
+                    };
+                }).ToList();
+
+                return JsonSerializer.Serialize(new
+                {
+                    success = true,
+                    engine = "WAVEFORM",
+                    waveforms = summaries
+                });
+            }
+
+            default:
+                throw new ArgumentException($"Unsupported engine '{engine}'. Expected: SYSTEM | THREAD | VARIABLE | POINT | IO | MOTION | IMAQ | WAVEFORM");
+        }
     }
 
     private static string ToolCaptureUi(MainWindow mainWin, JsonNode? args)

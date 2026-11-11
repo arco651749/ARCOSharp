@@ -1027,7 +1027,7 @@ public partial class SequencerEditorControl : UserControl, ISequencerEditorHost
         }
     }
 
-    private void LoadCurrentProgramToUI()
+    public void LoadCurrentProgramToUI()
     {
         _rows.Clear();
         _currentRenderedPC = -1;
