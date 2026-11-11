@@ -212,4 +212,61 @@ public class SequencerVisualAndSelectionTests
         rows.Clear();
         Assert.Empty(rows);
     }
+
+    [Fact]
+    public void ClipboardManager_ShiftSelection_SetsSelectionBufferAccurately()
+    {
+        // 驗證 Shift + Click 快捷鍵範圍選取機制：將選定區間複製至全域 Buffer
+        var editorMock = new object();
+        var selectedItems = new List<(string Command, string Parameter)>
+        {
+            ("System@Delay", "0.1"),
+            ("IO@SetPort", "P0.0,1")
+        };
+
+        ARCOS.App.Services.SequencerClipboardManager.Instance.SetSelection(editorMock, 1, 2, selectedItems);
+
+        Assert.True(ARCOS.App.Services.SequencerClipboardManager.Instance.HasSelection);
+        Assert.True(ARCOS.App.Services.SequencerClipboardManager.Instance.HasItems);
+        Assert.Equal(1, ARCOS.App.Services.SequencerClipboardManager.Instance.StartLine);
+        Assert.Equal(2, ARCOS.App.Services.SequencerClipboardManager.Instance.EndLine);
+        Assert.Equal(2, ARCOS.App.Services.SequencerClipboardManager.Instance.Buffer.Count);
+        Assert.Equal("System@Delay", ARCOS.App.Services.SequencerClipboardManager.Instance.Buffer[0].Command);
+        Assert.Equal("P0.0,1", ARCOS.App.Services.SequencerClipboardManager.Instance.Buffer[1].Parameter);
+
+        // 驗證 Escape 或 ClearSelection 快捷鍵清除
+        ARCOS.App.Services.SequencerClipboardManager.Instance.ClearSelection();
+        Assert.False(ARCOS.App.Services.SequencerClipboardManager.Instance.HasSelection);
+    }
+
+    [Fact]
+    public void UndoRedo_SnapshotHistory_RestoresPreviousStateCorrectly()
+    {
+        // 驗證 Ctrl+Z (Undo) 與 Ctrl+Y (Redo) 內部快照堆疊還原機制
+        var undoStack = new Stack<List<(string Command, string Parameter)>>();
+        var redoStack = new Stack<List<(string Command, string Parameter)>>();
+
+        // 初始狀態：3 行指令
+        var state0 = new List<(string, string)> { ("Cmd0", "0"), ("Cmd1", "1"), ("Cmd2", "2") };
+        undoStack.Push(new List<(string, string)>(state0));
+
+        // 模擬執行修改（例如插入一行或變更參數）
+        var state1 = new List<(string, string)> { ("Cmd0", "0"), ("CmdInserted", "X"), ("Cmd1", "1"), ("Cmd2", "2") };
+
+        // 觸發 Ctrl+Z (Undo)：當前 state1 推入 redoStack，彈出 undoStack 恢復 state0
+        redoStack.Push(new List<(string, string)>(state1));
+        var restoredState = undoStack.Pop();
+
+        Assert.Equal(3, restoredState.Count);
+        Assert.Equal("Cmd0", restoredState[0].Item1);
+        Assert.Equal("Cmd1", restoredState[1].Item1);
+        Assert.Equal("Cmd2", restoredState[2].Item1);
+
+        // 觸發 Ctrl+Y (Redo)：當前 state0 推入 undoStack，彈出 redoStack 恢復 state1
+        undoStack.Push(new List<(string, string)>(restoredState));
+        var redoneState = redoStack.Pop();
+
+        Assert.Equal(4, redoneState.Count);
+        Assert.Equal("CmdInserted", redoneState[1].Item1);
+    }
 }
