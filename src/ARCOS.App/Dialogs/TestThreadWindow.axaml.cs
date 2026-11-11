@@ -383,13 +383,13 @@ public partial class TestThreadWindow : Window, ISequencerEditorHost
             };
         }
 
-        // Auto / Run
+        // Auto / Run (背景高速執行迴圈)
         var btnRun = this.FindControl<Button>("BtnRun");
         var btnAuto = this.FindControl<Button>("BtnAuto");
         Action toggleAuto = () =>
         {
             ClearRangeSelection();
-            if (_autoTimer.IsEnabled)
+            if (_testContext.IsRunning)
             {
                 _autoTimer.Stop();
                 _testContext.IsRunning = false;
@@ -397,8 +397,39 @@ public partial class TestThreadWindow : Window, ISequencerEditorHost
             else
             {
                 SyncUIToProgram();
+                int totalRows = _rows.Count;
+                if (_testContext.ProgIndex < 1 || _testContext.ProgIndex > totalRows)
+                {
+                    _testContext.ProgIndex = 1;
+                }
                 _testContext.IsRunning = true;
-                _autoTimer.Start();
+                Task.Run(async () =>
+                {
+                    int burst = 0;
+                    while (_testContext.IsRunning && _testContext.ProgIndex <= totalRows && _vm != null)
+                    {
+                        int prevPC = _testContext.ProgIndex;
+                        _vm.Executor.ExecuteStep(_testContext);
+                        UpdatePCPointer(_testContext.ProgIndex);
+
+                        if (_testContext.ProgIndex == prevPC)
+                        {
+                            burst = 0;
+                            await Task.Delay(1).ConfigureAwait(false);
+                        }
+                        else if (++burst >= 128)
+                        {
+                            burst = 0;
+                            Thread.Yield();
+                        }
+                    }
+                    _testContext.IsRunning = false;
+                    Dispatcher.UIThread.Post(() =>
+                    {
+                        UpdatePCPointer(_testContext.ProgIndex);
+                        DrainPCPointer();
+                    });
+                });
             }
         };
         if (btnRun != null) btnRun.Click += (_, _) => toggleAuto();

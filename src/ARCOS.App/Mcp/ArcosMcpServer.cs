@@ -1338,7 +1338,14 @@ public static class ArcosMcpServer
                 }
                 else if (action == "start" || action == "run")
                 {
-                    vm.StartThread(threadId, progNo, 1);
+                    if (threadId == 0 && mainWin.Sequencer != null && mainWin.Sequencer.CurrentProgramNumber == progNo)
+                    {
+                        mainWin.Sequencer.TriggerAutoRun();
+                    }
+                    else
+                    {
+                        vm.StartThread(threadId, progNo, 1);
+                    }
                 }
                 else if (action == "stop" || action == "suspend")
                 {
