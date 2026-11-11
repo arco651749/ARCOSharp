@@ -336,6 +336,31 @@ def run_tests():
     assert not any(r.get("isRangeSelected") for r in st_single_after.get("sequencerRows", [])), "單行操作完後應立即清空選取區"
     print("  ✓ 第一次 Shift+Click 單行選取操作並在操作後清空選取區")
 
+    # 10.5 點擊程式空白處：單行選取後 Ctrl+Click 複製插入至程式最尾端
+    rows_curr = st_single_after.get("sequencerRows", [])
+    cnt_before_blank = len(rows_curr)
+    target_cmd = rows_curr[0].get("command")
+    call_mcp("arcos_clipboard_action", {"action": "select", "start": 0, "end": 0})
+    # 點擊空白處 (傳入 -1 代表 targetRow == null 即程式最後面 _rows.Count)
+    call_mcp("arcos_clipboard_action", {"action": "copy_insert", "index": -1})
+    st_blank_copy = call_mcp("arcos_get_state", {})
+    rows_after_blank_copy = st_blank_copy.get("sequencerRows", [])
+    assert len(rows_after_blank_copy) == cnt_before_blank + 1, "空白處 Ctrl+Click 應成功在尾端增加 1 行"
+    assert rows_after_blank_copy[-1].get("command") == target_cmd, "尾端行應為複製之指令"
+    assert not any(r.get("isRangeSelected") for r in rows_after_blank_copy), "空白處操作完後應立即清空選取區"
+    print("  ✓ 點擊程式空白處 Ctrl+Click 成功在尾端複製插入並清空選取區")
+
+    # 10.6 點擊程式空白處：單行選取後 Ctrl+Alt+Click 剪下搬移至程式最尾端
+    move_cmd = rows_after_blank_copy[1].get("command")
+    call_mcp("arcos_clipboard_action", {"action": "select", "start": 1, "end": 1})
+    call_mcp("arcos_clipboard_action", {"action": "move", "index": -1})
+    st_blank_move = call_mcp("arcos_get_state", {})
+    rows_after_blank_move = st_blank_move.get("sequencerRows", [])
+    assert len(rows_after_blank_move) == len(rows_after_blank_copy), "搬移操作行數應保持不變"
+    assert rows_after_blank_move[-1].get("command") == move_cmd, "原本第 1 列之指令應成功被搬移至程式最尾端"
+    assert not any(r.get("isRangeSelected") for r in rows_after_blank_move), "空白處搬移完後應立即清空選取區"
+    print("  ✓ 點擊程式空白處 Ctrl+Alt+Click 成功將指令搬移至尾端並清空選取區")
+
     # -------------------------------------------------------------
     # Phase 11: 清空程式區 (X 按鈕) 與 Undo 復原
     # -------------------------------------------------------------

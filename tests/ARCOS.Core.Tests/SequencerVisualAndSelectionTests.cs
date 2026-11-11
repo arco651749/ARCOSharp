@@ -322,4 +322,87 @@ public class SequencerVisualAndSelectionTests
         Assert.Equal(4, redoneState.Count);
         Assert.Equal("CmdInserted", redoneState[1].Item1);
     }
+
+    [Fact]
+    public void BlankAreaOperations_CtrlClickAndCtrlAltClick_TargetProgramEndAndClearAll()
+    {
+        // 驗證使用者指定規範：
+        // 1. Shift+Click 單行選取後，若在程式空白處按 Ctrl+Click，應將該行複製並插入至程式尾端 (_rows.Count)，操作完清空選取區與快取
+        // 2. Shift+Click 單行選取後，若在程式空白處按 Ctrl+Alt+Click，應將該行剪下並搬移至程式尾端 (_rows.Count)，操作完清空選取區與快取
+        var rows = new List<SequencerRowViewModel>
+        {
+            new SequencerRowViewModel { LineNumber = 0, Command = "Cmd0", Parameter = "P0" },
+            new SequencerRowViewModel { LineNumber = 1, Command = "Cmd1", Parameter = "P1" },
+            new SequencerRowViewModel { LineNumber = 2, Command = "Cmd2", Parameter = "P2" }
+        };
+        var editorMock = new object();
+
+        // 測試 1：單行選取 Line 0，在空白處按 Ctrl+Click 複製插入到最後面
+        int selectedLine = 0;
+        rows[selectedLine].IsRangeSelected = true;
+        var selectedItem = new[] { (rows[selectedLine].Command, rows[selectedLine].Parameter) };
+        ARCOS.App.Services.SequencerClipboardManager.Instance.SetSelection(editorMock, selectedLine, selectedLine, selectedItem);
+
+        // 模擬空白處 Ctrl+Click (targetRow = null -> targetIndex = rows.Count = 3)
+        int targetIndex = rows.Count;
+        var copyItems = ARCOS.App.Services.SequencerClipboardManager.Instance.Buffer;
+        for (int i = 0; i < copyItems.Count; i++)
+        {
+            rows.Insert(targetIndex + i, new SequencerRowViewModel
+            {
+                Command = copyItems[i].Command,
+                Parameter = copyItems[i].Parameter,
+                LineNumber = targetIndex + i
+            });
+        }
+        for (int i = 0; i < rows.Count; i++) rows[i].LineNumber = i;
+
+        // 操作完成後自動清空選取區與剪貼快取
+        foreach (var r in rows) r.IsRangeSelected = false;
+        ARCOS.App.Services.SequencerClipboardManager.Instance.ClearAll();
+
+        Assert.Equal(4, rows.Count);
+        Assert.Equal("Cmd0", rows[3].Command); // 複製的 Cmd0 正確出現在程式尾端
+        Assert.False(ARCOS.App.Services.SequencerClipboardManager.Instance.HasSelection);
+        Assert.False(ARCOS.App.Services.SequencerClipboardManager.Instance.HasItems);
+
+        // 測試 2：單行選取 Line 1，在空白處按 Ctrl+Alt+Click 搬移到最後面
+        selectedLine = 1; // 目前的 rows[1] 是 Cmd1
+        rows[selectedLine].IsRangeSelected = true;
+        var moveItem = new[] { (rows[selectedLine].Command, rows[selectedLine].Parameter) };
+        ARCOS.App.Services.SequencerClipboardManager.Instance.SetSelection(editorMock, selectedLine, selectedLine, moveItem);
+
+        // 模擬空白處 Ctrl+Alt+Click 本地搬移 (targetRow = null -> targetIndex = rows.Count = 4)
+        int minLine = selectedLine;
+        int maxLine = selectedLine;
+        int moveTarget = rows.Count;
+
+        var movingRows = new List<SequencerRowViewModel>();
+        for (int i = minLine; i <= maxLine; i++)
+        {
+            movingRows.Add(new SequencerRowViewModel { Command = rows[i].Command, Parameter = rows[i].Parameter });
+        }
+        for (int i = maxLine; i >= minLine; i--)
+        {
+            rows.RemoveAt(i);
+        }
+        if (moveTarget > maxLine)
+        {
+            moveTarget -= (maxLine - minLine + 1);
+        }
+        for (int i = 0; i < movingRows.Count; i++)
+        {
+            rows.Insert(moveTarget + i, movingRows[i]);
+        }
+        for (int i = 0; i < rows.Count; i++) rows[i].LineNumber = i;
+
+        // 操作完成後清空選取區與快取
+        foreach (var r in rows) r.IsRangeSelected = false;
+        ARCOS.App.Services.SequencerClipboardManager.Instance.ClearAll();
+
+        Assert.Equal(4, rows.Count);
+        Assert.Equal("Cmd1", rows[3].Command); // Cmd1 成功由第 1 列被搬移至最尾端
+        Assert.False(ARCOS.App.Services.SequencerClipboardManager.Instance.HasSelection);
+        Assert.False(ARCOS.App.Services.SequencerClipboardManager.Instance.HasItems);
+    }
 }

@@ -849,32 +849,83 @@ public partial class TestThreadWindow : Window
         var visual = e.Source as Visual;
         if (visual == null) return;
 
-        // 1. 若點擊在資料行上，由行與單元格事件處理，不觸發空白處動作
-        if ((visual as Control)?.DataContext is SequencerRowViewModel) return;
+        // 1. 若點擊在資料行上，交由行或單元格快捷鍵狀態機處理
+        if ((visual as Control)?.DataContext is SequencerRowViewModel rowVm)
+        {
+            if (HandleShortcutPointerAction(rowVm, e))
+            {
+                e.Handled = true;
+            }
+            return;
+        }
 
         // 2. 排除點擊在表頭、滾動條、縮放或按鈕控制項上的情況
         if (IsInIgnoredGridArea(visual)) return;
 
-        // 若有選取範圍或待命中的 Shift 第一下選取，點擊空白處時取消選取
-        if (_anchorStartLine != null || _rows.Any(r => r.IsRangeSelected) || SequencerClipboardManager.Instance.HasSelection)
-        {
-            ClearRangeSelection();
-        }
+        var km = e.KeyModifiers;
+        bool isCtrl = km.HasFlag(KeyModifiers.Control);
+        bool isAlt = km.HasFlag(KeyModifiers.Alt);
+        bool isShift = km.HasFlag(KeyModifiers.Shift);
 
-        // 3. Ctrl + 點擊：原有之複製插入貼上
-        if (e.KeyModifiers == KeyModifiers.Control)
+        // 3. 點擊程式空白處：指操作在程式最後面 (targetIndex = _rows.Count)
+        // 3.1 Ctrl + Alt + 滑鼠左鍵：將選取的單行或範圍搬移至程式尾端
+        if (isCtrl && isAlt && !isShift)
         {
             e.Handled = true;
-            ExecuteCopyInsert(null);
+            if (SequencerClipboardManager.Instance.HasSelection)
+            {
+                ExecuteLocalMove(null);
+            }
             return;
         }
 
-        // 4. 無修飾鍵：在空白處點擊滑鼠左鍵 -> 在尾端新增指令行並跳出指令選擇視窗 (圖標示 3)
-        if (e.KeyModifiers == KeyModifiers.None)
+        // 3.2 Ctrl + 滑鼠左鍵：將剪貼簿內容複製插入到程式尾端；若剪貼簿為空，則在尾端新增並開啟指令選擇視窗
+        if (isCtrl && !isAlt && !isShift)
         {
+            e.Handled = true;
+            if (SequencerClipboardManager.Instance.HasItems)
+            {
+                ExecuteCopyInsert(null);
+            }
+            else
+            {
+                await PromptInsertRowAsync(_rows.Count);
+            }
+            return;
+        }
+
+        // 3.3 Alt + 滑鼠左鍵：刪除選取區
+        if (isAlt && !isCtrl && !isShift)
+        {
+            e.Handled = true;
+            if (SequencerClipboardManager.Instance.HasSelection)
+            {
+                ExecuteLocalDelete(null);
+            }
+            return;
+        }
+
+        // 3.4 無修飾鍵：
+        if (!isCtrl && !isAlt && !isShift)
+        {
+            // 若有選取範圍或待命中的 Shift 第一下選取，點擊空白處時取消選取
+            if (_anchorStartLine != null || _rows.Any(r => r.IsRangeSelected) || SequencerClipboardManager.Instance.HasSelection)
+            {
+                ClearRangeSelection();
+                e.Handled = true;
+                return;
+            }
+
+            // 無選取狀態下單擊空白處：在尾端新增指令行並跳出指令選擇視窗 (圖標示 3)
             e.Handled = true;
             await PromptInsertRowAsync(_rows.Count);
             return;
+        }
+
+        // 其它情況取消選取
+        if (_anchorStartLine != null || _rows.Any(r => r.IsRangeSelected) || SequencerClipboardManager.Instance.HasSelection)
+        {
+            ClearRangeSelection();
         }
     }
 
@@ -904,9 +955,12 @@ public partial class TestThreadWindow : Window
         if (!props.IsLeftButtonPressed) return false;
 
         var km = e.KeyModifiers;
+        bool isCtrl = km.HasFlag(KeyModifiers.Control);
+        bool isAlt = km.HasFlag(KeyModifiers.Alt);
+        bool isShift = km.HasFlag(KeyModifiers.Shift);
 
         // 1. Shift + 滑鼠左鍵 (選取與 Jump 狀態機)
-        if (km == KeyModifiers.Shift)
+        if (isShift && !isCtrl && !isAlt)
         {
             // 若為雙擊 (ClickCount >= 2)，交由 DoubleTapped / Shift+DoubleClick 邏輯處理，不作為範圍選取的第二擊
             if (e.ClickCount >= 2) return false;
@@ -950,7 +1004,7 @@ public partial class TestThreadWindow : Window
         }
 
         // 2. Ctrl + Alt + 滑鼠左鍵 (本地搬移)
-        if ((km & (KeyModifiers.Control | KeyModifiers.Alt)) == (KeyModifiers.Control | KeyModifiers.Alt) && !km.HasFlag(KeyModifiers.Shift))
+        if (isCtrl && isAlt && !isShift)
         {
             e.Handled = true;
             ExecuteLocalMove(row);
@@ -958,15 +1012,20 @@ public partial class TestThreadWindow : Window
         }
 
         // 3. Ctrl + 滑鼠左鍵 (複製插入，支援跨視窗)
-        if (km == KeyModifiers.Control)
+        if (isCtrl && !isAlt && !isShift)
         {
-            e.Handled = true;
-            ExecuteCopyInsert(row);
-            return true;
+            if (SequencerClipboardManager.Instance.HasItems)
+            {
+                e.Handled = true;
+                ExecuteCopyInsert(row);
+                return true;
+            }
+            // 若剪貼簿為空，不在此攔截，交由 Command 欄位之 PromptInsertRowAsync 處理
+            return false;
         }
 
         // 4. Alt + 滑鼠左鍵 (本地刪除選取區)
-        if (km == KeyModifiers.Alt)
+        if (isAlt && !isCtrl && !isShift)
         {
             e.Handled = true;
             ExecuteLocalDelete(row);
@@ -1027,7 +1086,10 @@ public partial class TestThreadWindow : Window
 
         int targetIndex = targetRow != null ? targetRow.LineNumber : _rows.Count;
         if (targetIndex >= minLine && targetIndex <= maxLine)
+        {
+            ClearRangeSelection();
             return;
+        }
 
         PushUndoSnapshot();
 
@@ -1222,21 +1284,28 @@ public partial class TestThreadWindow : Window
     {
         var row = (sender as Control)?.DataContext as SequencerRowViewModel;
 
-        // Ctrl + Click 在指令欄：在該行位置插入指令並自動開啟指令編輯 (同點選欄位後按「+」按鈕)
+        // 1. 優先交由全域快捷鍵狀態機處理 (Shift 單行/範圍選取、Ctrl 複製插入、Alt 刪除、Ctrl+Alt 搬移)
+        if (HandleShortcutPointerAction(row, e)) return;
+        if (row == null) return;
+
         var props = e.GetCurrentPoint(this).Properties;
-        if (props.IsLeftButtonPressed && e.KeyModifiers == KeyModifiers.Control)
+        var km = e.KeyModifiers;
+        bool isCtrl = km.HasFlag(KeyModifiers.Control);
+        bool isAlt = km.HasFlag(KeyModifiers.Alt);
+
+        // 2. 若無選取項目時按 Ctrl+Click：在該行位置插入新指令並自動帶出指令選擇視窗
+        if (props.IsLeftButtonPressed && isCtrl && !isAlt)
         {
             e.Handled = true;
             ClearRangeSelection();
-            int cur = row?.LineNumber ?? (this.FindControl<DataGrid>("GridCommands")?.SelectedIndex ?? _rows.Count);
+            int cur = row.LineNumber;
             int ins = (cur >= 0 && cur < _rows.Count) ? cur : _rows.Count;
             await PromptInsertRowAsync(ins);
             return;
         }
 
-        if (HandleShortcutPointerAction(row, e)) return;
-
-        if (row != null)
+        // 3. 無修飾鍵單擊指令欄：開啟該行指令編輯視窗
+        if (props.IsLeftButtonPressed && km == KeyModifiers.None)
         {
             await EditCommandForRowAsync(row);
         }
