@@ -5,10 +5,9 @@ using ARCOS.Core.Model;
 namespace ARCOS.Core.Execution.Handlers;
 
 /// <summary>
-/// Point&Path 模組直譯處理器 (Point&Path@)
-/// 完整實做 ARCOS/references/Point&Path.md 規範之全部點位運算、料盤幾何、座標轉換與微步替代指令
+/// Point&Path 幾何運算輔助庫（模組 IModuleHandler 已全面由 MODULES/POINT&PATH/Point&Path.csvi 擔任）
 /// </summary>
-public class PointPathModuleHandler : IModuleHandler
+public class PointPathModuleHandler
 {
     public string ModuleName => "Point&Path";
 

@@ -227,29 +227,45 @@ public sealed class ModuleRegistry
                 // 方案 A 嚴格檔名契約 (Convention over Configuration)：
                 // 1. 標準發行拓撲：<Category>/<Category>.Module.dll 或 <CustomCmd>/<CustomCmd>.dll
                 // 2. 開發期除錯：bin/Debug/net8.0/
-                var candidateDllPaths = new[]
-                {
-                    Path.Combine(moduleDir, $"{dirName}.Module.dll"),
-                    Path.Combine(moduleDir, $"{dirName}.Command.dll"),
-                    Path.Combine(moduleDir, $"{dirName}.dll"),
-                    Path.Combine(moduleDir, "bin", "Debug", "net8.0", $"{dirName}.Module.dll"),
-                    Path.Combine(moduleDir, "bin", "Debug", "net8.0", $"{dirName}.dll"),
-                    Path.Combine(moduleDir, $"{dirName}Module.dll")
-                };
+                bool isPureCsviMaster =
+                    dirName.Equals("IO", StringComparison.OrdinalIgnoreCase) ||
+                    dirName.Equals("POINT&PATH", StringComparison.OrdinalIgnoreCase) ||
+                    dirName.Equals("HELLO", StringComparison.OrdinalIgnoreCase) ||
+                    !HasModule(dirName);
 
-                string? foundDllPath = candidateDllPaths.FirstOrDefault(File.Exists);
-                if (foundDllPath != null)
+                bool isLegacyUnmigrated =
+                    dirName.Equals("CAPTURE", StringComparison.OrdinalIgnoreCase) ||
+                    dirName.Equals("MOTION", StringComparison.OrdinalIgnoreCase) ||
+                    dirName.Equals("DAQ", StringComparison.OrdinalIgnoreCase) ||
+                    dirName.Equals("PYTHON", StringComparison.OrdinalIgnoreCase);
+
+                string masterCsviPath = Path.Combine(moduleDir, $"{dirName}.csvi");
+                if (isPureCsviMaster && !isLegacyUnmigrated && File.Exists(masterCsviPath))
                 {
-                    TryLoadHandlersFromAssembly(foundDllPath);
+                    TryLoadHandlersFromAssembly(masterCsviPath, modulesRootPath != null ? moduleDir : null);
                 }
-                else if (!HasModule(dirName) &&
-                         !dirName.Equals("CAPTURE", StringComparison.OrdinalIgnoreCase) &&
-                         !dirName.Equals("MOTION", StringComparison.OrdinalIgnoreCase) &&
-                         !dirName.Equals("DAQ", StringComparison.OrdinalIgnoreCase) &&
-                         !dirName.Equals("PYTHON", StringComparison.OrdinalIgnoreCase) &&
-                         Directory.GetFiles(moduleDir, "*.csvi").Length > 0)
+
+                if (!HasModule(dirName))
                 {
-                    RegisterHandler(new CsviDynamicModuleHandler(dirName));
+                    var candidateDllPaths = new[]
+                    {
+                        Path.Combine(moduleDir, $"{dirName}.Module.dll"),
+                        Path.Combine(moduleDir, $"{dirName}.Command.dll"),
+                        Path.Combine(moduleDir, $"{dirName}.dll"),
+                        Path.Combine(moduleDir, "bin", "Debug", "net8.0", $"{dirName}.Module.dll"),
+                        Path.Combine(moduleDir, "bin", "Debug", "net8.0", $"{dirName}.dll"),
+                        Path.Combine(moduleDir, $"{dirName}Module.dll")
+                    };
+
+                    string? foundDllPath = candidateDllPaths.FirstOrDefault(File.Exists);
+                    if (foundDllPath != null)
+                    {
+                        TryLoadHandlersFromAssembly(foundDllPath);
+                    }
+                    else if (!isLegacyUnmigrated && Directory.GetFiles(moduleDir, "*.csvi").Length > 0)
+                    {
+                        RegisterHandler(new CsviDynamicModuleHandler(dirName));
+                    }
                 }
             }
 
@@ -266,7 +282,7 @@ public sealed class ModuleRegistry
         }
     }
 
-    private void TryLoadHandlersFromAssembly(string dllPath)
+    private void TryLoadHandlersFromAssembly(string dllPath, string? customDir = null)
     {
         try
         {
@@ -278,7 +294,17 @@ public sealed class ModuleRegistry
 
             foreach (var ht in handlerTypes)
             {
-                if (Activator.CreateInstance(ht) is IModuleHandler handler)
+                IModuleHandler? handler = null;
+                if (!string.IsNullOrEmpty(customDir) && ht.GetConstructor(new[] { typeof(string) }) != null)
+                {
+                    handler = Activator.CreateInstance(ht, customDir) as IModuleHandler;
+                }
+                else if (ht.GetConstructor(Type.EmptyTypes) != null)
+                {
+                    handler = Activator.CreateInstance(ht) as IModuleHandler;
+                }
+
+                if (handler != null)
                 {
                     RegisterHandler(handler);
                 }
@@ -306,7 +332,10 @@ public sealed class ModuleRegistry
         registry.RegisterHandler(new Handlers.MultiStationModuleHandler());
         registry.RegisterHandler(new Handlers.RedisModuleHandler());
         registry.RegisterHandler(new Handlers.AiAgentModuleHandler());
-        registry.RegisterHandler(new Handlers.PointPathModuleHandler());
+        if (!registry.LoadModuleByName("Point&Path", modulesRootPath))
+        {
+            registry.RegisterHandler(new CsviDynamicModuleHandler("Point&Path"));
+        }
 
         // 嚴格規範：其餘擴充模組 (IO, Motion, Capture, DAQ, Python 等)
         // 絕對不在啟動時預載入，必須待下達指令 (例如 System@IncludeModule 或首次調用該模組指令) 時才動態加載！
@@ -322,6 +351,12 @@ public sealed class ModuleRegistry
         string mod = moduleName.Trim();
         if (HasModule(mod)) return true;
 
+        bool isLegacyUnmigrated =
+            mod.Equals("CAPTURE", StringComparison.OrdinalIgnoreCase) ||
+            mod.Equals("MOTION", StringComparison.OrdinalIgnoreCase) ||
+            mod.Equals("DAQ", StringComparison.OrdinalIgnoreCase) ||
+            mod.Equals("PYTHON", StringComparison.OrdinalIgnoreCase);
+
         var candidateRoots = GetCandidateModulesRoots(modulesRootPath).ToList();
         candidateRoots.Add(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "EXTRACMD"));
 
@@ -330,8 +365,21 @@ public sealed class ModuleRegistry
             if (!Directory.Exists(root)) continue;
 
             string moduleDir = Path.Combine(root, mod);
+            if (!Directory.Exists(moduleDir) && string.Equals(Path.GetFileName(root), mod, StringComparison.OrdinalIgnoreCase))
+            {
+                moduleDir = root;
+            }
+
             if (Directory.Exists(moduleDir))
             {
+                // 優先載入同名主控 <Module>.csvi (例如 MODULES/IO/IO.csvi)
+                string masterCsvi = Path.Combine(moduleDir, $"{mod}.csvi");
+                if (!isLegacyUnmigrated && File.Exists(masterCsvi))
+                {
+                    TryLoadHandlersFromAssembly(masterCsvi, modulesRootPath != null ? moduleDir : null);
+                    if (HasModule(mod)) return true;
+                }
+
                 var candidateDllPaths = new[]
                 {
                     Path.Combine(moduleDir, $"{mod}.Module.dll"),
@@ -351,14 +399,11 @@ public sealed class ModuleRegistry
             }
         }
 
-        // 若未找到外部獨立 DLL，檢查是否有內建模組實作保底 (如純測試或未獨立發布環境)
+        // 若未找到外部獨立 CSVI / DLL，僅對尚未完成單一指令 CSVI 化的舊模組提供內建保底
         if (!HasModule(mod))
         {
             switch (mod.ToUpperInvariant())
             {
-                case "IO":
-                    RegisterHandler(new Handlers.IoModuleHandler());
-                    return true;
                 case "MOTION":
                     RegisterHandler(new Handlers.MotionModuleHandler());
                     return true;

@@ -248,6 +248,10 @@ public class IoEngine
         if (string.IsNullOrWhiteSpace(physicalPort) || string.IsNullOrWhiteSpace(aliasName)) return;
 
         string port = physicalPort.Trim();
+        if (TryParsePhysicalPort(port, out int pNum, out int bNum))
+        {
+            port = $"P{pNum}.{bNum}";
+        }
         string alias = aliasName.Trim();
 
         lock (_lock)
@@ -256,6 +260,20 @@ public class IoEngine
             _physicalToAlias[port] = alias;
         }
         PortNameChanged?.Invoke(port, alias);
+    }
+
+    /// <summary>
+    /// 根據實體點位 (如 P0.0) 查詢已命名的別名 (如 OUT1, Start?)，若未命名則回傳空字串
+    /// </summary>
+    public string GetPortAlias(string physicalPort)
+    {
+        if (string.IsNullOrWhiteSpace(physicalPort)) return string.Empty;
+        string key = physicalPort.Trim();
+        if (TryParsePhysicalPort(key, out int pNum, out int bNum))
+        {
+            key = $"P{pNum}.{bNum}";
+        }
+        return _physicalToAlias.TryGetValue(key, out string? alias) ? alias : string.Empty;
     }
 
     /// <summary>

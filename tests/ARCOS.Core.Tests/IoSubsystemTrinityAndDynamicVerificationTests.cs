@@ -11,7 +11,6 @@ using ARCOS.Core.Execution;
 using ARCOS.Core.Guidance;
 using ARCOS.Core.Model;
 using ARCOS.Driver.MockIO;
-using ARCOS.Module.IO;
 using Xunit;
 using ExecutionContext = ARCOS.Core.Execution.ExecutionContext;
 

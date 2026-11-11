@@ -26,7 +26,6 @@
     <ProjectReference Include="..\..\src\ARCOS.Core\ARCOS.Core.csproj" />
     <ProjectReference Include="..\..\src\ARCOS.App\ARCOS.App.csproj" />
     <ProjectReference Include="..\..\src\ARCOS.Remoter\ARCOS.Remoter.csproj" />
-    <ProjectReference Include="..\..\src\MODULES\IO\ARCOS.Module.IO.csproj" />
     <ProjectReference Include="..\..\src\MODULES\IO\DRIVER\MockIO\ARCOS.Driver.MockIO.csproj" />
   </ItemGroup>
 

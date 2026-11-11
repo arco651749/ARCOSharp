@@ -31,9 +31,11 @@ public class MockIoDriver : IDriver
     public bool[] ReadbackOutputs { get; private set; } = Array.Empty<bool>();
 
     public event Action? IoStateUpdated;
+    public event Action? PortNamesRefreshed;
 
     public void Init(string deviceName, string param, BasicEngines engines)
     {
+        _cts?.Cancel();
         DeviceName = deviceName;
         _engines = engines;
 
@@ -44,7 +46,7 @@ public class MockIoDriver : IDriver
         if (args.TryGetValue("OutPorts", out var outPorts) && int.TryParse(outPorts, out int op)) OutPorts = op;
         if (args.TryGetValue("InputStart", out var inStart) || args.TryGetValue("InStart", out inStart)) InStart = inStart;
         if (args.TryGetValue("InPorts", out var inPorts) && int.TryParse(inPorts, out int ip)) InPorts = ip;
-        if (args.TryGetValue("Interval", out var interval) && int.TryParse(interval, out int iv)) IntervalMs = iv;
+        if (args.TryGetValue("Interval", out var interval) && int.TryParse(interval, out int iv) && iv > 0) IntervalMs = iv;
 
         SimulatedInputs = new bool[InPorts];
         ReadbackOutputs = new bool[OutPorts];
@@ -60,12 +62,21 @@ public class MockIoDriver : IDriver
             }
         };
 
+        // 監聽點位改名事件：當腳本執行 IO@SetPortName 時同步通知前面板刷新名稱
+        _engines.Io.PortNameChanged += (_, _) =>
+        {
+            PortNamesRefreshed?.Invoke();
+        };
+
         _cts = new CancellationTokenSource();
         _workerTask = Task.Run(() => WorkerLoop(_cts.Token));
     }
 
     public string GetInputPortName(int index) => GetPortNameAtOffset(InStart, index);
     public string GetOutputPortName(int index) => GetPortNameAtOffset(OutStart, index);
+
+    public string GetInputPortAlias(int index) => _engines?.Io.GetPortAlias(GetInputPortName(index)) ?? string.Empty;
+    public string GetOutputPortAlias(int index) => _engines?.Io.GetPortAlias(GetOutputPortName(index)) ?? string.Empty;
 
     public static string GetPortNameAtOffset(string startPort, int offset)
     {
@@ -165,7 +176,32 @@ public class MockIoDriver : IDriver
     private void ExecuteCommand(DriverTicket ticket)
     {
         string cmd = ticket.Command.ToUpperInvariant();
-        if (cmd == "FORCE_UPDATE" || cmd == "UPDATE")
+        if (cmd == "INITIOPORT" || cmd == "INITIO" || cmd == "INIT")
+        {
+            if (!string.IsNullOrWhiteSpace(ticket.Parameter))
+            {
+                var args = ArgParaHelper.ParseKeyValueArgs(ticket.Parameter, out var posArgs);
+                if (args.TryGetValue("Interval", out var ivStr) && int.TryParse(ivStr, out int iv1) && iv1 > 0)
+                {
+                    IntervalMs = iv1;
+                }
+                else if (posArgs.Count > 0 && int.TryParse(posArgs[^1], out int iv2) && iv2 > 0)
+                {
+                    IntervalMs = iv2;
+                }
+            }
+
+            if (_engines != null)
+            {
+                _engines.Io.SetBatch(InStart, SimulatedInputs.AsSpan());
+                var outputs = _engines.Io.GetBatch(OutStart, OutPorts);
+                Array.Copy(outputs, ReadbackOutputs, Math.Min(outputs.Length, ReadbackOutputs.Length));
+            }
+            PortNamesRefreshed?.Invoke();
+            IoStateUpdated?.Invoke();
+            ticket.SetCompleted();
+        }
+        else if (cmd == "FORCEUPDATE" || cmd == "FORCE_UPDATE" || cmd == "FORCEUPDATEIO" || cmd == "UPDATE")
         {
             if (_engines != null)
             {

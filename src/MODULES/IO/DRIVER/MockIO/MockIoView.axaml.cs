@@ -42,7 +42,12 @@ public partial class MockIoView : UserControl
         InitWizardEvents();
 
         _driver.IoStateUpdated += OnIoStateUpdated;
-        DetachedFromVisualTree += (s, e) => _driver.IoStateUpdated -= OnIoStateUpdated;
+        _driver.PortNamesRefreshed += OnPortNamesRefreshed;
+        DetachedFromVisualTree += (s, e) =>
+        {
+            _driver.IoStateUpdated -= OnIoStateUpdated;
+            _driver.PortNamesRefreshed -= OnPortNamesRefreshed;
+        };
 
         // 綁定快速控制
         var btnClearAll = this.FindControl<Button>("BtnClearAllIn");
@@ -131,6 +136,8 @@ public partial class MockIoView : UserControl
             {
                 int idx = i;
                 string portName = _driver.GetInputPortName(idx);
+                string alias = _driver.GetInputPortAlias(idx);
+                bool hasAlias = !string.IsNullOrEmpty(alias);
                 bool isChecked = _driver.SimulatedInputs.Length > idx && _driver.SimulatedInputs[idx];
 
                 var bitCard = new Border
@@ -143,14 +150,16 @@ public partial class MockIoView : UserControl
                     Margin = new Thickness(2),
                     // Cursor Hand
                 };
+                ToolTip.SetTip(bitCard, hasAlias ? $"{alias} ({portName})" : portName);
 
                 var bitStack = new StackPanel { HorizontalAlignment = HorizontalAlignment.Center, Spacing = 2 };
                 var lblPort = new TextBlock
                 {
-                    Text = portName,
+                    Text = hasAlias ? alias : portName,
                     FontSize = 10,
                     FontWeight = FontWeight.Bold,
-                    Foreground = Brush.Parse("#F1F5F9"),
+                    Foreground = Brush.Parse(hasAlias ? "#FCD34D" : "#F1F5F9"),
+                    TextTrimming = TextTrimming.CharacterEllipsis,
                     HorizontalAlignment = HorizontalAlignment.Center
                 };
                 var indicator = new Border
@@ -163,7 +172,7 @@ public partial class MockIoView : UserControl
                 };
                 var lblBit = new TextBlock
                 {
-                    Text = $"b{idx % 8}",
+                    Text = hasAlias ? portName : $"b{idx % 8}",
                     FontSize = 9,
                     Foreground = Brush.Parse("#94A3B8"),
                     HorizontalAlignment = HorizontalAlignment.Center
@@ -238,6 +247,8 @@ public partial class MockIoView : UserControl
             {
                 int idx = i;
                 string portName = _driver.GetOutputPortName(idx);
+                string alias = _driver.GetOutputPortAlias(idx);
+                bool hasAlias = !string.IsNullOrEmpty(alias);
 
                 var bitCard = new Border
                 {
@@ -248,14 +259,16 @@ public partial class MockIoView : UserControl
                     Padding = new Thickness(2, 4),
                     Margin = new Thickness(2)
                 };
+                ToolTip.SetTip(bitCard, hasAlias ? $"{alias} ({portName})" : portName);
 
                 var bitStack = new StackPanel { HorizontalAlignment = HorizontalAlignment.Center, Spacing = 2 };
                 var lblPort = new TextBlock
                 {
-                    Text = portName,
+                    Text = hasAlias ? alias : portName,
                     FontSize = 10,
                     FontWeight = FontWeight.Bold,
-                    Foreground = Brush.Parse("#F1F5F9"),
+                    Foreground = Brush.Parse(hasAlias ? "#FCD34D" : "#F1F5F9"),
+                    TextTrimming = TextTrimming.CharacterEllipsis,
                     HorizontalAlignment = HorizontalAlignment.Center
                 };
 
@@ -271,7 +284,7 @@ public partial class MockIoView : UserControl
 
                 var lblBit = new TextBlock
                 {
-                    Text = $"b{idx % 8}",
+                    Text = hasAlias ? portName : $"b{idx % 8}",
                     FontSize = 9,
                     Foreground = Brush.Parse("#94A3B8"),
                     HorizontalAlignment = HorizontalAlignment.Center
@@ -299,6 +312,17 @@ public partial class MockIoView : UserControl
             _driver.SetSimulatedInput(i, value);
         }
         BuildGroupedInputControls();
+    }
+
+    private void OnPortNamesRefreshed()
+    {
+        Dispatcher.UIThread.Post(() =>
+        {
+            UpdateHeaderInfo();
+            BuildGroupedInputControls();
+            BuildGroupedOutputControls();
+            UpdateVisuals();
+        });
     }
 
     private void OnIoStateUpdated()

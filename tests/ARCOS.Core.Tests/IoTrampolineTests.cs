@@ -1,10 +1,10 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using ARCOS.Core.Drivers;
 using ARCOS.Core.Engines;
 using ARCOS.Core.Execution;
 using ARCOS.Core.Guidance;
-using ARCOS.Module.IO;
 using Xunit;
 using ExecutionContext = ARCOS.Core.Execution.ExecutionContext;
 
@@ -151,6 +151,31 @@ public class IoTrampolineTests
         };
     }
 
+    private static IModuleHandler CreateIoMasterHandler(string customDir)
+    {
+        string baseDir = AppContext.BaseDirectory;
+        string solutionRoot = Path.GetFullPath(Path.Combine(baseDir, "..", "..", "..", "..", ".."));
+        string masterCsvi = Path.Combine(solutionRoot, "src", "MODULES", "IO", "IO.csvi");
+        if (!File.Exists(masterCsvi))
+            masterCsvi = Path.Combine(solutionRoot, "dist", "ARCOS_Runtime", "MODULES", "IO", "IO.csvi");
+
+        var asm = ARCOS.Core.Common.PluginLoadManager.LoadOrReloadAssembly(masterCsvi, out _);
+        var handlerType = asm.GetExportedTypes().First(t => typeof(IModuleHandler).IsAssignableFrom(t) && !t.IsAbstract);
+        return (IModuleHandler)Activator.CreateInstance(handlerType, customDir)!;
+    }
+
+    private static IParameterGuidance? InvokeResolveGuidance(IModuleHandler handler, string action)
+    {
+        var method = handler.GetType().GetMethod("ResolveGuidance", new[] { typeof(string) });
+        return method?.Invoke(handler, new object[] { action }) as IParameterGuidance;
+    }
+
+    private static IReadOnlyList<string> InvokeGetSupportedDrivers(IModuleHandler handler)
+    {
+        var method = handler.GetType().GetMethod("GetSupportedDrivers", Type.EmptyTypes);
+        return (method?.Invoke(handler, null) as IReadOnlyList<string>) ?? Array.Empty<string>();
+    }
+
     [Fact]
     public void Trampoline_Cache_SuppressesRepeatedDiskProbes()
     {
@@ -159,12 +184,13 @@ public class IoTrampolineTests
 
         try
         {
-            using var handler = new IoModuleHandler(tempDir);
+            var handler = CreateIoMasterHandler(tempDir);
+            using var disp = handler as IDisposable;
 
-            var res1 = handler.ResolveGuidance("SetPort");
+            var res1 = InvokeResolveGuidance(handler, "SetPort");
             Assert.Null(res1);
 
-            var res2 = handler.ResolveGuidance("SetPort");
+            var res2 = InvokeResolveGuidance(handler, "SetPort");
             Assert.Null(res2);
         }
         finally
@@ -181,7 +207,8 @@ public class IoTrampolineTests
 
         try
         {
-            using var handler = new IoModuleHandler(tempDir);
+            var handler = CreateIoMasterHandler(tempDir);
+            using var disp = handler as IDisposable;
             var ctx = CreateContext();
 
             // 缺少對應 .csvi 時絕不退回內建保底，直接報錯 (CommandStatus.Error)
@@ -225,7 +252,8 @@ public class IoTrampolineTests
 
         if (!Directory.Exists(distIoDir)) return;
 
-        using var handler = new IoModuleHandler(distIoDir);
+        var handler = CreateIoMasterHandler(distIoDir);
+        using var disp = handler as IDisposable;
 
         var commands = handler.GetSupportedCommands();
         Assert.NotEmpty(commands);
@@ -235,11 +263,11 @@ public class IoTrampolineTests
         Assert.Contains("WaitPortOn", commands);
         Assert.Contains("Shift", commands);
 
-        var drivers = handler.GetSupportedDrivers();
+        var drivers = InvokeGetSupportedDrivers(handler);
         Assert.NotEmpty(drivers);
         Assert.Contains("MockIO", drivers);
 
-        var guidance = handler.ResolveGuidance("SetPort");
+        var guidance = InvokeResolveGuidance(handler, "SetPort");
         Assert.NotNull(guidance);
         var panel = guidance.GetFrontPanelControl();
         Assert.NotNull(panel);
