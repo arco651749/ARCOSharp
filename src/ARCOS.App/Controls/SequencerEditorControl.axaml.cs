@@ -382,6 +382,10 @@ public partial class SequencerEditorControl : UserControl
             if (r.IsRangeSelected)
                 r.IsRangeSelected = false;
         }
+        if (SequencerClipboardManager.Instance.SourceEditor == this)
+        {
+            SequencerClipboardManager.Instance.ClearSelection();
+        }
     }
 
     public void JumpToRow(int lineNumber)
@@ -455,8 +459,8 @@ public partial class SequencerEditorControl : UserControl
         // 2. 排除點擊在表頭、滾動條、縮放或按鈕控制項上的情況
         if (IsInIgnoredGridArea(visual)) return;
 
-        // 若有待命中的 Shift 第一下選取，點擊空白處時取消選取
-        if (_anchorStartLine != null)
+        // 若有選取範圍或待命中的 Shift 第一下選取，點擊空白處時取消選取
+        if (_anchorStartLine != null || _rows.Any(r => r.IsRangeSelected) || SequencerClipboardManager.Instance.HasSelection)
         {
             ClearRangeSelection();
         }
@@ -551,8 +555,8 @@ public partial class SequencerEditorControl : UserControl
             return true;
         }
 
-        // 若不是 Shift 點擊，但先前有第一下 Shift 點擊待命中，取消該選取行為
-        if (_anchorStartLine != null)
+        // 若不是 Shift 點擊（例如：一般點擊行、點擊單元格查看/編輯），自動取消先前的範圍選取
+        if (_anchorStartLine != null || _rows.Any(r => r.IsRangeSelected) || SequencerClipboardManager.Instance.HasSelection)
         {
             ClearRangeSelection();
         }
@@ -610,6 +614,8 @@ public partial class SequencerEditorControl : UserControl
         {
             _rows[i].LineNumber = i;
         }
+
+        ClearRangeSelection(); // 複製插入完成後，自動取消選取範圍
 
         SyncUIToProgram();
         UpdateUndoRedoButtonState();

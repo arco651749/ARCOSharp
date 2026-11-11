@@ -237,6 +237,47 @@ public class SequencerVisualAndSelectionTests
         // 驗證 Escape 或 ClearSelection 快捷鍵清除
         ARCOS.App.Services.SequencerClipboardManager.Instance.ClearSelection();
         Assert.False(ARCOS.App.Services.SequencerClipboardManager.Instance.HasSelection);
+        Assert.True(ARCOS.App.Services.SequencerClipboardManager.Instance.HasItems); // 剪貼簿緩衝區依然保留
+    }
+
+    [Fact]
+    public void RangeSelection_AutoClearedAfterAction_RetainsClipboardBuffer()
+    {
+        // 驗證需求：選取完做其他動作後，自動取消選取範圍 (反白消失)，但快取資料保留供貼上使用
+        var rows = Enumerable.Range(0, 5).Select(i => new SequencerRowViewModel
+        {
+            LineNumber = i,
+            Command = $"Cmd_{i}",
+            Parameter = $"{i}"
+        }).ToList();
+
+        // 模擬 Shift 選取第 1 ~ 3 行
+        int start = 1, end = 3;
+        foreach (var r in rows)
+        {
+            r.IsRangeSelected = (r.LineNumber >= start && r.LineNumber <= end);
+        }
+        var selected = rows.Where(r => r.IsRangeSelected).Select(r => (r.Command, r.Parameter)).ToList();
+        var editorMock = new object();
+        ARCOS.App.Services.SequencerClipboardManager.Instance.SetSelection(editorMock, start, end, selected);
+
+        Assert.Equal(3, rows.Count(r => r.IsRangeSelected));
+        Assert.True(ARCOS.App.Services.SequencerClipboardManager.Instance.HasSelection);
+        Assert.True(ARCOS.App.Services.SequencerClipboardManager.Instance.HasItems);
+
+        // 模擬做其他動作 (例如點擊其他行、點擊空白處或執行貼上)，觸發 ClearRangeSelection
+        foreach (var r in rows)
+        {
+            r.IsRangeSelected = false;
+        }
+        ARCOS.App.Services.SequencerClipboardManager.Instance.ClearSelection();
+
+        // 驗證：視覺選取完全取消，不殘留反白
+        Assert.All(rows, r => Assert.False(r.IsRangeSelected));
+        Assert.False(ARCOS.App.Services.SequencerClipboardManager.Instance.HasSelection);
+        // 驗證：剪貼簿快取依然保留，需要時仍可使用或再次選取
+        Assert.True(ARCOS.App.Services.SequencerClipboardManager.Instance.HasItems);
+        Assert.Equal(3, ARCOS.App.Services.SequencerClipboardManager.Instance.Buffer.Count);
     }
 
     [Fact]

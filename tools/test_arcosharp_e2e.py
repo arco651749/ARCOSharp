@@ -317,6 +317,15 @@ def run_tests():
     assert not any(r.get("isRangeSelected") for r in st_esc.get("sequencerRows", [])), "Escape 應清除所有選取"
     print("  ✓ Escape 快速鍵成功取消選取")
 
+    # 10.3 執行其他動作 (如複製貼上/點擊) 後自動取消選取範圍
+    call_mcp("arcos_clipboard_action", {"action": "select", "start": 0, "end": 1})
+    st_sel2 = call_mcp("arcos_get_state", {})
+    assert any(r.get("isRangeSelected") for r in st_sel2.get("sequencerRows", [])), "應成功選取範圍"
+    call_mcp("arcos_clipboard_action", {"action": "copy_insert", "index": 4})
+    st_after_insert = call_mcp("arcos_get_state", {})
+    assert not any(r.get("isRangeSelected") for r in st_after_insert.get("sequencerRows", [])), "執行貼上插入後，選取範圍應自動取消"
+    print("  ✓ 執行其他動作 (複製插入) 後，選取範圍自動取消")
+
     # -------------------------------------------------------------
     # Phase 11: 清空程式區 (X 按鈕) 與 Undo 復原
     # -------------------------------------------------------------
