@@ -305,6 +305,17 @@ public class DriverManager : IDisposable
             .ToList();
     }
 
+    /// <summary>
+    /// 取得指定類別的所有 (DeviceName, Driver) 項目
+    /// </summary>
+    public IReadOnlyList<(string DeviceName, IDriver Driver)> GetDeviceEntriesByCategory(string category)
+    {
+        return _devices
+            .Where(kvp => string.Equals(kvp.Key.Category, category, StringComparison.OrdinalIgnoreCase))
+            .Select(kvp => (kvp.Key.DeviceName, kvp.Value))
+            .ToList();
+    }
+
     public IReadOnlyList<IDriver> GetAllDevices()
     {
         return _devices.Values.ToList();

@@ -13,7 +13,7 @@ public class VariableModuleHandler : IModuleHandler
 {
     public string ModuleName => "Variable";
 
-    private static readonly Regex PointElementRegex = new(@"^([a-zA-Z0-9_]+)=([XYZUVWxyzuvw])\(([^)]+)\)$", RegexOptions.Compiled);
+    private static readonly Regex PointElementRegex = new(@"^([a-zA-Z0-9_$]+)=([XYZUVWHxyzuvwh](?:\.[a-zA-Z0-9_]+)?)\(([^)]+)\)$", RegexOptions.Compiled);
 
     private static readonly string[] Commands = new[]
     {
@@ -344,25 +344,43 @@ public class VariableModuleHandler : IModuleHandler
 
         if (action.Equals("GetPointElement", StringComparison.OrdinalIgnoreCase))
         {
-            var m = PointElementRegex.Match(filteredParam.Trim());
+            string expr = filteredParam.Trim();
+            string sec = ctx.CurrentSection;
+            int commaIdx = expr.LastIndexOf(',');
+            if (commaIdx > 0)
+            {
+                sec = expr.Substring(commaIdx + 1).Trim();
+                expr = expr.Substring(0, commaIdx).Trim();
+            }
+
+            var m = PointElementRegex.Match(expr);
             if (m.Success)
             {
                 string varName = m.Groups[1].Value.TrimStart('$');
-                char axis = char.ToUpperInvariant(m.Groups[2].Value[0]);
+                string axisSpec = m.Groups[2].Value;
+                char axis = char.ToUpperInvariant(axisSpec[0]);
                 string ptName = m.Groups[3].Value.TrimStart('$');
 
                 var pt = ctx.Engines.Point.GetPoint(ptName);
-                double val = axis switch
+                if (axis == 'H')
                 {
-                    'X' => pt.X,
-                    'Y' => pt.Y,
-                    'Z' => pt.Z,
-                    'U' => pt.U,
-                    'V' => pt.V,
-                    'W' => pt.W,
-                    _ => 0.0
-                };
-                ctx.Engines.Variable.Set(varName, val.ToString(CultureInfo.InvariantCulture), ctx.CurrentSection);
+                    string? subKey = axisSpec.Length > 2 && axisSpec[1] == '.' ? axisSpec.Substring(2) : null;
+                    ctx.Engines.Variable.Set(varName, pt.GetHString(subKey), sec);
+                }
+                else
+                {
+                    double val = axis switch
+                    {
+                        'X' => pt.X,
+                        'Y' => pt.Y,
+                        'Z' => pt.Z,
+                        'U' => pt.U,
+                        'V' => pt.V,
+                        'W' => pt.W,
+                        _ => 0.0
+                    };
+                    ctx.Engines.Variable.Set(varName, val.ToString(CultureInfo.InvariantCulture), sec);
+                }
             }
             return CommandResult.Done();
         }
@@ -443,7 +461,11 @@ public class VariableModuleHandler : IModuleHandler
         {
             if (parts.Length > 0)
             {
-                ctx.Engines.Variable.Subscribe(parts[0].TrimStart('$'), 5000);
+                bool signaled = ctx.Engines.Variable.Subscribe(parts[0].TrimStart('$'), 0);
+                if (!signaled)
+                {
+                    return CommandResult.Wait();
+                }
             }
             return CommandResult.Done();
         }
@@ -460,16 +482,23 @@ public class VariableModuleHandler : IModuleHandler
         // 11. 存取檔
         if (action.Equals("VariableSave", StringComparison.OrdinalIgnoreCase))
         {
-            ctx.Engines.Variable.SaveToFile(parts[0]);
+            if (parts.Length > 0)
+            {
+                var filterPatterns = parts.Length > 1 ? parts.Skip(1) : null;
+                ctx.Engines.Variable.SaveToFile(parts[0], filterPatterns);
+            }
             return CommandResult.Done();
         }
 
         if (action.Equals("VariableLoad", StringComparison.OrdinalIgnoreCase))
         {
-            ctx.Engines.Variable.LoadFromFile(parts[0]);
+            if (parts.Length > 0)
+            {
+                ctx.Engines.Variable.LoadFromFile(parts[0]);
+            }
             return CommandResult.Done();
         }
 
-        return CommandResult.Done();
+        return CommandResult.Fail($"Command CSVI not found: MODULES/Variable/{action}.csvi");
     }
 }

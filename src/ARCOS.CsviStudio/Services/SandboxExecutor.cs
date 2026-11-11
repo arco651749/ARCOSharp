@@ -52,7 +52,26 @@ public class SandboxExecutor
             var context = new CoreExecutionContext(0, "SandboxThread", program, engines, drivers);
             string action = commandKey.Contains('@') ? commandKey.Split('@')[1] : commandKey;
 
-            // 1. 優先尋找實作 IModuleHandler 的型別
+            // 0. 優先尋找實作 ICallCommand 的外部獨立 CSVI (如 ExternalModules/mycsvi.csvi)
+            var callType = asm.GetTypes().FirstOrDefault(t => typeof(ICallCommand).IsAssignableFrom(t) && !t.IsInterface && !t.IsAbstract);
+            if (callType != null && Activator.CreateInstance(callType) is ICallCommand callCmd)
+            {
+                var posArgs = string.IsNullOrWhiteSpace(parameter)
+                    ? Array.Empty<string>()
+                    : parameter.Split(',', StringSplitOptions.TrimEntries);
+
+                var subSw = Stopwatch.StartNew();
+                object? retVal = callCmd.Execute(posArgs, context);
+                subSw.Stop();
+
+                sw.Stop();
+                result.Success = true;
+                result.ElapsedMilliseconds = subSw.Elapsed.TotalMilliseconds;
+                result.Output = $"[ICallCommand] Target: {commandKey}, Args: [{string.Join(", ", posArgs)}], Return: {retVal ?? "null"}";
+                return result;
+            }
+
+            // 1. 尋找實作 IModuleHandler 的型別
             var handlerType = asm.GetTypes().FirstOrDefault(t => typeof(IModuleHandler).IsAssignableFrom(t) && !t.IsInterface && !t.IsAbstract);
             if (handlerType != null && Activator.CreateInstance(handlerType) is IModuleHandler handler)
             {

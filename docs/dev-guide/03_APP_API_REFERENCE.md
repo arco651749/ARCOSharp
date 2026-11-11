@@ -46,13 +46,27 @@ public SequencerEditorControl? Sequencer { get; }
 public TestThreadWindow? TestThreadWindow { get; }
 ```
 
-#### 主要 Public 方法
+#### 主要 Public 方法與生命週期事件
 - `ToggleTestThreadWindow() -> void`
   - **說明**：切換 Test Thread Editor 顯示狀態（開啟/最小化/置頂恢復）。支援全域 `Ctrl+T` 呼叫。
+  - **權限限制**：**僅限於 `Sequencer.IsSupervisorMode == true`（`SUPERVISOR` 模式）下才可開啟**；若處於 `OPERATOR` 模式則拒絕開啟並記錄日誌提示。當從 `SUPERVISOR` 切回 `OPERATOR` 時，已開啟之 `TestThreadWindow` 會自動最小化收起。
   - **執行緒限制**：必須在 UI Thread（`Dispatcher.UIThread`）呼叫。
+- `OnClosing(WindowClosingEventArgs e) -> void`
+  - **說明**：當關閉 ARCOSharp 視窗時，若 `98: End Script` 有指令且尚未執行，會先設定 `e.Cancel = true` 並啟動 `EndScript&` 執行 `98: End Script`，**等待其執行完畢（`OnExecutionStopped`）後才正式關閉視窗**。
 - `LoadUserPanelFromCsvi(string csviNameOrPath) -> bool`
   - **說明**：動態解析並將指定 CSVI 自訂面板掛載至「User Tab」容器，並自動呼叫其 `Init(BasicEngines)`。
   - **傳回值**：掛載成功回傳 `true`，檔案遺失或型別無效回傳 `false`。
+
+---
+
+### 2.1.1 AdministratorAccountManager 與 AdministratorAccountDialog
+- **路徑**：
+  - [`src/ARCOS.App/Services/AdministratorAccountManager.cs`](../../src/ARCOS.App/Services/AdministratorAccountManager.cs)
+  - [`src/ARCOS.App/Dialogs/AdministratorAccountDialog.cs`](../../src/ARCOS.App/Dialogs/AdministratorAccountDialog.cs)
+- **用途**：管理 `OPERATOR` 切換至 `SUPERVISOR` 時的帳號密碼驗證（儲存於根目錄 `Administrator.json`）。
+  - 若未設定帳號與密碼（`HasCredentialsConfigured() == false`），允許自由切換 `OPERATOR` / `SUPERVISOR`。
+  - 若已設定帳號與密碼，切換至 `SUPERVISOR` 時自動呼叫 `AdministratorAccountDialog.PromptLoginAsync` 驗證。
+  - 在 `SUPERVISOR` 面板點擊左側鎖頭按鈕（`BtnLockSup`）可呼叫 `AdministratorAccountDialog.OpenAccountManagerAsync` 修改或清除帳密。
 
 ---
 
@@ -143,11 +157,13 @@ flowchart TD
 3. 兩者在欄位維度上徹底解耦，即使操作員進行多行選取，PC 游標依然能在 `i` 欄自由穿梭跳躍，清晰可見！
 
 ### 專案與程式區管理介面 (Project & Section UI Buttons)
-- **`[ 📁 READ .PROG ]`**：將磁碟中的全專案檔（`*.prog` 或舊版相容 `*.pro`）讀入至 0~99 程式區槽位中。
+- **`[ 📁 READ .PROG ]`**：將磁碟中的全專案檔（`*.prog` 或舊版相容 `*.pro`）讀入至 0~99 程式區槽位中（若未覆寫 94/95/96/99 則保留系統預設指令）。
 - **`[ 💾 SAVE .PROG ]`**：將當前 100 個程式區段整體序列化寫入 `.prog` 專案檔。
 - **`[ 📗 READ .INIT ]`**：載入單一程式區腳本（二進制 $N \times 2$ 格式）至當前選定之 Program Section。
 - **`[ 💾 SAVE .INIT ]`**：將目前選定之單一 Program Section 導出為獨立 `.init` 二進制腳本（供 SubThread 或 UI 調用）。
-- **`ProgSelector` 下拉選單**：支援 `System@ProgramSection` 動態命名，格式化顯示 `0: Main`, `1: SectionName`, `94: Pause Off`, `99: EMG Stop`。
+- **`ProgSelector` 下拉選單**：支援 `System@ProgramSection` 動態命名，格式化顯示 `0: Main`, `1: SectionName`, `94: Pause Off`, `95: Pause On`, `96: Execute On`, `97: Execute Off`, `98: End Script`, `99: EMG Stop`。
+- **尾端空白佔位列 (`IsTrailingPlaceholder`)**：`SequencerEditorControl` 與 `TestThreadWindow` 在程式最後面永遠自動多維持一行空白佔位列（`EnsureTrailingPlaceholderRow()`），確保指令很多、捲軸拉到最底部時仍可直接點擊空白列在最尾端新增、貼上或搬移指令，且存檔與同步時自動排除該佔位列。
+- **`ThreadMonitorControl` 即時指令與行號高亮**：`Modules Info -> THREAD` 分頁中的 `Thread Main (0)` 與 `Thread 1~12` 均同步顯示該執行緒的完整程式指令，並於左欄 `i` 即時以粉紅色高亮顯示目前執行到的行號（PC）。
 
 ---
 

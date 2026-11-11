@@ -64,14 +64,38 @@ public sealed class SequencerClipboardManager
         return lineNumber >= StartLine!.Value && lineNumber <= EndLine!.Value;
     }
 
+    public static int GetEffectiveRowCount(IList<SequencerRowViewModel> rows)
+    {
+        int count = rows.Count;
+        while (count > 0 && rows[count - 1].IsTrailingPlaceholder)
+        {
+            count--;
+        }
+        return count;
+    }
+
     /// <summary>
     /// 集中處理 Shift + Click 選取狀態機 (第一次單行選取 / 第二次範圍選取)。
     /// </summary>
     public void HandleShiftClick(ISequencerEditorHost editor, int clickedLine)
     {
         var rows = editor.EditorRows;
-        if (clickedLine < 0 || clickedLine >= rows.Count)
+        int effectiveCount = GetEffectiveRowCount(rows);
+        if (effectiveCount <= 0 || clickedLine < 0)
             return;
+
+        if (clickedLine >= effectiveCount)
+        {
+            // 若在等待第二次 Shift+Click 時點到尾端空白列，自動夾限至最後一行真實指令；若是第一次點擊則忽略
+            if (ReferenceEquals(SourceEditor, editor) && IsWaitingSecondShift && AnchorLine.HasValue)
+            {
+                clickedLine = effectiveCount - 1;
+            }
+            else
+            {
+                return;
+            }
+        }
 
         if (!ReferenceEquals(SourceEditor, editor) || !IsWaitingSecondShift || !AnchorLine.HasValue)
         {
@@ -139,11 +163,12 @@ public sealed class SequencerClipboardManager
             return false;
 
         var rows = targetEditor.EditorRows;
+        int effectiveCount = GetEffectiveRowCount(rows);
         targetEditor.PushUndoSnapshot();
 
-        int targetIndex = targetLine ?? rows.Count;
+        int targetIndex = targetLine ?? effectiveCount;
         if (targetIndex < 0) targetIndex = 0;
-        if (targetIndex > rows.Count) targetIndex = rows.Count;
+        if (targetIndex > effectiveCount) targetIndex = effectiveCount;
 
         var itemsCopy = Buffer.ToList();
         for (int i = 0; i < itemsCopy.Count; i++)
@@ -181,13 +206,15 @@ public sealed class SequencerClipboardManager
         if (ReferenceEquals(SourceEditor, targetEditor))
         {
             var rows = targetEditor.EditorRows;
-            if (minLine < 0 || maxLine >= rows.Count)
+            int effectiveCount = GetEffectiveRowCount(rows);
+            if (minLine < 0 || maxLine >= effectiveCount)
             {
                 ClearAll();
                 return false;
             }
 
-            int targetIndex = targetLine ?? rows.Count;
+            int targetIndex = targetLine ?? effectiveCount;
+            if (targetIndex > effectiveCount) targetIndex = effectiveCount;
             // 若目標位置就在選取範圍內，無須搬移，但必須清空選取區防呆
             if (targetIndex >= minLine && targetIndex <= maxLine)
             {
@@ -212,12 +239,13 @@ public sealed class SequencerClipboardManager
                 rows.RemoveAt(i);
             }
 
+            int newEffectiveCount = GetEffectiveRowCount(rows);
             if (targetIndex > maxLine)
             {
                 targetIndex -= (maxLine - minLine + 1);
             }
             if (targetIndex < 0) targetIndex = 0;
-            if (targetIndex > rows.Count) targetIndex = rows.Count;
+            if (targetIndex > newEffectiveCount) targetIndex = newEffectiveCount;
 
             for (int i = 0; i < movingRows.Count; i++)
             {
@@ -237,8 +265,9 @@ public sealed class SequencerClipboardManager
         {
             var srcRows = sourceHost.EditorRows;
             var dstRows = targetEditor.EditorRows;
+            int srcEffectiveCount = GetEffectiveRowCount(srcRows);
 
-            if (minLine < 0 || maxLine >= srcRows.Count)
+            if (minLine < 0 || maxLine >= srcEffectiveCount)
             {
                 ClearAll();
                 return false;
@@ -259,9 +288,10 @@ public sealed class SequencerClipboardManager
             sourceHost.UpdateUndoRedoButtonState();
 
             // 2. 插入到目標 Editor 指定行或尾端
-            int targetIndex = targetLine ?? dstRows.Count;
+            int dstEffectiveCount = GetEffectiveRowCount(dstRows);
+            int targetIndex = targetLine ?? dstEffectiveCount;
             if (targetIndex < 0) targetIndex = 0;
-            if (targetIndex > dstRows.Count) targetIndex = dstRows.Count;
+            if (targetIndex > dstEffectiveCount) targetIndex = dstEffectiveCount;
 
             for (int i = 0; i < itemsCopy.Count; i++)
             {
@@ -294,13 +324,14 @@ public sealed class SequencerClipboardManager
         if (HasSelection && SourceEditor is ISequencerEditorHost sourceHost)
         {
             var srcRows = sourceHost.EditorRows;
+            int srcEffectiveCount = GetEffectiveRowCount(srcRows);
             int minLine = StartLine!.Value;
             int maxLine = EndLine!.Value;
 
-            if (minLine >= 0 && minLine < srcRows.Count)
+            if (minLine >= 0 && minLine < srcEffectiveCount)
             {
                 sourceHost.PushUndoSnapshot();
-                int end = Math.Min(maxLine, srcRows.Count - 1);
+                int end = Math.Min(maxLine, srcEffectiveCount - 1);
                 for (int i = end; i >= minLine; i--)
                 {
                     srcRows.RemoveAt(i);
@@ -316,7 +347,7 @@ public sealed class SequencerClipboardManager
         }
 
         var rows = targetEditor.EditorRows;
-        if (clickedRow != null && rows.Contains(clickedRow))
+        if (clickedRow != null && !clickedRow.IsTrailingPlaceholder && rows.Contains(clickedRow))
         {
             targetEditor.PushUndoSnapshot();
             rows.Remove(clickedRow);

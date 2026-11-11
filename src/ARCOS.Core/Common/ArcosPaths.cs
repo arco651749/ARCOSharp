@@ -97,14 +97,59 @@ public static class ArcosPaths
         return dir;
     }
 
+    private static string? _sessionLogFilePath;
+    private static readonly object _sessionLogLock = new();
+
     /// <summary>
-    /// 取得今日系統日誌檔案完整路徑：LOGS/yyyyMMdd.log
+    /// 取得當次開啟 ARCOSharp 的專屬 Session 日誌檔案路徑：LOGS/yyyyMMdd-HHmmss.log
     /// </summary>
-    public static string GetTodayLogFilePath()
+    public static string SessionLogFilePath
     {
-        if (!Directory.Exists(LogsDirectory)) Directory.CreateDirectory(LogsDirectory);
-        return Path.Combine(LogsDirectory, $"{DateTime.Now:yyyyMMdd}.log");
+        get
+        {
+            lock (_sessionLogLock)
+            {
+                if (string.IsNullOrEmpty(_sessionLogFilePath))
+                {
+                    InitSessionLogFile();
+                }
+                return _sessionLogFilePath!;
+            }
+        }
     }
+
+    /// <summary>
+    /// 初始化當次開啟的 Session Log 檔案（以當下日期+時間命名，建立於 LOGS 目錄下）
+    /// </summary>
+    public static string InitSessionLogFile()
+    {
+        lock (_sessionLogLock)
+        {
+            try
+            {
+                if (!Directory.Exists(LogsDirectory)) Directory.CreateDirectory(LogsDirectory);
+                if (string.IsNullOrEmpty(_sessionLogFilePath))
+                {
+                    _sessionLogFilePath = Path.Combine(LogsDirectory, $"{DateTime.Now:yyyyMMdd-HHmmss}.log");
+                }
+                if (!File.Exists(_sessionLogFilePath))
+                {
+                    File.WriteAllText(_sessionLogFilePath, $"=== ARCOSharp Session Started at {DateTime.Now:yyyy-MM-dd HH:mm:ss.fff} ==={Environment.NewLine}");
+                }
+                return _sessionLogFilePath;
+            }
+            catch
+            {
+                _sessionLogFilePath ??= Path.Combine(LogsDirectory, $"{DateTime.Now:yyyyMMdd-HHmmss}.log");
+                return _sessionLogFilePath;
+            }
+        }
+    }
+
+    /// <summary>
+    /// 取得今日系統日誌檔案完整路徑（向後相容，回傳當次 Session Log 檔案路徑）
+    /// </summary>
+    public static string GetTodayLogFilePath() => SessionLogFilePath;
 
     /// <summary>
     /// 解析 .prog (或向後相容 .pro) 專案檔案路徑（預設在根目錄）

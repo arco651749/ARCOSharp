@@ -97,7 +97,6 @@
 | **Pallet2D** | `Point&Path@Pallet2D::$point, $nx, $ny` | `$point[0]`原點, `[1]`X終點, `[2]`Y終點 | 自動產生 2D 矩陣陣列 | `$point` 內必須預先具備 3 個基準點 |
 | **Circle2DPath** | `Point&Path@Circle2DPath::$P, $deg1, $deg2, $sec` | 圓心[0], 起點[1], 終點[2], 起迄角, 分割數 | 自動依圓弧分割出點陣列路徑 | 配合 `Motion@AddPath` 跑圓弧運動 |
 | **ResetPalletIndex**| `Point&Path@ResetPalletIndex::$point(, $idx)` | 重設料盤內部游標，未給預設 0 | 滿盤換盤後必須呼叫此指令歸零 | 換新 Tray 盤時必備 |
-| **CheckPalletLast?**| `Point&Path@CheckPalletLast?::$point` | 檢查內部游標是否在最後一顆 | 結果輸出至 `$(point)#Last?` | 亦可於 `GoPallet` 執行完自動觸發 |
 | **Select(X=A?B:C)** | `Point&Path@Select(X=A?B:C)::$P=$logic ? $P1 : $P2` | 三元條件選擇點位 | 依據條件動態二選一目標點 | 條件式 `$logic` 內嚴禁帶 `$` 前綴 |
 | **Point2WS** | `Point&Path@Point2WS::$point, $ws` | 機構座標轉換為工作區座標 | 多相機、多手臂手眼校正換算 | 需先以 `Calculate` 建立好 `$ws` 原點與軸向 |
 | **WS2Point** | `Point&Path@WS2Point::$point, $ws` | 工作區座標轉回機構實際座標 | 讓機構移動至視覺辨識出的空間位置 | 影像對位轉手臂座標最常用指令 |
@@ -192,12 +191,9 @@
 | **WarningBox** | `System@WarningBox::$logic, $msg;` | 條件式, 提示文字 | 當條件為真時彈出警告詢問是否繼續 | 條件式內嚴禁帶 `$` |
 | **ProgramSection**| `System@ProgramSection::$no, $name;` | 編號 (0~99), 區段名稱 | 命名當前程式區段 | 方便架構化識別 |
 | **ProgramLoad** | `System@ProgramLoad::$file.pro;` | 專案檔名 | 載入並切換至新工程檔 | 機種整線大換模使用 |
-| **SystemPause** | `System@SystemPause::;` | 無參數 | 全域暫停（觸發 Prog 95） | 掛起所有普通 Thread，但帶 `&` 的守護緒不中斷 |
-| **SystemResume**| `System@SystemResume::;` | 無參數 | 全域恢復運作（觸發 Prog 94） | 喚醒被 SystemPause 暫停的任務 |
-| **IncludeModule**| `System@IncludeModule::$module;` | 模組名稱 (如 Redis, Python) | 載入 `ExternalModules/$module` 外掛 | 調用 Redis/Python 前必須先 Include |
-| **ParameterSet**| `System@ParameterSet::$key, $val(, $sec);` | 鍵, 值, 分區 | 寫入系統全域配方參數 | 支援獨立分區 |
-| **ParameterSave**| `System@ParameterSave::$file;` | 設定檔名 | 備份當前系統參數到硬碟 | 配方存檔 |
-| **ParameterLoad**| `System@ParameterLoad::$file;` | 設定檔名 | 從硬碟讀取配方參數覆寫 | 開機或配方切換時加載 |
+| **Pause / SystemPause** | `System@Pause::($thread)(, CONDITION=$iologic);` | 目標執行緒(選填), 觸發條件(選填) | 雙層暫停：未帶 `$thread` 為全域暫停；帶 `$thread` 為分站 Local Pause | 帶 `&` 的特權緒不受全域暫停阻擋 |
+| **Resume / SystemResume**| `System@Resume::($thread)(, CONDITION=$iologic);` | 目標執行緒(選填), 觸發條件(選填) | 雙層恢復：解除全域或指定分站執行緒之暫停 | 喚醒被 Pause 暫停的任務 |
+| **IncludeModule**| `System@IncludeModule::$module;` | 模組名稱 (如 Redis, Python) | 動態載入功能模組（驅動與設備由各模組自行管理） | 調用擴充模組前必須先 Include |
 
 ---
 

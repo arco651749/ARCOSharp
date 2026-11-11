@@ -182,12 +182,15 @@ public int GetCounter(string counterName);
 
 - **命名空間**：`ARCOS.Core.Execution`
 - **原始碼路徑**：[`src/ARCOS.Core/Execution/ExecutionContext.cs`](../../src/ARCOS.Core/Execution/ExecutionContext.cs)
-- **用途說明**：執行緒運行上下文，封裝當前線程的一切資源，為指令 Handler 的唯一環境介面。
+- **用途說明**：獨立平行執行緒運行上下文，封裝當前線程的一切資源、平行背景高速直譯迴圈與雙層暫停狀態，為指令 Handler 的唯一環境介面。
 
 ### 公開屬性與事件
 ```csharp
 public int ThreadId { get; set; }
 public string ThreadName { get; set; }
+public bool IsPauseExempt { get; } // ThreadName 尾端帶 "&" 時為 true，享有免全域暫停特權
+public bool IsLocalPaused { get; set; } // 分站局部暫停旗標 (自動同步 <ThreadName>#Pause?)
+public bool IsEffectivelyPaused { get; } // 綜合判定是否受 Local Pause 或 Global Pause 暫停
 public ProgramTable Program { get; set; }
 public int ProgIndex { get; set; } // 寫入時自動調用 NotifyProgIndex
 public int ReportedProgIndex { get; } // 供 UI 異步節流讀取之原子 PC
@@ -201,10 +204,13 @@ public bool IsRunning { get; set; }
 
 public event Action<int>? OnProgIndexNoticed;
 public event Action<string, bool>? OnLog;
+public event Action<ExecutionContext>? OnExecutionStopped;
 ```
 
 ### 公開方法
 ```csharp
+public void StartBackgroundLoop(CommandExecutor executor);
+public void StopBackgroundLoop(bool resetRunningFlag = true);
 public void NotifyProgIndex(int pc);
 public void Log(string message, bool isError = false);
 ```
@@ -287,19 +293,25 @@ public CommandResult ExecuteCommandLine(ExecutionContext ctx, string commandLine
 
 - **命名空間**：`ARCOS.Core.Execution`
 - **原始碼路徑**：[`src/ARCOS.Core/Execution/ArcosThreadVM.cs`](../../src/ARCOS.Core/Execution/ArcosThreadVM.cs)
-- **用途說明**：多執行緒虛擬機器調度中心。
+- **用途說明**：多執行緒虛擬機器調度中心，管理 13 個固定主執行緒 (`ThreadMain`, `Thread1`~`Thread12`)、動態 `SubThreads`、100 個程式區 (`0`~`99`)、雙層暫停機制 (`System@Pause` / `System@Resume`) 以及系統事件程式區 (`94`~`99`) 預設指令。
 
 ```csharp
-public ObservableCollection<ExecutionContext> MainThreads { get; } // 槽位 0~12
-public ObservableCollection<ExecutionContext> SubThreads { get; }  // 槽位 90+
+public ExecutionContext[] MainThreads { get; } // 槽位 0~12 (ThreadMain, Thread1..Thread12)
+public ConcurrentDictionary<string, ExecutionContext> SubThreads { get; } // 動態平行子執行緒與系統事件執行緒
 public CommandExecutor Executor { get; }
+public bool AutoSpawnBackgroundLoop { get; set; }
+public event Action<int>? OnProgramChanged;
+
+public void InitializeDefaultSystemPrograms(); // 初始化 94=System@Resume, 95=System@Pause, 96=Thread@Run::0,0, 99=Motion@Stop
 public void LoadProgram(int progNo, ProgramTable program);
-public void StartAll();
-public void PauseAll();
-public void ResumeAll();
+public ProgramTable GetProgram(int progNo);
+public void StartThread(int threadIndex, int progNo, int startIndex = 1);
+public void SuspendThread(int threadIndex);
+public ExecutionContext StartSubThread(string subThreadName, ProgramTable program, int startIndex = 1);
+public void SetGlobalPause(bool isPaused, bool triggerHook = false);
+public int SetThreadLocalPause(IEnumerable<string> threadTargets, bool isPaused);
+public ExecutionContext? TriggerSystemHook(int progNo); // 觸發 94~99 系統事件，自動產生尾端帶 "&" 之特權 SubThread
 public void StopAll();
-public void Step(int progNo);
-public void ResetProgram(int progNo);
 ```
 
 ---

@@ -61,83 +61,17 @@ public partial class ComSelectWindow : Window
 
     private void InitializeDefaultCommands()
     {
-        // 1. System
-        _moduleActions["System"] = new List<string>
+        var csviModules = new[] { "System", "Thread", "Variable", "IO", "Motion", "Capture", "DAQ", "Python" };
+        foreach (var mod in csviModules)
         {
-            "Note", "Log Message", "Log Error", "Clear Message",
-            "Clear Error", "Delay", "Record", "RecordWrite",
-            "RecordRead", "LogRecordCycleTime", "TimerReset", "TimerCheck",
-            "CounterReset", "CounterCheck", "MessageBox", "WarningBox",
-            "ErrorBox", "ParameterSet", "SystemPause", "AddExternalDevice", "Nop"
-        };
+            var csviCmds = ModuleRegistry.GetCsviCommandsForModule(mod);
+            if (csviCmds != null && csviCmds.Count > 0)
+            {
+                _moduleActions[mod] = csviCmds.ToList();
+            }
+        }
 
-        // 2. Thread
-        _moduleActions["Thread"] = new List<string>
-        {
-            "Thread Label", "Jump", "JumpIf", "JumpIfNot",
-            "Run", "Pause", "Resume", "Stop",
-            "Call", "Return", "Loop", "LoopEnd",
-            "ErrorHandler", "ErrorRetry", "ErrorGoto"
-        };
-
-        // 3. IO
-        _moduleActions["IO"] = new List<string>
-        {
-            "BitOn", "BitOff", "BitWait", "BitCheck",
-            "PortWrite", "PortRead", "AddIODriver"
-        };
-
-        // 4. Motion
-        _moduleActions["Motion"] = new List<string>
-        {
-            "AbsMove", "RelMove", "Jog", "Home",
-            "Stop", "WaitDone", "AddMotion", "GetPos"
-        };
-
-        // 5. Capture
-        _moduleActions["Capture"] = new List<string>
-        {
-            "Snap", "Live", "Stop", "SaveImage",
-            "LoadImage", "FindCircle", "FindPattern", "Threshold", "Binarize"
-        };
-
-        // 6. Point&Path
-        _moduleActions["Point&Path"] = new List<string>
-        {
-            "TeachPoint", "MovePoint", "LoadPath", "RunPath", "SetCoord"
-        };
-
-        // 7. Variable
-        _moduleActions["Variable"] = new List<string>
-        {
-            "Set", "Get", "Calc", "Compare", "Clear"
-        };
-
-        // 8. StationInfo
-        _moduleActions["StationInfo"] = new List<string>
-        {
-            "SetStation", "GetStation", "SetBatch", "GetYield", "ResetStats"
-        };
-
-        // 9. MultiStation
-        _moduleActions["MultiStation"] = new List<string>
-        {
-            "SyncWait", "SyncSignal", "Handoff", "CheckStatus"
-        };
-
-        // 10. DAQ
-        _moduleActions["DAQ"] = new List<string>
-        {
-            "SampleOnce", "StartContinuous", "StopContinuous", "ReadBuffer"
-        };
-
-        // 11. User
-        _moduleActions["User"] = new List<string>
-        {
-            "ShowDialog", "InputText", "Confirm", "SelectRecipe"
-        };
-
-        // 12. Call (動態掃描 ExternalModules/ 目錄下所有可用之 CSVI 虛擬儀表)
+        // Call (動態掃描 ExternalModules/ 目錄下所有可用之 CSVI 虛擬儀表)
         var callActions = new List<string>();
         try
         {
@@ -156,20 +90,6 @@ public partial class ComSelectWindow : Window
             callActions.Add("mycsvi.csvi");
         }
         _moduleActions["Call"] = callActions;
-
-        // 13. Python
-        _moduleActions["Python"] = new List<string>
-        {
-            "Script", "File", "SetVariable", "GetVariable",
-            "SetPoint", "GetPoint", "SetCapture", "GetCapture",
-            "SetCaptureFile", "ResetSession", "Init"
-        };
-
-        // 14. AiAgent
-        _moduleActions["AiAgent"] = new List<string>
-        {
-            "InspectDefect", "SuggestCorrection", "AuditLogs", "AutonomousRun"
-        };
     }
 
     private void LoadCategories()

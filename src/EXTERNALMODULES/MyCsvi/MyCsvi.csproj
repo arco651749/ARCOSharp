@@ -15,6 +15,7 @@
     <PackageReference Include="Avalonia" Version="11.0.10" />
     <PackageReference Include="Avalonia.Desktop" Version="11.0.10" />
     <PackageReference Include="Avalonia.Themes.Fluent" Version="11.0.10" />
+    <PackageReference Include="Avalonia.Markup.Xaml.Loader" Version="11.0.10" />
     <ProjectReference Include="..\..\ARCOS.Core\ARCOS.Core.csproj">
       <Private>false</Private>
     </ProjectReference>

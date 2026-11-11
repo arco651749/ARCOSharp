@@ -38,23 +38,17 @@
 | **Pause** / **SystemPause** | `($thread)(, CONDITION=$iologic)` | 當 `CONDITION` 為 True (預設為 True) 時：若未帶 `$thread`，全域暫停除 `&` 外的全部 Thread 並執行 `Pause On` (Prog 95)；若帶有 `$thread` 則僅設定該 Thread 的 Local Pause (`<Thread>#Pause? = True`)，不影響其他工位 Thread |
 | **Resume** / **SystemResume** | `($thread)(, CONDITION=$iologic)` | 當 `CONDITION` 為 True (預設為 True) 時：若未帶 `$thread`，全域恢復 ARCOS 系統運作並執行 `Pause Off` (Prog 94)；若帶有 `$thread` 則解除該 Thread 的 Local Pause 繼續執行 |
 
-### 3. 資源載入與參數儲存 (Parameters & External Loading)
+### 3. 資源載入與面板控制 (External Loading & User Panel)
 | 指令 | 參數範例 | 說明 |
 | :--- | :--- | :--- |
 | **ProgramSection** | `$section, $name` | 設定當前程式區段的識別編號 `$section` 與其名稱 `$name` |
-| **ProgramLoad** | `$file.pro` | 載入並切換至指定的 ARCOS 工程檔 (.pro) |
-| **UserPanelOpen** | `$vi` | 載入並彈出指定的使用者自訂面板 (User Panel) VI 檔案 |
-| **UserPanelCMD** | `$cmd` | 執行指定的使用者自訂面板 (User Panel) VI 指令，多個參數時，參數之間用逗號分隔 |
-| **ParameterSet** | `$key, $value(, $section)` | 設定系統參數：可選擇將 `$key=$value` 存入指定 `$section` 變數區內 |
-| **ParameterSave** | `$file` | 將目前參數設定備份至檔案內 |
-| **ParameterLoad** | `$file` | 從檔案內讀取並覆寫參數設定 |
+| **ProgramLoad** | `$file.pro` | 載入並切換至指定的 ARCOS 工程檔 (.prog / .pro / .init) |
+| **UserPanelOpen** | `$vi` | 載入並彈出指定的使用者自訂面板 (User Panel) CSVI 檔案 |
 
-### 4. 擴充模組與驅動程式對接 (Modules & Drivers)
+### 4. 擴充模組動態載入 (Dynamic Modules)
 | 指令 | 參數範例 | 說明 |
 | :--- | :--- | :--- |
-| **IncludeModule** | `$module` | 從 `ExternalModules/$module` 目錄下載入指令模組 |
-| **AddExternalDriver** | `$module, $drive` | 從 `ExternalModules/$module/$driver` 目錄下載入驅動程式 |
-| **AddExternalDevice** | `$device, $driver, $parameter` | 以指定的驅動程式註冊並新增一個硬體作動設備 |
+| **IncludeModule** | `$module` | 動態載入指定功能模組（由該模組自行管理其內部驅動與硬體設備） |
 
 ---
 
@@ -69,7 +63,7 @@ System@Log Message::Cylinder is moving down;
 System@Delay::0.5
 ```
 
-**範例 2：宣告程式區段並透過 MessageBox 警告使用者**
+**範例 2：宣告程式區段並透過 WarningBox 警告使用者**
 定義一個叫做 "MainProcess" 的專屬程式區，並判斷若硬體未就位，跳出警告給使用者看：
 
 ```markdown
@@ -80,12 +74,12 @@ System@ProgramSection::1,MainProcess;
 System@WarningBox::L_DoorClose,The door is open! Do you want to continue running?
 ```
 
-**範例 3：載入參數檔並讀取計時**
-在每次機台初始化時，載入參數設置，並測量某段手動調整程式段的時間：
+**範例 3：載入擴充模組並測量計時**
+在機台初始化時載入擴充模組，並測量某段處理程式段的時間：
 
 ```markdown
-// 載入機台預設參數檔
-System@ParameterLoad::DefaultConfig.ini;
+// 動態載入擴充模組
+System@IncludeModule::Python;
 
 // 開始計時
 System@TimerReset::ProcessTimer,10;

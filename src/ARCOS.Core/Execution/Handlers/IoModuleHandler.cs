@@ -23,13 +23,8 @@ public class IoModuleHandler : IModuleHandler
         "CheckLogicOff",
         "SetPortName",
         "AddVirtualIO",
-        "VirtualIO",
         "AddIODriver",
-        "AddDriver",
-        "AddDrvier",
         "InitIOPort",
-        "Initio",
-        "InitIO",
         "ForceUpdate",
         "Shift"
     };
@@ -42,7 +37,7 @@ public class IoModuleHandler : IModuleHandler
         parsed.TryGetValue("_ErrorLabel", out var errorLabel);
         parsed.TryGetValue("_ErrorMsg", out var errorMsg);
 
-        // 1. SetPort / ClrPort (支援選填 $second 延遲)
+        // 1. SetPort / ClrPort (支援選填 $second 延遲，Pause 時自動凍結計時)
         if (action.Equals("SetPort", StringComparison.OrdinalIgnoreCase) ||
             action.Equals("ClrPort", StringComparison.OrdinalIgnoreCase))
         {
@@ -63,12 +58,12 @@ public class IoModuleHandler : IModuleHandler
                 ctx.Engines.Io.SetPort(port, val);
                 ctx.State.Value = 1;
                 ctx.State["targetMs"] = targetMs;
-                ctx.State["startTicks"] = Environment.TickCount64;
+                ctx.State["startClockMs"] = ctx.GetActiveClockMs();
                 return CommandResult.Wait();
             }
 
-            long startTicks = ctx.State["startTicks"]?.GetValue<long>() ?? Environment.TickCount64;
-            long elapsed = Environment.TickCount64 - startTicks;
+            long startClockMs = ctx.State["startClockMs"]?.GetValue<long>() ?? ctx.GetActiveClockMs();
+            long elapsed = ctx.GetActiveClockMs() - startClockMs;
             if (elapsed >= targetMs)
             {
                 ctx.State.Reset();
@@ -98,15 +93,15 @@ public class IoModuleHandler : IModuleHandler
                 ctx.Engines.Io.SetPort(port, initialVal);
                 ctx.State.Value = 1;
                 ctx.State["phase"] = 1;
-                ctx.State["startTicks"] = Environment.TickCount64;
+                ctx.State["startClockMs"] = ctx.GetActiveClockMs();
                 ctx.State["durationMs"] = t1Ms;
                 return CommandResult.Wait();
             }
 
             int phase = ctx.State["phase"]?.GetValue<int>() ?? 1;
-            long startTicks = ctx.State["startTicks"]?.GetValue<long>() ?? Environment.TickCount64;
+            long startClockMs = ctx.State["startClockMs"]?.GetValue<long>() ?? ctx.GetActiveClockMs();
             long durMs = ctx.State["durationMs"]?.GetValue<long>() ?? 0;
-            long elapsed = Environment.TickCount64 - startTicks;
+            long elapsed = ctx.GetActiveClockMs() - startClockMs;
 
             if (phase == 1)
             {
@@ -114,7 +109,7 @@ public class IoModuleHandler : IModuleHandler
                 {
                     ctx.Engines.Io.SetPort(port, secondVal);
                     ctx.State["phase"] = 2;
-                    ctx.State["startTicks"] = Environment.TickCount64;
+                    ctx.State["startClockMs"] = ctx.GetActiveClockMs();
                     ctx.State["durationMs"] = t2Ms;
                 }
                 return CommandResult.Wait();
@@ -158,12 +153,12 @@ public class IoModuleHandler : IModuleHandler
             {
                 ctx.State.Value = 1;
                 ctx.State["timeoutMs"] = targetTimeoutMs;
-                ctx.State["startTicks"] = Environment.TickCount64;
+                ctx.State["startClockMs"] = ctx.GetActiveClockMs();
                 return CommandResult.Wait();
             }
 
-            long startTicks = ctx.State["startTicks"]?.GetValue<long>() ?? Environment.TickCount64;
-            long elapsed = Environment.TickCount64 - startTicks;
+            long startClockMs = ctx.State["startClockMs"]?.GetValue<long>() ?? ctx.GetActiveClockMs();
+            long elapsed = ctx.GetActiveClockMs() - startClockMs;
 
             if (elapsed >= targetTimeoutMs)
             {
@@ -201,12 +196,12 @@ public class IoModuleHandler : IModuleHandler
             {
                 ctx.State.Value = 1;
                 ctx.State["timeoutMs"] = targetTimeoutMs;
-                ctx.State["startTicks"] = Environment.TickCount64;
+                ctx.State["startClockMs"] = ctx.GetActiveClockMs();
                 return CommandResult.Wait();
             }
 
-            long startTicks = ctx.State["startTicks"]?.GetValue<long>() ?? Environment.TickCount64;
-            long elapsed = Environment.TickCount64 - startTicks;
+            long startClockMs = ctx.State["startClockMs"]?.GetValue<long>() ?? ctx.GetActiveClockMs();
+            long elapsed = ctx.GetActiveClockMs() - startClockMs;
 
             if (elapsed >= targetTimeoutMs)
             {
@@ -228,26 +223,37 @@ public class IoModuleHandler : IModuleHandler
             return CommandResult.Done();
         }
 
-        // 6. AddVirtualIO / VirtualIO
-        if (action.Equals("AddVirtualIO", StringComparison.OrdinalIgnoreCase) ||
-            action.Equals("VirtualIO", StringComparison.OrdinalIgnoreCase))
+        // 6. AddVirtualIO ($port, {on,off,0,1,$logic})
+        if (action.Equals("AddVirtualIO", StringComparison.OrdinalIgnoreCase))
         {
             if (posArgs.Count >= 2)
             {
                 string port = posArgs[0];
-                string valStr = posArgs[1];
-                bool val = valStr.Equals("On", StringComparison.OrdinalIgnoreCase) ||
-                           valStr.Equals("1", StringComparison.OrdinalIgnoreCase) ||
-                           valStr.Equals("True", StringComparison.OrdinalIgnoreCase);
+                string valStr = posArgs[1].Trim();
+                bool val;
+                if (valStr.Equals("On", StringComparison.OrdinalIgnoreCase) ||
+                    valStr.Equals("1", StringComparison.OrdinalIgnoreCase) ||
+                    valStr.Equals("True", StringComparison.OrdinalIgnoreCase))
+                {
+                    val = true;
+                }
+                else if (valStr.Equals("Off", StringComparison.OrdinalIgnoreCase) ||
+                         valStr.Equals("0", StringComparison.OrdinalIgnoreCase) ||
+                         valStr.Equals("False", StringComparison.OrdinalIgnoreCase))
+                {
+                    val = false;
+                }
+                else
+                {
+                    val = LogicEvaluator.EvaluateLogic(valStr, ctx.Engines.Io, ctx.Engines.Variable, ctx.CurrentSection);
+                }
                 ctx.Engines.Io.AddVirtualIO(port, val);
             }
             return CommandResult.Done();
         }
 
-        // 7. AddIODriver / AddDrvier / AddDriver
-        if (action.Equals("AddIODriver", StringComparison.OrdinalIgnoreCase) ||
-            action.Equals("AddDrvier", StringComparison.OrdinalIgnoreCase) ||
-            action.Equals("AddDriver", StringComparison.OrdinalIgnoreCase))
+        // 7. AddIODriver
+        if (action.Equals("AddIODriver", StringComparison.OrdinalIgnoreCase))
         {
             if (posArgs.Count >= 1)
             {
@@ -266,10 +272,8 @@ public class IoModuleHandler : IModuleHandler
             return CommandResult.Done();
         }
 
-        // 8. InitIOPort / Initio / InitIO / ForceUpdate
+        // 8. InitIOPort / ForceUpdate
         if (action.Equals("InitIOPort", StringComparison.OrdinalIgnoreCase) ||
-            action.Equals("Initio", StringComparison.OrdinalIgnoreCase) ||
-            action.Equals("InitIO", StringComparison.OrdinalIgnoreCase) ||
             action.Equals("ForceUpdate", StringComparison.OrdinalIgnoreCase))
         {
             if (posArgs.Count > 0)

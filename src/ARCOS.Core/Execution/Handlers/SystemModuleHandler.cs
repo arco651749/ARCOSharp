@@ -34,13 +34,7 @@ public class SystemModuleHandler : IModuleHandler
         "ProgramSection",
         "ProgramLoad",
         "UserPanelOpen",
-        "UserPanelCMD",
-        "ParameterSet",
-        "ParameterSave",
-        "ParameterLoad",
-        "IncludeModule",
-        "AddExternalDriver",
-        "AddExternalDevice"
+        "IncludeModule"
     };
 
     public IReadOnlyList<string> GetSupportedCommands() => Commands;
@@ -62,7 +56,7 @@ public class SystemModuleHandler : IModuleHandler
 
         if (action.Equals("Log Error", StringComparison.OrdinalIgnoreCase))
         {
-            ctx.Log(filteredParam, isError: true);
+            // HandleError 內部會呼叫 ctx.Log(..., isError: true) 並觸發自癒跳轉或 99: EMG Stop
             return CommandResult.Fail(filteredParam);
         }
 
@@ -74,27 +68,84 @@ public class SystemModuleHandler : IModuleHandler
 
         if (action.Equals("Clear Error", StringComparison.OrdinalIgnoreCase))
         {
-            ctx.Engines.Record.GetOrCreateChannel("SYSTEMLOG").ClearMatching(m => m.Contains("[ERROR]"));
+            ctx.Engines.Io.SetPort("System#Error?", false);
+            ctx.Engines.Record.ClearSystemErrors();
             return CommandResult.Done();
         }
 
         if (action.Equals("MessageBox", StringComparison.OrdinalIgnoreCase))
         {
-            ctx.Log($"[MessageBox] {filteredParam}");
+            if (ctx.VM?.OnMessageBoxRequested == null)
+            {
+                ctx.Log($"[MessageBox] {filteredParam}");
+                return CommandResult.Done();
+            }
+
+            if (ctx.State.Value == 0)
+            {
+                ctx.Log($"[MessageBox] {filteredParam}");
+                ctx.State.Value = 1;
+                ctx.State.TransientObject = ctx.VM.OnMessageBoxRequested(ctx.ThreadName, filteredParam);
+                return CommandResult.Wait();
+            }
+
+            if (ctx.State.TransientObject is Task dialogTask && !dialogTask.IsCompleted)
+            {
+                return CommandResult.Wait();
+            }
+
             return CommandResult.Done();
         }
 
         if (action.Equals("WarningBox", StringComparison.OrdinalIgnoreCase))
         {
-            var parts = filteredParam.Split(',', 2, StringSplitOptions.TrimEntries);
-            if (parts.Length > 1)
+            if (ctx.State.Value == 0)
             {
-                bool cond = LogicEvaluator.EvaluateLogic(parts[0], ctx.Engines.Io, ctx.Engines.Variable, ctx.CurrentSection);
-                if (cond)
+                var parts = filteredParam.Split(',', 2, StringSplitOptions.TrimEntries);
+                bool cond;
+                string msg;
+                if (parts.Length > 1)
                 {
-                    ctx.Log($"[WarningBox] Condition '{parts[0]}' triggered: {parts[1]}");
+                    cond = LogicEvaluator.EvaluateLogic(parts[0], ctx.Engines.Io, ctx.Engines.Variable, ctx.CurrentSection);
+                    msg = parts[1];
+                }
+                else
+                {
+                    cond = true;
+                    msg = filteredParam.Trim();
+                }
+
+                if (!cond)
+                {
+                    return CommandResult.Done();
+                }
+
+                ctx.Log($"[WarningBox] {msg}");
+                if (ctx.VM?.OnWarningBoxRequested == null)
+                {
+                    return CommandResult.Done();
+                }
+
+                ctx.State.Value = 1;
+                ctx.State.TransientObject = ctx.VM.OnWarningBoxRequested(ctx.ThreadName, msg);
+                return CommandResult.Wait();
+            }
+
+            if (ctx.State.TransientObject is Task<bool> warnTask)
+            {
+                if (!warnTask.IsCompleted)
+                {
+                    return CommandResult.Wait();
+                }
+
+                bool continueExecution = warnTask.Status == TaskStatus.RanToCompletion && warnTask.Result;
+                if (!continueExecution)
+                {
+                    ctx.Log($"[WarningBox] Operator selected STOP on thread '{ctx.ThreadName}'.");
+                    return CommandResult.Stop("Operator chose to stop execution in WarningBox.");
                 }
             }
+
             return CommandResult.Done();
         }
 
@@ -269,36 +320,7 @@ public class SystemModuleHandler : IModuleHandler
             return CommandResult.Done();
         }
 
-        if (action.Equals("UserPanelCMD", StringComparison.OrdinalIgnoreCase))
-        {
-            ctx.Log($"[UserPanelCMD] {filteredParam.Trim()}");
-            return CommandResult.Done();
-        }
-
-        if (action.Equals("ParameterSet", StringComparison.OrdinalIgnoreCase))
-        {
-            var parts = filteredParam.Split(',', StringSplitOptions.TrimEntries);
-            if (parts.Length >= 2)
-            {
-                string sec = parts.Length > 2 ? parts[2] : ctx.CurrentSection;
-                ctx.Engines.Variable.Set(parts[0], parts[1], sec);
-            }
-            return CommandResult.Done();
-        }
-
-        if (action.Equals("ParameterSave", StringComparison.OrdinalIgnoreCase))
-        {
-            ctx.Engines.Variable.SaveToFile(filteredParam.Trim());
-            return CommandResult.Done();
-        }
-
-        if (action.Equals("ParameterLoad", StringComparison.OrdinalIgnoreCase))
-        {
-            ctx.Engines.Variable.LoadFromFile(filteredParam.Trim());
-            return CommandResult.Done();
-        }
-
-        // 4. 擴充模組與驅動程式對接 (Modules & Drivers)
+        // 4. 擴充模組動態載入 (Dynamic Modules)
         if (action.Equals("IncludeModule", StringComparison.OrdinalIgnoreCase))
         {
             string modName = filteredParam.Trim();
@@ -335,7 +357,7 @@ public class SystemModuleHandler : IModuleHandler
                 }
             }
 
-            // 2. 探測 MODULES/<modName>/Init.csvi (或 init.csvi) 並執行初始化
+            // 3. 探測 MODULES/<modName>/Init.csvi (或 init.csvi) 並執行初始化
             string? initCsvi = FindModuleInitCsvi(modName);
             var handler = ctx.Registry?.GetHandler(modName);
             if (initCsvi != null)
@@ -355,27 +377,7 @@ public class SystemModuleHandler : IModuleHandler
             return CommandResult.Done();
         }
 
-        if (action.Equals("AddExternalDriver", StringComparison.OrdinalIgnoreCase))
-        {
-            var parts = filteredParam.Split(',', StringSplitOptions.TrimEntries);
-            if (parts.Length >= 2)
-            {
-                ctx.Log($"[AddExternalDriver] Module '{parts[0]}', Driver '{parts[1]}'");
-            }
-            return CommandResult.Done();
-        }
-
-        if (action.Equals("AddExternalDevice", StringComparison.OrdinalIgnoreCase))
-        {
-            var parts = filteredParam.Split(',', 3, StringSplitOptions.TrimEntries);
-            if (parts.Length >= 2)
-            {
-                ctx.Log($"[AddExternalDevice] Device '{parts[0]}', Driver '{parts[1]}'");
-            }
-            return CommandResult.Done();
-        }
-
-        return CommandResult.Done();
+        return CommandResult.Fail($"Command CSVI not found: MODULES/System/{action}.csvi");
     }
 
     private static void ExecutePauseOrResume(string filteredParam, ExecutionContext ctx, bool isPause)
@@ -430,7 +432,7 @@ public class SystemModuleHandler : IModuleHandler
         // 3. 未指定 $THREAD -> 設定 Global Pause (除帶 & 特權外的全部 Thread 暫停/恢復)
         if (ctx.VM != null)
         {
-            ctx.VM.SetGlobalPause(isPause, triggerHook: true);
+            ctx.VM.SetGlobalPause(isPause, triggerHook: false);
         }
         else
         {

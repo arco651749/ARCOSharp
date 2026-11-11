@@ -54,7 +54,7 @@ public sealed class CommandResult
     public static CommandResult Fail(string errorMsg, string? errorLabel = null) =>
         new(CommandStatus.Error, errorMsg: errorMsg, errorLabel: errorLabel);
 
-    public static CommandResult Retry() => new(CommandStatus.Retry);
+    public static CommandResult Retry(int offset = 0) => new(CommandStatus.Retry, targetLine: offset);
 
     public static CommandResult Stop(string? msg = null) => new(CommandStatus.Stop, errorMsg: msg);
 }

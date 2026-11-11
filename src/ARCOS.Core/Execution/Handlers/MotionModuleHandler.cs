@@ -52,6 +52,20 @@ public class MotionModuleHandler : IModuleHandler
         parsed.TryGetValue("_ErrorLabel", out var errorLabel);
         parsed.TryGetValue("_ErrorMsg", out var errorMsg);
 
+        // 0. 無參數 Motion@Stop：對全系統所有已掛載的 Motion Device 全部下達緊急停止
+        if (posArgs.Count == 0 && action.Equals("Stop", StringComparison.OrdinalIgnoreCase))
+        {
+            var motionEntries = ctx.Drivers.GetDeviceEntriesByCategory("Motion");
+            foreach (var (devName, drv) in motionEntries)
+            {
+                var stopTicket = new DriverTicket("Stop", "");
+                drv.PostTicket(stopTicket);
+                ctx.Engines.Io.SetPort($"{devName}#Busy?", false);
+                ctx.Engines.Io.SetPort($"{devName}#Done?", true);
+            }
+            return CommandResult.Done();
+        }
+
         if (posArgs.Count == 0) return CommandResult.Done();
         string motor = posArgs[0];
 

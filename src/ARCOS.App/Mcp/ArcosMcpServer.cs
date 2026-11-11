@@ -454,7 +454,8 @@ public static class ArcosMcpServer
         var seq = mainWin.Sequencer;
         var txtStatus = seq?.FindControl<TextBlock>("TxtMachineStatus");
         var pnlSup = seq?.FindControl<Border>("PnlSupervisor");
-        var ctx = mainWin.VM.MainThreads[seq?.CurrentProgramNumber ?? 0];
+        int curProg = seq?.CurrentProgramNumber ?? 0;
+        var ctx = mainWin.VM.MainThreads[curProg >= 0 && curProg < 13 ? curProg : 0];
 
         var activeDlg = GetActiveDialog(mainWin);
 
@@ -482,7 +483,8 @@ public static class ArcosMcpServer
             command = r.Command,
             parameter = r.Parameter,
             isCurrentPC = r.IsCurrentPC,
-            isRangeSelected = r.IsRangeSelected
+            isRangeSelected = r.IsRangeSelected,
+            isTrailingPlaceholder = r.IsTrailingPlaceholder
         }).ToList();
 
         return JsonSerializer.Serialize(new
@@ -494,10 +496,13 @@ public static class ArcosMcpServer
             machineStatus = txtStatus?.Text ?? "IDLE",
             isSupervisorMode = pnlSup?.IsVisible ?? false,
             isLocked = seq?.IsLocked ?? false,
-            currentProgram = seq?.CurrentProgramNumber ?? 0,
+            hasAdminCredentials = AdministratorAccountManager.Instance.HasCredentialsConfigured(),
+            currentProgram = curProg,
+            effectiveRowCount = seq?.EffectiveRowCount ?? 0,
             currentPC = ctx.ProgIndex,
             isThreadRunning = ctx.IsRunning,
             isSystemPaused = mainWin.Engines.Timer.IsSystemPaused,
+            isTestThreadVisible = mainWin.TestThreadWindow?.IsVisible == true && mainWin.TestThreadWindow.WindowState != WindowState.Minimized,
             activeDialog = new
             {
                 isOpen = activeDlg != null,
@@ -914,12 +919,28 @@ public static class ArcosMcpServer
                     seq.SetSupervisorMode(isSup);
                     return JsonSerializer.Serialize(new { success = true, mode = isSup ? "Supervisor" : "Operator", isLocked = seq.IsLocked });
 
+                case "select_program":
+                    int targetProg = args?["progNo"]?.GetValue<int>() ?? rowIndex;
+                    seq.RefreshProgSelector(targetProg);
+                    seq.LoadCurrentProgramToUI();
+                    return JsonSerializer.Serialize(new { success = true, currentProg = seq.CurrentProgramNumber, rowCount = seq.EffectiveRowCount, totalRowsWithPlaceholder = seq.Rows.Count });
+
+                case "set_admin":
+                    string adminUser = command ?? "admin";
+                    string adminPass = parameter ?? "1234";
+                    AdministratorAccountManager.Instance.SaveConfig(adminUser, adminPass);
+                    return JsonSerializer.Serialize(new { success = true, hasAdminCredentials = AdministratorAccountManager.Instance.HasCredentialsConfigured(), username = adminUser });
+
+                case "clear_admin":
+                    AdministratorAccountManager.Instance.SaveConfig("", "");
+                    return JsonSerializer.Serialize(new { success = true, hasAdminCredentials = AdministratorAccountManager.Instance.HasCredentialsConfigured() });
+
                 case "select_row":
                     seq.SelectRow(rowIndex);
                     return JsonSerializer.Serialize(new { success = true, selectedRow = rowIndex });
 
                 case "edit_row":
-                    if (rowIndex < 0 || rowIndex >= seq.Rows.Count)
+                    if (rowIndex < 0 || rowIndex >= seq.EffectiveRowCount)
                         return JsonSerializer.Serialize(new { success = false, error = $"Invalid rowIndex {rowIndex}" });
                     seq.SetSupervisorMode(true);
                     if (command != null) seq.Rows[rowIndex].Command = command;
@@ -936,16 +957,17 @@ public static class ArcosMcpServer
                 case "add_row":
                     seq.SetSupervisorMode(true);
                     seq.TriggerAddRow(targetRowIndex, command ?? "IO@SetPort", parameter ?? "P0.0");
-                    return JsonSerializer.Serialize(new { success = true, rowCount = seq.Rows.Count });
+                    return JsonSerializer.Serialize(new { success = true, rowCount = seq.EffectiveRowCount, totalRowsWithPlaceholder = seq.Rows.Count });
 
                 case "delete_row":
                     seq.SetSupervisorMode(true);
                     seq.TriggerDeleteRow(rowIndex);
-                    return JsonSerializer.Serialize(new { success = true, rowCount = seq.Rows.Count });
+                    return JsonSerializer.Serialize(new { success = true, rowCount = seq.EffectiveRowCount, totalRowsWithPlaceholder = seq.Rows.Count });
 
                 case "step":
                     seq.TriggerStep();
-                    return JsonSerializer.Serialize(new { success = true, action = "step", currentPC = mainWin.VM.MainThreads[seq.CurrentProgramNumber].ProgIndex });
+                    int stepTIdx = seq.CurrentProgramNumber < 13 ? seq.CurrentProgramNumber : 0;
+                    return JsonSerializer.Serialize(new { success = true, action = "step", currentPC = mainWin.VM.MainThreads[stepTIdx].ProgIndex });
 
                 case "run":
                     seq.TriggerAutoRun();
@@ -961,15 +983,16 @@ public static class ArcosMcpServer
 
                 case "jump":
                     seq.TriggerJump(rowIndex);
-                    return JsonSerializer.Serialize(new { success = true, action = "jump", currentPC = mainWin.VM.MainThreads[seq.CurrentProgramNumber].ProgIndex });
+                    int jumpTIdx = seq.CurrentProgramNumber < 13 ? seq.CurrentProgramNumber : 0;
+                    return JsonSerializer.Serialize(new { success = true, action = "jump", currentPC = mainWin.VM.MainThreads[jumpTIdx].ProgIndex });
 
                 case "undo":
                     seq.PerformUndo();
-                    return JsonSerializer.Serialize(new { success = true, action = "undo", currentProg = seq.CurrentProgramNumber, undoCount = seq.GetUndoCount(), redoCount = seq.GetRedoCount(), rowCount = seq.Rows.Count });
+                    return JsonSerializer.Serialize(new { success = true, action = "undo", currentProg = seq.CurrentProgramNumber, undoCount = seq.GetUndoCount(), redoCount = seq.GetRedoCount(), rowCount = seq.EffectiveRowCount });
 
                 case "redo":
                     seq.PerformRedo();
-                    return JsonSerializer.Serialize(new { success = true, action = "redo", currentProg = seq.CurrentProgramNumber, undoCount = seq.GetUndoCount(), redoCount = seq.GetRedoCount(), rowCount = seq.Rows.Count });
+                    return JsonSerializer.Serialize(new { success = true, action = "redo", currentProg = seq.CurrentProgramNumber, undoCount = seq.GetUndoCount(), redoCount = seq.GetRedoCount(), rowCount = seq.EffectiveRowCount });
 
                 case "search":
                     seq.PerformSearch(parameter ?? command, forward: true);
@@ -978,12 +1001,12 @@ public static class ArcosMcpServer
                     return JsonSerializer.Serialize(new { success = true, action = "search", keyword = parameter ?? command, status = txtSearchStatus?.Text ?? "", selectedIndex = gridCmds?.SelectedIndex ?? -1 });
 
                 case "get_history":
-                    return JsonSerializer.Serialize(new { success = true, currentProg = seq.CurrentProgramNumber, undoCount = seq.GetUndoCount(), redoCount = seq.GetRedoCount(), rowCount = seq.Rows.Count });
+                    return JsonSerializer.Serialize(new { success = true, currentProg = seq.CurrentProgramNumber, undoCount = seq.GetUndoCount(), redoCount = seq.GetRedoCount(), rowCount = seq.EffectiveRowCount });
 
                 case "clear_section":
                     seq.SetSupervisorMode(true);
                     seq.TriggerClearSection();
-                    return JsonSerializer.Serialize(new { success = true, action = "clear_section", currentProg = seq.CurrentProgramNumber, rowCount = seq.Rows.Count, undoCount = seq.GetUndoCount() });
+                    return JsonSerializer.Serialize(new { success = true, action = "clear_section", currentProg = seq.CurrentProgramNumber, rowCount = seq.EffectiveRowCount, undoCount = seq.GetUndoCount() });
 
                 case "send_key":
                     string keyStr = args?["key"]?.GetValue<string>() ?? "";

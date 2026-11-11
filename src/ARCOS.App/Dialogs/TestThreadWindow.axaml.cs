@@ -48,6 +48,33 @@ public partial class TestThreadWindow : Window, ISequencerEditorHost
     private readonly ObservableCollection<SequencerRowViewModel> _rows = new();
     public ObservableCollection<SequencerRowViewModel> Rows => _rows;
     public IList<SequencerRowViewModel> EditorRows => _rows;
+    public int EffectiveRowCount => _rows.Count > 0 && _rows[^1].IsTrailingPlaceholder ? _rows.Count - 1 : _rows.Count;
+
+    public void EnsureTrailingPlaceholderRow()
+    {
+        for (int i = _rows.Count - 1; i >= 0; i--)
+        {
+            if (_rows[i].IsTrailingPlaceholder && i != _rows.Count - 1)
+            {
+                _rows.RemoveAt(i);
+            }
+        }
+
+        if (_rows.Count == 0 || !_rows[^1].IsTrailingPlaceholder)
+        {
+            _rows.Add(new SequencerRowViewModel
+            {
+                LineNumber = _rows.Count,
+                Command = string.Empty,
+                Parameter = string.Empty,
+                IsTrailingPlaceholder = true
+            });
+        }
+        else
+        {
+            _rows[^1].LineNumber = _rows.Count - 1;
+        }
+    }
 
     // 獨立 Undo / Redo 堆疊
     private readonly Dictionary<int, Stack<List<(string Command, string Parameter)>>> _undoStacks = new();
@@ -301,6 +328,7 @@ public partial class TestThreadWindow : Window, ISequencerEditorHost
                 _testContext.ProgIndex = 1;
             }
         }
+        EnsureTrailingPlaceholderRow();
 
         var txtTitle = this.FindControl<TextBox>("TxtScriptTitle");
         if (txtTitle != null)
@@ -318,6 +346,7 @@ public partial class TestThreadWindow : Window, ISequencerEditorHost
         string name = ProgramSlotItem.GetDefaultName(_currentProgNo);
         foreach (var r in _rows)
         {
+            if (r.IsTrailingPlaceholder) continue;
             if (r.Command.Equals("System@ProgramSection", StringComparison.OrdinalIgnoreCase))
             {
                 var parts = r.Parameter.Split(',', StringSplitOptions.TrimEntries);
@@ -334,12 +363,16 @@ public partial class TestThreadWindow : Window, ISequencerEditorHost
         }
 
         var prog = new ProgramTable { ProgramNumber = _currentProgNo, Name = name };
+        int lineIdx = 0;
         for (int i = 0; i < _rows.Count; i++)
         {
             var r = _rows[i];
-            r.LineNumber = i;
-            prog.Add(CommandItem.Parse($"{r.Command}\t{r.Parameter}", i));
+            if (r.IsTrailingPlaceholder) continue;
+            r.LineNumber = lineIdx;
+            prog.Add(CommandItem.Parse($"{r.Command}\t{r.Parameter}", lineIdx));
+            lineIdx++;
         }
+        EnsureTrailingPlaceholderRow();
         _testContext.Program = prog;
         SyncIoDefinitionsFromRows();
     }
@@ -1019,13 +1052,13 @@ public partial class TestThreadWindow : Window, ISequencerEditorHost
 
     private void ExecuteCopyInsert(SequencerRowViewModel? targetRow)
     {
-        int? targetLine = targetRow != null ? targetRow.LineNumber : null;
+        int? targetLine = (targetRow != null && !targetRow.IsTrailingPlaceholder) ? targetRow.LineNumber : null;
         SequencerClipboardManager.Instance.ExecuteCopyInsert(this, targetLine);
     }
 
     private void ExecuteLocalMove(SequencerRowViewModel? targetRow)
     {
-        int? targetLine = targetRow != null ? targetRow.LineNumber : null;
+        int? targetLine = (targetRow != null && !targetRow.IsTrailingPlaceholder) ? targetRow.LineNumber : null;
         SequencerClipboardManager.Instance.ExecuteMove(this, targetLine);
     }
 
@@ -1039,7 +1072,7 @@ public partial class TestThreadWindow : Window, ISequencerEditorHost
         int start = Math.Min(startLine, endLine);
         int end = Math.Max(startLine, endLine);
         var selectedItems = _rows
-            .Where(r => r.LineNumber >= start && r.LineNumber <= end)
+            .Where(r => !r.IsTrailingPlaceholder && r.LineNumber >= start && r.LineNumber <= end)
             .Select(r => (r.Command ?? "", r.Parameter ?? ""))
             .ToList();
         SequencerClipboardManager.Instance.SetSelection(this, start, end, selectedItems);
@@ -1047,13 +1080,15 @@ public partial class TestThreadWindow : Window, ISequencerEditorHost
 
     public void PasteFromClipboard(int targetIndex)
     {
-        int? targetLine = (targetIndex >= 0 && targetIndex < _rows.Count) ? targetIndex : null;
+        int effectiveCount = EffectiveRowCount;
+        int? targetLine = (targetIndex >= 0 && targetIndex < effectiveCount) ? targetIndex : null;
         SequencerClipboardManager.Instance.ExecuteCopyInsert(this, targetLine);
     }
 
     public void MoveSelectedRange(int targetIndex)
     {
-        int? targetLine = (targetIndex >= 0 && targetIndex < _rows.Count) ? targetIndex : null;
+        int effectiveCount = EffectiveRowCount;
+        int? targetLine = (targetIndex >= 0 && targetIndex < effectiveCount) ? targetIndex : null;
         SequencerClipboardManager.Instance.ExecuteMove(this, targetLine);
     }
 
@@ -1064,6 +1099,11 @@ public partial class TestThreadWindow : Window, ISequencerEditorHost
 
     private async Task EditCommandForRowAsync(SequencerRowViewModel row)
     {
+        if (row.IsTrailingPlaceholder)
+        {
+            await PromptInsertRowAsync(EffectiveRowCount);
+            return;
+        }
         SyncIoDefinitionsFromRows();
         bool wasTopmost = this.Topmost;
         string? selectedCmd = null;
@@ -1098,7 +1138,8 @@ public partial class TestThreadWindow : Window, ISequencerEditorHost
 
     public async Task<SequencerRowViewModel?> PromptInsertRowAsync(int insertIndex)
     {
-        if (insertIndex < 0 || insertIndex > _rows.Count) insertIndex = _rows.Count;
+        int effectiveCount = EffectiveRowCount;
+        if (insertIndex < 0 || insertIndex > effectiveCount) insertIndex = effectiveCount;
         SyncIoDefinitionsFromRows();
         bool wasTopmost = this.Topmost;
         string? selectedCmd = null;
@@ -1125,6 +1166,7 @@ public partial class TestThreadWindow : Window, ISequencerEditorHost
             Parameter = confirmedParam
         };
         _rows.Insert(insertIndex, newRow);
+        EnsureTrailingPlaceholderRow();
         for (int i = 0; i < _rows.Count; i++) _rows[i].LineNumber = i;
         SyncUIToProgram();
         SyncIoDefinitionsFromRows();
@@ -1156,8 +1198,8 @@ public partial class TestThreadWindow : Window, ISequencerEditorHost
         {
             e.Handled = true;
             ClearRangeSelection();
-            int cur = row.LineNumber;
-            int ins = (cur >= 0 && cur < _rows.Count) ? cur : _rows.Count;
+            int effectiveCount = EffectiveRowCount;
+            int ins = (!row.IsTrailingPlaceholder && row.LineNumber >= 0 && row.LineNumber < effectiveCount) ? row.LineNumber : effectiveCount;
             await PromptInsertRowAsync(ins);
             return;
         }
@@ -1304,7 +1346,7 @@ public partial class TestThreadWindow : Window, ISequencerEditorHost
             _undoStacks[_currentProgNo] = uStack;
         }
 
-        var snapshot = _rows.Select(r => (r.Command ?? "", r.Parameter ?? "")).ToList();
+        var snapshot = _rows.Where(r => !r.IsTrailingPlaceholder).Select(r => (r.Command ?? "", r.Parameter ?? "")).ToList();
         uStack.Push(snapshot);
         if (uStack.Count > MaxUndoDepth)
         {
@@ -1329,7 +1371,7 @@ public partial class TestThreadWindow : Window, ISequencerEditorHost
             rStack = new Stack<List<(string Command, string Parameter)>>();
             _redoStacks[_currentProgNo] = rStack;
         }
-        rStack.Push(_rows.Select(r => (r.Command ?? "", r.Parameter ?? "")).ToList());
+        rStack.Push(_rows.Where(r => !r.IsTrailingPlaceholder).Select(r => (r.Command ?? "", r.Parameter ?? "")).ToList());
 
         var prev = uStack.Pop();
         _rows.Clear();
@@ -1337,6 +1379,7 @@ public partial class TestThreadWindow : Window, ISequencerEditorHost
         {
             _rows.Add(new SequencerRowViewModel { LineNumber = i, Command = prev[i].Command, Parameter = prev[i].Parameter });
         }
+        EnsureTrailingPlaceholderRow();
         SyncUIToProgram();
         UpdateUndoRedoButtonState();
     }
@@ -1350,7 +1393,7 @@ public partial class TestThreadWindow : Window, ISequencerEditorHost
             uStack = new Stack<List<(string Command, string Parameter)>>();
             _undoStacks[_currentProgNo] = uStack;
         }
-        uStack.Push(_rows.Select(r => (r.Command ?? "", r.Parameter ?? "")).ToList());
+        uStack.Push(_rows.Where(r => !r.IsTrailingPlaceholder).Select(r => (r.Command ?? "", r.Parameter ?? "")).ToList());
 
         var next = rStack.Pop();
         _rows.Clear();
@@ -1358,6 +1401,7 @@ public partial class TestThreadWindow : Window, ISequencerEditorHost
         {
             _rows.Add(new SequencerRowViewModel { LineNumber = i, Command = next[i].Command, Parameter = next[i].Parameter });
         }
+        EnsureTrailingPlaceholderRow();
         SyncUIToProgram();
         UpdateUndoRedoButtonState();
     }

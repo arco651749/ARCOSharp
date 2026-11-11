@@ -15,6 +15,11 @@ public class CommandState
     public int Value { get; set; } = 0;
 
     /// <summary>
+    /// 供單步非阻塞指令（如 MessageBox / WarningBox 對話框 Task）暫存執行期物件參考，Reset 時自動釋放
+    /// </summary>
+    public object? TransientObject { get; set; }
+
+    /// <summary>
     /// 惰性初始化的 JSON 暫存字典
     /// </summary>
     private JsonObject? _transientData;
@@ -73,6 +78,7 @@ public class CommandState
     public void Reset()
     {
         Value = 0;
+        TransientObject = null;
         if (_transientData != null)
         {
             var persistentEntries = _transientData

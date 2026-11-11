@@ -15,6 +15,16 @@ public sealed class SequencerRowViewModel : INotifyPropertyChanged
     private string _statePreview = "";
     private bool _hasStateData;
     private string _stateTooltip = "";
+    private bool _isTrailingPlaceholder;
+
+    /// <summary>
+    /// 標記此列是否為編輯器最底部的「虛擬尾端空白列」，供捲動到底時仍可直接點擊插入/貼上/搬移至程式最尾端
+    /// </summary>
+    public bool IsTrailingPlaceholder
+    {
+        get => _isTrailingPlaceholder;
+        set => SetField(ref _isTrailingPlaceholder, value);
+    }
 
     public int LineNumber
     {

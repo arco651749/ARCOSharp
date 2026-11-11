@@ -17,6 +17,8 @@ public partial class ThreadMonitorControl : UserControl
 
     private readonly ObservableCollection<SequencerRowViewModel> _rows = new();
     private ArcosExecutionContext? _context;
+    private ARCOS.Core.Execution.ProgramTable? _lastProgramRef;
+    private int _lastProgramCount = -1;
     private string _threadTitle = "Thread";
     private int _currentRenderedPC = -1;
     private readonly DispatcherTimer _drainTimer;
@@ -101,9 +103,24 @@ public partial class ThreadMonitorControl : UserControl
         _rows.Clear();
         _currentRenderedPC = -1;
 
-        if (_context == null || _context.Program == null) return;
+        if (_context == null) return;
 
+        // 確保同步取得 VM 中對應 ProgramNumber 的最新 ProgramTable 實例
         var prog = _context.Program;
+        if (prog != null && _context.VM != null)
+        {
+            var latestProg = _context.VM.GetProgram(prog.ProgramNumber);
+            if (latestProg != null && !ReferenceEquals(prog, latestProg))
+            {
+                _context.Program = latestProg;
+                prog = latestProg;
+            }
+        }
+        if (prog == null) return;
+
+        _lastProgramRef = prog;
+        _lastProgramCount = prog.Count;
+
         for (int i = 0; i < prog.Count; i++)
         {
             var item = prog.Items[i];
@@ -135,10 +152,28 @@ public partial class ThreadMonitorControl : UserControl
     {
         if (_context == null) return;
 
+        // 檢查該 Thread 綁定的 Program 是否因編輯器修改或 Thread@Run 切換而改變
+        var currentProg = _context.Program;
+        if (currentProg != null && _context.VM != null)
+        {
+            var vmProg = _context.VM.GetProgram(currentProg.ProgramNumber);
+            if (vmProg != null && !ReferenceEquals(currentProg, vmProg))
+            {
+                _context.Program = vmProg;
+                currentProg = vmProg;
+            }
+        }
+
+        if (!ReferenceEquals(currentProg, _lastProgramRef) || (currentProg != null && currentProg.Count != _lastProgramCount))
+        {
+            ReloadProgram();
+            return;
+        }
+
         bool isRunning = _context.IsRunning;
         bool isPaused = _context.IsEffectivelyPaused;
         int pc1Based = _context.ReportedProgIndex;
-        int targetRow = pc1Based >= 1 ? pc1Based - 1 : 0;
+        int targetRow = _rows.Count > 0 ? Math.Clamp(pc1Based >= 1 ? pc1Based - 1 : 0, 0, _rows.Count - 1) : -1;
 
         // 1. 更新數值標籤
         var txtProgIdx = this.FindControl<TextBlock>("TxtProgIndex");
@@ -174,17 +209,17 @@ public partial class ThreadMonitorControl : UserControl
             txtStatusMsg.Text = $"{item.Command}  {item.RawParameter}";
         }
 
-        // 4. 更新 DataGrid 當前 PC 行號粉色反白指示
-        if (targetRow != _currentRenderedPC || !isRunning)
+        // 4. 更新 DataGrid 當前 PC 行號粉色反白指示 (與編輯頁相同，隨時顯示目前執行到的行號)
+        if (targetRow != _currentRenderedPC)
         {
             if (_currentRenderedPC >= 0 && _currentRenderedPC < _rows.Count)
             {
                 _rows[_currentRenderedPC].IsCurrentPC = false;
             }
 
-            _currentRenderedPC = isRunning ? targetRow : -1;
+            _currentRenderedPC = targetRow;
 
-            if (isRunning && _currentRenderedPC >= 0 && _currentRenderedPC < _rows.Count)
+            if (_currentRenderedPC >= 0 && _currentRenderedPC < _rows.Count)
             {
                 _rows[_currentRenderedPC].IsCurrentPC = true;
                 var grid = this.FindControl<DataGrid>("GridCommands");

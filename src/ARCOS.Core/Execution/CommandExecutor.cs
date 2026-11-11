@@ -60,12 +60,36 @@ public sealed class CommandExecutor
         // 4. 前置變數過濾 (Param Filter)
         string filteredParam = ctx.Engines.Variable.FilterParameters(item.RawParameter, ctx.CurrentSection);
 
-        // 5. 模組分發查詢
+        // 5. 模組分發查詢與 MODULES/<Module>/<Action>.csvi 強制對應檢查
         var handler = Registry.GetHandler(item.Module);
         if (handler == null)
         {
             string err = $"Module '{item.Module}' not found in registry at line {ctx.ProgIndex} ({item.Command})";
             return HandleError(ctx, item, CommandResult.Fail(err), filteredParam);
+        }
+
+        // 對已完成單一指令 CSVI 化的模組，強制要求對應的 MODULES/<Module>/<Action>.csvi 必須存在！
+        // 若 <Action>.csvi 不存在，直接跳錯誤，絕不退回舊保底！
+        if (item.Module.Equals("System", StringComparison.OrdinalIgnoreCase) ||
+            item.Module.Equals("Variable", StringComparison.OrdinalIgnoreCase) ||
+            item.Module.Equals("Thread", StringComparison.OrdinalIgnoreCase) ||
+            item.Module.Equals("IO", StringComparison.OrdinalIgnoreCase) ||
+            item.Module.Equals("Point&Path", StringComparison.OrdinalIgnoreCase))
+        {
+            string? csviPath = ModuleRegistry.ResolveCommandCsviPath(item.Module, item.Action);
+            if (csviPath == null)
+            {
+                string err = $"Command CSVI file not found: MODULES/{item.Module}/{item.Action}.csvi at line {ctx.ProgIndex} ({item.Command})";
+                return HandleError(ctx, item, CommandResult.Fail(err), filteredParam);
+            }
+
+            var csviHandler = Registry.LoadCommandCsviHandler(csviPath);
+            if (csviHandler == null)
+            {
+                string err = $"Failed to load command CSVI handler from: {csviPath} at line {ctx.ProgIndex} ({item.Command})";
+                return HandleError(ctx, item, CommandResult.Fail(err), filteredParam);
+            }
+            handler = csviHandler;
         }
 
         // 6. 執行指令
@@ -108,9 +132,41 @@ public sealed class CommandExecutor
                 break;
 
             case CommandStatus.Call:
-                // 將下一行推進點壓入呼叫堆疊
-                ctx.CallStack.Push((ctx.Program, ctx.ProgIndex + 1));
-                ctx.State.Reset();
+                // 將下一行推進點壓入呼叫堆疊，並切換至目標副程式區段或同區段 Label
+                var targetSubProg = ctx.VM?.FindProgram(result.TargetProgram);
+                if (targetSubProg != null && !ReferenceEquals(targetSubProg, ctx.Program))
+                {
+                    ctx.CallStack.Push((ctx.Program, ctx.ProgIndex + 1));
+                    ctx.Program = targetSubProg;
+                    ctx.ProgIndex = 1;
+                    ctx.State.Reset();
+                }
+                else if (!string.IsNullOrEmpty(result.TargetProgram))
+                {
+                    int labelLine = ctx.Program.FindLabel(result.TargetProgram);
+                    if (labelLine > 0)
+                    {
+                        ctx.CallStack.Push((ctx.Program, ctx.ProgIndex + 1));
+                        ctx.ProgIndex = labelLine;
+                        ctx.State.Reset();
+                    }
+                    else if (targetSubProg != null)
+                    {
+                        ctx.CallStack.Push((ctx.Program, ctx.ProgIndex + 1));
+                        ctx.Program = targetSubProg;
+                        ctx.ProgIndex = 1;
+                        ctx.State.Reset();
+                    }
+                    else
+                    {
+                        string err = $"Call target program or label '{result.TargetProgram}' not found";
+                        return HandleError(ctx, item, CommandResult.Fail(err), filteredParam);
+                    }
+                }
+                else
+                {
+                    ctx.State.Reset();
+                }
                 break;
 
             case CommandStatus.Return:
@@ -131,8 +187,8 @@ public sealed class CommandExecutor
                 return HandleError(ctx, item, result, filteredParam);
 
             case CommandStatus.Retry:
-                // ErrorRetry: 還原為 FailedPC 重新執行
-                ctx.ProgIndex = ctx.FailedPC;
+                // ErrorRetry: 還原為 FailedPC (+ offset) 重新執行
+                ctx.ProgIndex = Math.Max(1, ctx.FailedPC + result.TargetLine);
                 ctx.State.Reset();
                 break;
 
@@ -176,8 +232,12 @@ public sealed class CommandExecutor
             return CommandResult.Jump(healingLine);
         }
 
-        // 無對應自癒標籤，停止該執行緒
+        // 無對應自癒標籤，停止該執行緒，並觸發 99: EMG Stop 系統錯誤處理程序
         ctx.IsRunning = false;
+        if (ctx.Program.ProgramNumber != 99 && !ctx.ThreadName.Equals("EMGStop&", StringComparison.OrdinalIgnoreCase))
+        {
+            ctx.VM?.TriggerSystemHook(99);
+        }
         return errorResult;
     }
 
@@ -206,6 +266,38 @@ public sealed class CommandExecutor
         {
             string err = $"Module '{item.Module}' not found in registry ({item.Command})";
             return CommandResult.Fail(err);
+        }
+
+        if (item.Module.Equals("System", StringComparison.OrdinalIgnoreCase) ||
+            item.Module.Equals("Variable", StringComparison.OrdinalIgnoreCase) ||
+            item.Module.Equals("Thread", StringComparison.OrdinalIgnoreCase) ||
+            item.Module.Equals("IO", StringComparison.OrdinalIgnoreCase) ||
+            item.Module.Equals("Point&Path", StringComparison.OrdinalIgnoreCase))
+        {
+            string? csviPath = ModuleRegistry.ResolveCommandCsviPath(item.Module, item.Action);
+            if (csviPath == null)
+            {
+                return CommandResult.Fail($"Command CSVI file not found: MODULES/{item.Module}/{item.Action}.csvi ({item.Command})");
+            }
+
+            var csviHandler = Registry.LoadCommandCsviHandler(csviPath);
+            if (csviHandler == null)
+            {
+                return CommandResult.Fail($"Failed to load command CSVI handler from: {csviPath} ({item.Command})");
+            }
+            handler = csviHandler;
+        }
+        else
+        {
+            string? csviPath = ModuleRegistry.ResolveCommandCsviPath(item.Module, item.Action);
+            if (csviPath != null)
+            {
+                var csviHandler = Registry.LoadCommandCsviHandler(csviPath);
+                if (csviHandler != null)
+                {
+                    handler = csviHandler;
+                }
+            }
         }
 
         try

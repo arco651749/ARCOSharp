@@ -245,28 +245,13 @@ public sealed class ExecutionContext
         }
     }
 
-    private static readonly object _logFileLock = new();
-
     public void Log(string message, bool isError = false)
     {
-        string timestamp = DateTime.Now.ToString("HH:mm:ss.fff");
-        string entry = $"[{timestamp}] [Thread {ThreadId}:{ThreadName}] {(isError ? "[ERROR] " : "")}{message}";
-
-        // 同步寫入系統日誌旗標與 RecordEngine SYSTEMLOG 通道
+        // 同步寫入系統日誌旗標與 RecordEngine SYSTEMLOG 通道 (2000 筆環狀緩衝，滿 2000 筆或 Clear Message 時批次寫入當次 Session Log 檔)
         if (isError)
         {
             Engines.Io.SetPort("System#Error?", true);
         }
         Engines.Record.Record("SYSTEMLOG", $"[Thread {ThreadId}:{ThreadName}] {(isError ? "[ERROR] " : "")}{message}");
-
-        try
-        {
-            lock (_logFileLock)
-            {
-                string logPath = ARCOS.Core.Common.ArcosPaths.GetTodayLogFilePath();
-                File.AppendAllText(logPath, entry + Environment.NewLine);
-            }
-        }
-        catch { }
     }
 }

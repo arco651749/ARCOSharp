@@ -26,14 +26,14 @@
 | **Calculate**| `$var=formula(, $section)` | 將變數當作算式進行計算並賦值 |
 | **Delete** | `$variable(, $section)` | 刪除指定的變數記憶 |
 | **Rename** | `$oldname, $newname(, $section)`| 將變數重新命名 |
-| **VariableSave** | `$file(, $var1, $var2...)` | 將指定變數存檔。預設為儲存所有變數；若有接續帶入變數參數，則僅儲存該特定變數 |
+| **VariableSave** | `$file(, $var1, $var2...)` | 將指定變數存檔。預設為儲存所有變數；若有接續帶入變數名稱或正規表示式 (Regex)，則僅儲存符合條件的變數 |
 | **VariableLoad** | `$file` | 從檔案讀取變數 |
 
 ### 2. 字串處理 (String Actions)
 | 指令 | 參數範例 | 說明 |
 | :--- | :--- | :--- |
 | **Append** | `$variable, $value(, $section)` | 將 `$value` 串接附加到該變數的字串後方 |
-| **Trim** | `$variable, $start, $end(, $section)`| 依照起迄位置擷取變數的字串內容 |
+| **Trim** | `$variable, $start, $end(, $section)`| 依照起迄位置擷取變數的字串內容（0-based 索引，且包含 `$end` 位置字元） |
 | **Slice** | `$variable, $char(, $section)` | 用指定字元 `$char` 將字串切分成陣列 |
 | **Joint** | `$variable, $char(, $section)` | 將陣列用 `$char` 字符合併回單一字串 |
 

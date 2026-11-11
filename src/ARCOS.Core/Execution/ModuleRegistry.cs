@@ -1,19 +1,219 @@
+using System.Collections.Concurrent;
 using System.Reflection;
 
 namespace ARCOS.Core.Execution;
 
 /// <summary>
 /// 全域模組指令註冊表 (Module Registry)
-/// 負責收集各模組小程式分派器並支援動態查詢與 *@getCMD 探索
+/// 負責收集各模組小程式分派器、執行 MODULES/&lt;Module&gt;/&lt;Action&gt;.csvi 單一指令組件並支援動態查詢與 *@getCMD 探索
 /// </summary>
 public sealed class ModuleRegistry
 {
     private readonly Dictionary<string, IModuleHandler> _handlers = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, (DateTime LastWriteUtc, IModuleHandler Handler)> _csviActionCache = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// 當有新模組被註冊或動態加載時觸發 (提供模組名稱供 UI 即時更新)
     /// </summary>
     public event Action<string>? ModuleRegistered;
+
+    /// <summary>
+    /// 取得候選 MODULES 根目錄清單
+    /// </summary>
+    public static IReadOnlyList<string> GetCandidateModulesRoots(string? customRoot = null)
+    {
+        var roots = new List<string>();
+        if (!string.IsNullOrWhiteSpace(customRoot) && Directory.Exists(customRoot))
+        {
+            roots.Add(customRoot);
+        }
+
+        string baseDir = AppDomain.CurrentDomain.BaseDirectory;
+        roots.Add(Path.Combine(baseDir, "MODULES"));
+        roots.Add(Path.Combine(Directory.GetCurrentDirectory(), "MODULES"));
+        try
+        {
+            var cur = new DirectoryInfo(baseDir);
+            for (int depth = 0; depth < 7 && cur != null; depth++, cur = cur.Parent)
+            {
+                string srcMod = Path.Combine(cur.FullName, "src", "MODULES");
+                if (Directory.Exists(srcMod)) roots.Add(srcMod);
+
+                string distMod = Path.Combine(cur.FullName, "dist", "ARCOS_Runtime", "MODULES");
+                if (Directory.Exists(distMod)) roots.Add(distMod);
+
+                string directMod = Path.Combine(cur.FullName, "MODULES");
+                if (Directory.Exists(directMod)) roots.Add(directMod);
+            }
+        }
+        catch { }
+
+        return roots.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+    }
+
+    /// <summary>
+    /// 尋找指定模組的所有候選目錄路徑 (MODULES/&lt;Module&gt;)
+    /// </summary>
+    public static IReadOnlyList<string> FindModuleDirectories(string moduleName, string? customRoot = null)
+    {
+        var dirs = new List<string>();
+        if (string.IsNullOrWhiteSpace(moduleName)) return dirs;
+        string mod = moduleName.Trim();
+        foreach (var root in GetCandidateModulesRoots(customRoot))
+        {
+            if (!Directory.Exists(root)) continue;
+            foreach (var dir in Directory.GetDirectories(root))
+            {
+                if (string.Equals(Path.GetFileName(dir), mod, StringComparison.OrdinalIgnoreCase))
+                {
+                    dirs.Add(dir);
+                }
+            }
+        }
+        return dirs;
+    }
+
+    /// <summary>
+    /// 尋找指定模組目錄路徑 (MODULES/&lt;Module&gt;，優先回傳含有 .csvi 檔案的目錄)
+    /// </summary>
+    public static string? FindModuleDirectory(string moduleName, string? customRoot = null)
+    {
+        var dirs = FindModuleDirectories(moduleName, customRoot);
+        return dirs.FirstOrDefault(d => Directory.GetFiles(d, "*.csvi").Length > 1) ?? dirs.FirstOrDefault();
+    }
+
+    /// <summary>
+    /// 尋找單一指令對應的 MODULES/&lt;Module&gt;/&lt;Action&gt;.csvi 檔案路徑
+    /// </summary>
+    public static string? ResolveCommandCsviPath(string moduleName, string actionName, string? customRoot = null)
+    {
+        var modDirs = FindModuleDirectories(moduleName, customRoot);
+        if (modDirs.Count == 0) return null;
+
+        string act = actionName.Trim();
+        if (act.StartsWith("#Comment", StringComparison.OrdinalIgnoreCase))
+        {
+            act = "Comment";
+        }
+
+        var candidateFileNames = new List<string> { $"{act}.csvi" };
+        if (moduleName.Equals("System", StringComparison.OrdinalIgnoreCase))
+        {
+            if (act.Equals("Pause", StringComparison.OrdinalIgnoreCase))
+                candidateFileNames.Add("SystemPause.csvi");
+            else if (act.Equals("Resume", StringComparison.OrdinalIgnoreCase))
+                candidateFileNames.Add("SystemResume.csvi");
+        }
+        else if (moduleName.Equals("Point&Path", StringComparison.OrdinalIgnoreCase))
+        {
+            if (act.StartsWith("Select", StringComparison.OrdinalIgnoreCase))
+                candidateFileNames.Add("Select.csvi");
+        }
+
+        foreach (var modDir in modDirs)
+        {
+            if (!Directory.Exists(modDir)) continue;
+            foreach (var file in Directory.GetFiles(modDir, "*.csvi"))
+            {
+                string fileName = Path.GetFileName(file);
+                // 排除與模組同名的模組前面板 <Module>.csvi 及 UserPanel.csvi
+                if (string.Equals(Path.GetFileNameWithoutExtension(fileName), moduleName.Trim(), StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(fileName, "UserPanel.csvi", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                foreach (var cand in candidateFileNames)
+                {
+                    if (string.Equals(fileName, cand, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return file;
+                    }
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// 掃描 MODULES/&lt;Module&gt;/*.csvi 取得該模組目前實際存在的指令清單 (排除同名 &lt;Module&gt;.csvi 前面板與 UserPanel.csvi)
+    /// </summary>
+    public static IReadOnlyList<string>? GetCsviCommandsForModule(string moduleName, string? customRoot = null)
+    {
+        string? modDir = FindModuleDirectory(moduleName, customRoot);
+        if (modDir == null || !Directory.Exists(modDir)) return null;
+
+        var cmds = new List<string>();
+        foreach (var file in Directory.GetFiles(modDir, "*.csvi").OrderBy(f => f, StringComparer.OrdinalIgnoreCase))
+        {
+            string nameNoExt = Path.GetFileNameWithoutExtension(file);
+            if (string.Equals(nameNoExt, moduleName.Trim(), StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(nameNoExt, "UserPanel", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            if (string.Equals(nameNoExt, "Comment", StringComparison.OrdinalIgnoreCase) &&
+                moduleName.Equals("System", StringComparison.OrdinalIgnoreCase))
+            {
+                cmds.Add("#Comment----->>");
+                continue;
+            }
+
+            if (string.Equals(nameNoExt, "Select", StringComparison.OrdinalIgnoreCase) &&
+                moduleName.Equals("Point&Path", StringComparison.OrdinalIgnoreCase))
+            {
+                cmds.Add("Select(X=A?B:C)");
+                continue;
+            }
+
+            cmds.Add(nameNoExt);
+        }
+
+        return cmds;
+    }
+
+    /// <summary>
+    /// 依模組與指令名稱尋找並載入 MODULES/&lt;Module&gt;/&lt;Action&gt;.csvi 的 IModuleHandler 實例
+    /// </summary>
+    public IModuleHandler? LoadCommandCsviHandler(string moduleName, string actionName)
+    {
+        var path = ResolveCommandCsviPath(moduleName, actionName);
+        return path != null ? LoadCommandCsviHandler(path) : null;
+    }
+
+    /// <summary>
+    /// 從指定 &lt;Action&gt;.csvi 檔案載入 (或熱重載) IModuleHandler 實例
+    /// </summary>
+    public IModuleHandler? LoadCommandCsviHandler(string csviPath)
+    {
+        string fullPath = Path.GetFullPath(csviPath);
+        if (!File.Exists(fullPath)) return null;
+
+        DateTime lastWrite = File.GetLastWriteTimeUtc(fullPath);
+        if (_csviActionCache.TryGetValue(fullPath, out var cached) && cached.LastWriteUtc == lastWrite)
+        {
+            return cached.Handler;
+        }
+
+        var asm = ARCOS.Core.Common.PluginLoadManager.LoadOrReloadAssembly(fullPath, out _);
+        if (asm == null) return null;
+
+        foreach (var t in asm.GetTypes())
+        {
+            if (typeof(IModuleHandler).IsAssignableFrom(t) && !t.IsAbstract && !t.IsInterface)
+            {
+                if (Activator.CreateInstance(t) is IModuleHandler handler)
+                {
+                    _csviActionCache[fullPath] = (lastWrite, handler);
+                    return handler;
+                }
+            }
+        }
+
+        return null;
+    }
 
     public void RegisterHandler(IModuleHandler handler)
     {
@@ -56,7 +256,6 @@ public sealed class ModuleRegistry
             {
                 var dirName = Path.GetFileName(moduleDir);
                 if (dirName.Equals("DRIVER", StringComparison.OrdinalIgnoreCase) ||
-                    dirName.Equals("USERPARAMETEREDITOR", StringComparison.OrdinalIgnoreCase) ||
                     dirName.Equals("PYTHON", StringComparison.OrdinalIgnoreCase)) // 外部隨選擴充模組，開機不預載
                     continue;
 
@@ -148,16 +347,8 @@ public sealed class ModuleRegistry
         string mod = moduleName.Trim();
         if (HasModule(mod)) return true;
 
-        var candidateRoots = new List<string>();
-        if (!string.IsNullOrEmpty(modulesRootPath) && Directory.Exists(modulesRootPath))
-        {
-            candidateRoots.Add(modulesRootPath);
-        }
-
-        candidateRoots.Add(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "MODULES"));
+        var candidateRoots = GetCandidateModulesRoots(modulesRootPath).ToList();
         candidateRoots.Add(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "EXTRACMD"));
-        candidateRoots.Add(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "..", "dist", "ARCOS_Runtime", "MODULES"));
-        candidateRoots.Add(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "..", "src", "MODULES"));
 
         foreach (var root in candidateRoots)
         {
@@ -257,7 +448,9 @@ public sealed class ModuleRegistry
 
             foreach (var kvp in _handlers.OrderBy(k => k.Key))
             {
-                foreach (var cmd in kvp.Value.GetSupportedCommands())
+                var csviCmds = GetCsviCommandsForModule(kvp.Key);
+                var cmdList = (csviCmds != null && csviCmds.Count > 0) ? csviCmds : kvp.Value.GetSupportedCommands();
+                foreach (var cmd in cmdList)
                 {
                     result.Add($"{kvp.Key}@{cmd}");
                 }
@@ -265,10 +458,13 @@ public sealed class ModuleRegistry
         }
         else
         {
-            var handler = GetHandler(moduleFilter.Trim());
+            string modName = moduleFilter.Trim();
+            var handler = GetHandler(modName);
             if (handler != null)
             {
-                foreach (var cmd in handler.GetSupportedCommands())
+                var csviCmds = GetCsviCommandsForModule(handler.ModuleName);
+                var cmdList = (csviCmds != null && csviCmds.Count > 0) ? csviCmds : handler.GetSupportedCommands();
+                foreach (var cmd in cmdList)
                 {
                     result.Add($"{handler.ModuleName}@{cmd}");
                 }

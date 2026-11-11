@@ -50,7 +50,8 @@ public sealed class ProgramTable
         if (item.Module.Equals("Thread", StringComparison.OrdinalIgnoreCase))
         {
             if (item.Action.Equals("Label", StringComparison.OrdinalIgnoreCase) || 
-                item.Action.Equals("Thread Label", StringComparison.OrdinalIgnoreCase))
+                item.Action.Equals("Thread Label", StringComparison.OrdinalIgnoreCase) ||
+                item.Action.Equals("ForeachStart", StringComparison.OrdinalIgnoreCase))
             {
                 string lbl = item.RawParameter.Trim();
                 if (!string.IsNullOrEmpty(lbl))

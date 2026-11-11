@@ -29,7 +29,8 @@ public partial class SequencerEditorControl : UserControl, ISequencerEditorHost
 {
     private ArcosThreadVM? _vm;
     private int _currentProgNo = 0;
-    private bool _isLocked = false;
+    private bool _isLocked = true;
+    private bool _isSupervisorMode = false;
     private readonly ObservableCollection<SequencerRowViewModel> _rows = new();
     private readonly DispatcherTimer _autoTimer;
     private readonly DispatcherTimer _pcDrainerTimer;
@@ -47,8 +48,10 @@ public partial class SequencerEditorControl : UserControl, ISequencerEditorHost
 
     public ObservableCollection<SequencerRowViewModel> Rows => _rows;
     public IList<SequencerRowViewModel> EditorRows => _rows;
+    public int EffectiveRowCount => SequencerClipboardManager.GetEffectiveRowCount(_rows);
     public int CurrentProgramNumber => _currentProgNo;
     public bool IsLocked => _isLocked;
+    public bool IsSupervisorMode => _isSupervisorMode;
 
     public SequencerEditorControl()
     {
@@ -147,61 +150,71 @@ public partial class SequencerEditorControl : UserControl, ISequencerEditorHost
 
     private void OnTabOpClick(object? sender, RoutedEventArgs e)
     {
-        var pnlOp = this.FindControl<Border>("PnlOperator");
-        var pnlSup = this.FindControl<Border>("PnlSupervisor");
-        var btnOp = this.FindControl<Button>("BtnTabOp");
-        var btnSup = this.FindControl<Button>("BtnTabSup");
-
-        if (pnlOp != null) pnlOp.IsVisible = true;
-        if (pnlSup != null) pnlSup.IsVisible = false;
-
-        if (btnOp != null)
-        {
-            btnOp.Background = Brushes.White;
-            btnOp.BorderThickness = new Avalonia.Thickness(1);
-        }
-        if (btnSup != null)
-        {
-            btnSup.Background = Brushes.Transparent;
-            btnSup.BorderThickness = new Avalonia.Thickness(0);
-        }
-
-        _isLocked = true;
-        var grid = this.FindControl<DataGrid>("GridCommands");
-        if (grid != null) grid.IsReadOnly = true;
+        ApplyModeVisuals(supervisor: false);
     }
 
-    private void OnTabSupClick(object? sender, RoutedEventArgs e)
+    private async void OnTabSupClick(object? sender, RoutedEventArgs e)
     {
+        if (!_isSupervisorMode && sender != null && AdministratorAccountManager.Instance.HasCredentialsConfigured())
+        {
+            var topLevel = TopLevel.GetTopLevel(this) as Window;
+            if (topLevel != null)
+            {
+                bool ok = await AdministratorAccountDialog.PromptLoginAsync(topLevel);
+                if (!ok)
+                {
+                    return;
+                }
+            }
+        }
+
+        ApplyModeVisuals(supervisor: true);
+    }
+
+    private void ApplyModeVisuals(bool supervisor)
+    {
+        _isSupervisorMode = supervisor;
+        _isLocked = !supervisor;
+
         var pnlOp = this.FindControl<Border>("PnlOperator");
         var pnlSup = this.FindControl<Border>("PnlSupervisor");
         var btnOp = this.FindControl<Button>("BtnTabOp");
         var btnSup = this.FindControl<Button>("BtnTabSup");
 
-        if (pnlOp != null) pnlOp.IsVisible = false;
-        if (pnlSup != null) pnlSup.IsVisible = true;
+        if (pnlOp != null) pnlOp.IsVisible = !supervisor;
+        if (pnlSup != null) pnlSup.IsVisible = supervisor;
 
-        if (btnSup != null)
-        {
-            btnSup.Background = Brushes.White;
-            btnSup.BorderThickness = new Avalonia.Thickness(1);
-        }
         if (btnOp != null)
         {
-            btnOp.Background = Brushes.Transparent;
-            btnOp.BorderThickness = new Avalonia.Thickness(0);
+            btnOp.Background = supervisor ? Brushes.Transparent : Brushes.White;
+            btnOp.BorderThickness = new Avalonia.Thickness(supervisor ? 0 : 1);
+        }
+        if (btnSup != null)
+        {
+            btnSup.Background = supervisor ? Brushes.White : Brushes.Transparent;
+            btnSup.BorderThickness = new Avalonia.Thickness(supervisor ? 1 : 0);
         }
 
-        _isLocked = false;
         var grid = this.FindControl<DataGrid>("GridCommands");
-        if (grid != null) grid.IsReadOnly = false;
+        if (grid != null) grid.IsReadOnly = _isLocked;
+
+        if (!supervisor && TopLevel.GetTopLevel(this) is MainWindow mw && mw.TestThreadWindow != null && mw.TestThreadWindow.IsVisible)
+        {
+            mw.TestThreadWindow.WindowState = WindowState.Minimized;
+        }
     }
 
     private bool _isOpeningCommandSelect = false;
 
     public async Task<bool> EditCommandForRowAsync(SequencerRowViewModel row, Window topLevel)
     {
-        if (_isOpeningCommandSelect) return false;
+        if (_isLocked || _isOpeningCommandSelect) return false;
+        if (row.IsTrailingPlaceholder)
+        {
+            var inserted = await PromptInsertRowAsync(EffectiveRowCount, topLevel);
+            return inserted != null;
+        }
+
         try
         {
             _isOpeningCommandSelect = true;
@@ -231,7 +244,8 @@ public partial class SequencerEditorControl : UserControl, ISequencerEditorHost
     public async Task<SequencerRowViewModel?> PromptInsertRowAsync(int insertIndex, Window topLevel)
     {
         if (_isLocked || _isOpeningCommandSelect) return null;
-        if (insertIndex < 0 || insertIndex > _rows.Count) insertIndex = _rows.Count;
+        int effectiveCount = EffectiveRowCount;
+        if (insertIndex < 0 || insertIndex > effectiveCount) insertIndex = effectiveCount;
 
         try
         {
@@ -251,6 +265,7 @@ public partial class SequencerEditorControl : UserControl, ISequencerEditorHost
                 Parameter = confirmedParam
             };
             _rows.Insert(insertIndex, newRow);
+            EnsureTrailingPlaceholderRow();
             RenumberRows();
             SyncUIToProgram();
             SyncIoDefinitionsFromRows();
@@ -283,13 +298,13 @@ public partial class SequencerEditorControl : UserControl, ISequencerEditorHost
         {
             e.Handled = true;
             ClearRangeSelection();
-            int cur = row.LineNumber;
-            int ins = (cur >= 0 && cur < _rows.Count) ? cur : _rows.Count;
+            int effectiveCount = EffectiveRowCount;
+            int ins = (!row.IsTrailingPlaceholder && row.LineNumber >= 0 && row.LineNumber < effectiveCount) ? row.LineNumber : effectiveCount;
             await PromptInsertRowAsync(ins, topLevel);
             return;
         }
 
-        // 3. 無修飾鍵單擊指令欄：開啟該行指令編輯視窗
+        // 3. 無修飾鍵單擊指令欄：開啟該行指令編輯視窗 (若為尾端空白列則直接在尾端新增)
         if (props.IsLeftButtonPressed && e.KeyModifiers == KeyModifiers.None)
         {
             await EditCommandForRowAsync(row, topLevel);
@@ -356,6 +371,12 @@ public partial class SequencerEditorControl : UserControl, ISequencerEditorHost
         var row = (sender as Control)?.DataContext as SequencerRowViewModel;
         if (row == null) return;
 
+        if (row.IsTrailingPlaceholder)
+        {
+            await PromptInsertRowAsync(EffectiveRowCount, topLevel);
+            return;
+        }
+
         try
         {
             _isOpeningGuidance = true;
@@ -384,7 +405,7 @@ public partial class SequencerEditorControl : UserControl, ISequencerEditorHost
         var mgr = SequencerClipboardManager.Instance;
         foreach (var r in _rows)
         {
-            bool shouldSelect = mgr.IsRowSelected(this, r.LineNumber);
+            bool shouldSelect = !r.IsTrailingPlaceholder && mgr.IsRowSelected(this, r.LineNumber);
             if (r.IsRangeSelected != shouldSelect)
             {
                 r.IsRangeSelected = shouldSelect;
@@ -400,7 +421,8 @@ public partial class SequencerEditorControl : UserControl, ISequencerEditorHost
 
     public void JumpToRow(int lineNumber)
     {
-        if (lineNumber < 0 || lineNumber >= _rows.Count) return;
+        int effectiveCount = EffectiveRowCount;
+        if (lineNumber < 0 || lineNumber >= effectiveCount) return;
         if (_vm == null) return;
 
         var ctx = GetActiveContext();
@@ -408,10 +430,10 @@ public partial class SequencerEditorControl : UserControl, ISequencerEditorHost
         ctx.State.Reset();
         UpdatePCPointer(ctx.ProgIndex);
         DrainPCPointer();
-        ctx.Log($"[PC JUMP] PC pointer jumped to Line {lineNumber}: {(_rows.Count > lineNumber ? _rows[lineNumber].Command : "")}");
+        ctx.Log($"[PC JUMP] PC pointer jumped to Line {lineNumber}: {(effectiveCount > lineNumber ? _rows[lineNumber].Command : "")}");
 
         var grid = this.FindControl<DataGrid>("GridCommands");
-        if (grid != null && lineNumber < _rows.Count)
+        if (grid != null && lineNumber < effectiveCount)
         {
             grid.SelectedIndex = lineNumber;
         }
@@ -422,10 +444,11 @@ public partial class SequencerEditorControl : UserControl, ISequencerEditorHost
         if (_vm == null) return;
         SyncUIToProgram();
 
+        int effectiveCount = EffectiveRowCount;
         var ctx = GetActiveContext();
         if (!ctx.IsRunning)
         {
-            int startIdx = (ctx.ProgIndex >= 1 && ctx.ProgIndex <= _rows.Count) ? ctx.ProgIndex : 1;
+            int startIdx = (ctx.ProgIndex >= 1 && ctx.ProgIndex <= effectiveCount) ? ctx.ProgIndex : 1;
             _vm.StartThread(ctx.ThreadId, _currentProgNo, startIdx);
         }
 
@@ -434,7 +457,7 @@ public partial class SequencerEditorControl : UserControl, ISequencerEditorHost
         UpdatePCPointer(ctx.ProgIndex);
         DrainPCPointer();
 
-        if (!ctx.IsRunning || ctx.ProgIndex > _rows.Count)
+        if (!ctx.IsRunning || ctx.ProgIndex > effectiveCount)
         {
             ctx.IsRunning = false;
             UpdateMachineStatus("IDLE");
@@ -581,6 +604,13 @@ public partial class SequencerEditorControl : UserControl, ISequencerEditorHost
         bool isAlt = km.HasFlag(KeyModifiers.Alt);
         bool isShift = km.HasFlag(KeyModifiers.Shift);
 
+        // 在 OPERATOR (鎖定) 模式下，禁止編輯快捷鍵
+        if (_isLocked && (isShift || isCtrl || isAlt))
+        {
+            e.Handled = true;
+            return true;
+        }
+
         // 1. Shift + 滑鼠左鍵 (集中由 SequencerClipboardManager.HandleShiftClick 管理單行與範圍選取)
         if (isShift && !isCtrl && !isAlt)
         {
@@ -633,18 +663,21 @@ public partial class SequencerEditorControl : UserControl, ISequencerEditorHost
 
     private void ExecuteCopyInsert(SequencerRowViewModel? targetRow)
     {
-        int? targetLine = targetRow != null ? targetRow.LineNumber : null;
+        if (_isLocked) return;
+        int? targetLine = (targetRow != null && !targetRow.IsTrailingPlaceholder) ? targetRow.LineNumber : null;
         SequencerClipboardManager.Instance.ExecuteCopyInsert(this, targetLine);
     }
 
     private void ExecuteLocalMove(SequencerRowViewModel? targetRow)
     {
-        int? targetLine = targetRow != null ? targetRow.LineNumber : null;
+        if (_isLocked) return;
+        int? targetLine = (targetRow != null && !targetRow.IsTrailingPlaceholder) ? targetRow.LineNumber : null;
         SequencerClipboardManager.Instance.ExecuteMove(this, targetLine);
     }
 
     private void ExecuteLocalDelete(SequencerRowViewModel? clickedRow)
     {
+        if (_isLocked) return;
         SequencerClipboardManager.Instance.ExecuteDelete(this, clickedRow);
     }
 
@@ -653,7 +686,7 @@ public partial class SequencerEditorControl : UserControl, ISequencerEditorHost
         int start = Math.Min(startLine, endLine);
         int end = Math.Max(startLine, endLine);
         var selectedItems = _rows
-            .Where(r => r.LineNumber >= start && r.LineNumber <= end)
+            .Where(r => !r.IsTrailingPlaceholder && r.LineNumber >= start && r.LineNumber <= end)
             .Select(r => (r.Command ?? "", r.Parameter ?? ""))
             .ToList();
         SequencerClipboardManager.Instance.SetSelection(this, start, end, selectedItems);
@@ -661,13 +694,15 @@ public partial class SequencerEditorControl : UserControl, ISequencerEditorHost
 
     public void PasteFromClipboard(int targetIndex)
     {
-        int? targetLine = (targetIndex >= 0 && targetIndex < _rows.Count) ? targetIndex : null;
+        int effectiveCount = EffectiveRowCount;
+        int? targetLine = (targetIndex >= 0 && targetIndex < effectiveCount) ? targetIndex : null;
         SequencerClipboardManager.Instance.ExecuteCopyInsert(this, targetLine);
     }
 
     public void MoveSelectedRange(int targetIndex)
     {
-        int? targetLine = (targetIndex >= 0 && targetIndex < _rows.Count) ? targetIndex : null;
+        int effectiveCount = EffectiveRowCount;
+        int? targetLine = (targetIndex >= 0 && targetIndex < effectiveCount) ? targetIndex : null;
         SequencerClipboardManager.Instance.ExecuteMove(this, targetLine);
     }
 
@@ -682,13 +717,13 @@ public partial class SequencerEditorControl : UserControl, ISequencerEditorHost
 
     public void SetSupervisorMode(bool supervisor)
     {
-        if (supervisor) OnTabSupClick(null, new RoutedEventArgs());
-        else OnTabOpClick(null, new RoutedEventArgs());
+        ApplyModeVisuals(supervisor);
     }
 
     public async Task<string?> OpenParameterGuidanceForRowAsync(int rowIndex)
     {
-        if (rowIndex < 0 || rowIndex >= _rows.Count) return null;
+        int effectiveCount = EffectiveRowCount;
+        if (rowIndex < 0 || rowIndex >= effectiveCount) return null;
         if (_isLocked) SetSupervisorMode(true);
         NavigateToRow(rowIndex);
 
@@ -723,8 +758,9 @@ public partial class SequencerEditorControl : UserControl, ISequencerEditorHost
     {
         PushUndoSnapshot();
         var grid = this.FindControl<DataGrid>("GridCommands");
-        int insertIndex = atIndex ?? (grid?.SelectedIndex >= 0 && grid.SelectedIndex < _rows.Count ? grid.SelectedIndex : _rows.Count);
-        if (insertIndex < 0 || insertIndex > _rows.Count) insertIndex = _rows.Count;
+        int effectiveCount = EffectiveRowCount;
+        int insertIndex = atIndex ?? (grid?.SelectedIndex >= 0 && grid.SelectedIndex < effectiveCount ? grid.SelectedIndex : effectiveCount);
+        if (insertIndex < 0 || insertIndex > effectiveCount) insertIndex = effectiveCount;
 
         var newRow = new SequencerRowViewModel
         {
@@ -734,6 +770,7 @@ public partial class SequencerEditorControl : UserControl, ISequencerEditorHost
         };
         _rows.Insert(insertIndex, newRow);
 
+        EnsureTrailingPlaceholderRow();
         RenumberRows();
         SyncUIToProgram();
         NavigateToRow(insertIndex);
@@ -743,7 +780,7 @@ public partial class SequencerEditorControl : UserControl, ISequencerEditorHost
     public void TriggerDeleteRow(int? atIndex = null)
     {
         var grid = this.FindControl<DataGrid>("GridCommands");
-        if (atIndex.HasValue && atIndex.Value >= 0 && atIndex.Value < _rows.Count && grid != null)
+        if (atIndex.HasValue && atIndex.Value >= 0 && atIndex.Value < EffectiveRowCount && grid != null)
         {
             grid.SelectedIndex = atIndex.Value;
         }
@@ -767,9 +804,9 @@ public partial class SequencerEditorControl : UserControl, ISequencerEditorHost
 
     private void BindToolbarButtons()
     {
-        // 核心流程控制 (Run, Step, Jump, Pause, Reset)
+        // 核心流程控制 (Operator Run 對應 96: Execute On / 97: Execute Off；Supervisor Run/Auto 直接運行當前程式區)
         var btnBigRunOp = this.FindControl<Button>("BtnBigRunOp");
-        if (btnBigRunOp != null) btnBigRunOp.Click += BtnAuto_Click;
+        if (btnBigRunOp != null) btnBigRunOp.Click += BtnOperatorRun_Click;
 
         var btnRunSup = this.FindControl<Button>("BtnRunSup");
         if (btnRunSup != null) btnRunSup.Click += BtnAuto_Click;
@@ -838,10 +875,10 @@ public partial class SequencerEditorControl : UserControl, ISequencerEditorHost
         if (btnRefresh != null) btnRefresh.Click += (_, _) => LoadCurrentProgramToUI();
 
         var btnLockOp = this.FindControl<Button>("BtnLockOp");
-        if (btnLockOp != null) btnLockOp.Click += BtnLock_Click;
+        if (btnLockOp != null) btnLockOp.Click += OnTabSupClick;
 
         var btnLockSup = this.FindControl<Button>("BtnLockSup");
-        if (btnLockSup != null) btnLockSup.Click += BtnLock_Click;
+        if (btnLockSup != null) btnLockSup.Click += BtnAccountManager_Click;
 
         // Program 翻頁
         var btnPrev = this.FindControl<Button>("BtnProgPrev");
@@ -977,11 +1014,38 @@ public partial class SequencerEditorControl : UserControl, ISequencerEditorHost
         }
     }
 
-    private void BtnLock_Click(object? sender, RoutedEventArgs e)
+    private async void BtnAccountManager_Click(object? sender, RoutedEventArgs e)
     {
-        _isLocked = !_isLocked;
-        var grid = this.FindControl<DataGrid>("GridCommands");
-        if (grid != null) grid.IsReadOnly = _isLocked;
+        var topLevel = TopLevel.GetTopLevel(this) as Window;
+        if (topLevel == null) return;
+        await AdministratorAccountDialog.OpenAccountManagerAsync(topLevel);
+    }
+
+    public void EnsureTrailingPlaceholderRow()
+    {
+        // 先移除中間可能殘留的佔位列
+        for (int i = _rows.Count - 1; i >= 0; i--)
+        {
+            if (_rows[i].IsTrailingPlaceholder && i != _rows.Count - 1)
+            {
+                _rows.RemoveAt(i);
+            }
+        }
+
+        if (_rows.Count == 0 || !_rows[^1].IsTrailingPlaceholder)
+        {
+            _rows.Add(new SequencerRowViewModel
+            {
+                LineNumber = _rows.Count,
+                Command = string.Empty,
+                Parameter = string.Empty,
+                IsTrailingPlaceholder = true
+            });
+        }
+        else
+        {
+            _rows[^1].LineNumber = _rows.Count - 1;
+        }
     }
 
     public void RefreshProgSelector(int? selectedSlot = null)
@@ -1034,7 +1098,7 @@ public partial class SequencerEditorControl : UserControl, ISequencerEditorHost
         if (_vm == null) return;
 
         var prog = _vm.GetProgram(_currentProgNo);
-        ExecutionContext? runningCtx = null;
+        ARCOS.Core.Execution.ExecutionContext? runningCtx = null;
         for (int t = 0; t < 13; t++)
         {
             if (_vm.MainThreads[t].Program?.ProgramNumber == _currentProgNo && _vm.MainThreads[t].IsRunning)
@@ -1055,9 +1119,11 @@ public partial class SequencerEditorControl : UserControl, ISequencerEditorHost
                 LineNumber = i,
                 Command = item.Command,
                 Parameter = item.RawParameter,
-                IsCurrentPC = (i == activePC && isRunning)
+                IsCurrentPC = (i == activePC - 1 && isRunning),
+                IsTrailingPlaceholder = false
             });
         }
+        EnsureTrailingPlaceholderRow();
         UpdatePCPointer(activePC);
         DrainPCPointer();
     }
@@ -1073,6 +1139,7 @@ public partial class SequencerEditorControl : UserControl, ISequencerEditorHost
         // 支援 System@ProgramSection 指令動態重命名程式區
         foreach (var r in _rows)
         {
+            if (r.IsTrailingPlaceholder) continue;
             if (r.Command.Equals("System@ProgramSection", StringComparison.OrdinalIgnoreCase))
             {
                 var parts = r.Parameter.Split(',', StringSplitOptions.TrimEntries);
@@ -1090,12 +1157,16 @@ public partial class SequencerEditorControl : UserControl, ISequencerEditorHost
 
         bool nameChanged = existingProg != null && existingProg.Name != name;
         var prog = new ProgramTable { ProgramNumber = _currentProgNo, Name = name };
+        int lineIdx = 0;
         for (int i = 0; i < _rows.Count; i++)
         {
             var row = _rows[i];
-            row.LineNumber = i;
-            prog.Add(CommandItem.Parse($"{row.Command}\t{row.Parameter}", i));
+            if (row.IsTrailingPlaceholder) continue;
+            row.LineNumber = lineIdx;
+            prog.Add(CommandItem.Parse($"{row.Command}\t{row.Parameter}", lineIdx));
+            lineIdx++;
         }
+        EnsureTrailingPlaceholderRow();
         _vm.LoadProgram(_currentProgNo, prog);
         var ctx = GetActiveContext();
         if (ctx.Program?.ProgramNumber == _currentProgNo)
@@ -1133,8 +1204,9 @@ public partial class SequencerEditorControl : UserControl, ISequencerEditorHost
 
         _currentRenderedPC = targetPC;
 
-        // O(1) 開啟目前 PC 行號的粉色反白
-        if (_currentRenderedPC >= 0 && _currentRenderedPC < _rows.Count)
+        // O(1) 開啟目前 PC 行號的粉色反白 (不含尾端空白佔位列)
+        int effectiveCount = EffectiveRowCount;
+        if (_currentRenderedPC >= 0 && _currentRenderedPC < effectiveCount)
         {
             _rows[_currentRenderedPC].IsCurrentPC = true;
             var grid = this.FindControl<DataGrid>("GridCommands");
@@ -1142,7 +1214,7 @@ public partial class SequencerEditorControl : UserControl, ISequencerEditorHost
         }
     }
 
-    private ExecutionContext GetActiveContext()
+    private ARCOS.Core.Execution.ExecutionContext GetActiveContext()
     {
         if (_vm != null)
         {
@@ -1164,6 +1236,48 @@ public partial class SequencerEditorControl : UserControl, ISequencerEditorHost
         StepOnce();
     }
 
+    private void BtnOperatorRun_Click(object? sender, RoutedEventArgs e)
+    {
+        ClearRangeSelection();
+        if (_vm == null) return;
+        SyncUIToProgram();
+
+        var mainCtx = _vm.MainThreads[0];
+        if (mainCtx.IsRunning)
+        {
+            // 若正在執行中再次點擊 Operator Run (停止)，停止主執行緒並觸發 97: Execute Off
+            mainCtx.StopBackgroundLoop(resetRunningFlag: true);
+            _vm.TriggerSystemHook(97);
+            UpdateMachineStatus("IDLE");
+            return;
+        }
+
+        // 啟動：觸發 96: Execute On (預設指令為 Thread@Run::0,0)
+        mainCtx.OnExecutionStopped -= OnOperatorMainExecutionStopped;
+        mainCtx.OnExecutionStopped += OnOperatorMainExecutionStopped;
+
+        UpdateMachineStatus("RUNNING");
+        var hookCtx = _vm.TriggerSystemHook(96);
+        if (hookCtx == null)
+        {
+            // 若 96: Execute On 被清空，Fallback 啟動程式區 0
+            _vm.StartThread(0, 0, 1);
+        }
+    }
+
+    private void OnOperatorMainExecutionStopped(ARCOS.Core.Execution.ExecutionContext stoppedCtx)
+    {
+        stoppedCtx.OnExecutionStopped -= OnOperatorMainExecutionStopped;
+        // 當主執行緒自然結束時，觸發 97: Execute Off
+        _vm?.TriggerSystemHook(97);
+        Dispatcher.UIThread.Post(() =>
+        {
+            UpdateMachineStatus("IDLE");
+            UpdatePCPointer(stoppedCtx.ProgIndex);
+            DrainPCPointer();
+        });
+    }
+
     private void BtnAuto_Click(object? sender, RoutedEventArgs e)
     {
         ClearRangeSelection();
@@ -1171,7 +1285,7 @@ public partial class SequencerEditorControl : UserControl, ISequencerEditorHost
         SyncUIToProgram();
 
         var ctx = GetActiveContext();
-        int totalRows = _rows.Count;
+        int totalRows = EffectiveRowCount;
         int startIdx = (ctx.ProgIndex >= 1 && ctx.ProgIndex <= totalRows) ? ctx.ProgIndex : 1;
 
         ctx.OnExecutionStopped -= OnActiveContextStopped;
@@ -1204,7 +1318,7 @@ public partial class SequencerEditorControl : UserControl, ISequencerEditorHost
         if (_vm == null) return;
         var ctx = GetActiveContext();
 
-        if (!ctx.IsRunning || ctx.ProgIndex > _rows.Count)
+        if (!ctx.IsRunning || ctx.ProgIndex > EffectiveRowCount)
         {
             ctx.IsRunning = false;
             _autoTimer.Stop();
@@ -1246,7 +1360,7 @@ public partial class SequencerEditorControl : UserControl, ISequencerEditorHost
     {
         ClearRangeSelection();
         var grid = this.FindControl<DataGrid>("GridCommands");
-        if (grid?.SelectedItem is SequencerRowViewModel row)
+        if (grid?.SelectedItem is SequencerRowViewModel row && !row.IsTrailingPlaceholder)
         {
             JumpToRow(row.LineNumber);
         }
@@ -1260,18 +1374,20 @@ public partial class SequencerEditorControl : UserControl, ISequencerEditorHost
 
         ClearRangeSelection();
         var grid = this.FindControl<DataGrid>("GridCommands");
-        int ins = (grid?.SelectedIndex >= 0 && grid.SelectedIndex < _rows.Count) ? grid.SelectedIndex : _rows.Count;
+        int effectiveCount = EffectiveRowCount;
+        int ins = (grid?.SelectedIndex >= 0 && grid.SelectedIndex < effectiveCount) ? grid.SelectedIndex : effectiveCount;
         await PromptInsertRowAsync(ins, topLevel);
     }
 
     private void BtnClearSection_Click(object? sender, RoutedEventArgs e)
     {
         if (_isLocked) return;
-        if (_rows.Count == 0) return;
+        if (EffectiveRowCount == 0) return;
 
         PushUndoSnapshot();
         ClearRangeSelection();
         _rows.Clear();
+        EnsureTrailingPlaceholderRow();
         SyncUIToProgram();
         UpdateUndoRedoButtonState();
         UpdatePCPointer(1);
@@ -1286,14 +1402,16 @@ public partial class SequencerEditorControl : UserControl, ISequencerEditorHost
 
     private void BtnDelete_Click(object? sender, RoutedEventArgs e)
     {
+        if (_isLocked) return;
         ClearRangeSelection();
-        if (_rows.Count == 0) return;
+        if (EffectiveRowCount == 0) return;
         var grid = this.FindControl<DataGrid>("GridCommands");
-        if (grid?.SelectedItem is SequencerRowViewModel row)
+        if (grid?.SelectedItem is SequencerRowViewModel row && !row.IsTrailingPlaceholder)
         {
             PushUndoSnapshot();
             int cur = grid.SelectedIndex;
             _rows.Remove(row);
+            EnsureTrailingPlaceholderRow();
             RenumberRows();
             SyncUIToProgram();
             if (_rows.Count > 0)
@@ -1372,6 +1490,7 @@ public partial class SequencerEditorControl : UserControl, ISequencerEditorHost
             {
                 _vm.LoadProgram(p.ProgramNumber, p);
             }
+            _vm.InitializeDefaultSystemPrograms();
             UpdateUndoRedoButtonState();
             var txtTitle = this.FindControl<TextBox>("TxtScriptTitle");
             if (txtTitle != null) txtTitle.Text = System.IO.Path.GetFileName(path);
@@ -1504,12 +1623,14 @@ public partial class SequencerEditorControl : UserControl, ISequencerEditorHost
         {
             if (e.Key == Key.Z)
             {
+                if (_isLocked) { e.Handled = true; return; }
                 if (e.KeyModifiers.HasFlag(KeyModifiers.Shift)) PerformRedo();
                 else PerformUndo();
                 e.Handled = true;
             }
             else if (e.Key == Key.Y)
             {
+                if (_isLocked) { e.Handled = true; return; }
                 PerformRedo();
                 e.Handled = true;
             }
@@ -1532,6 +1653,7 @@ public partial class SequencerEditorControl : UserControl, ISequencerEditorHost
         var list = new List<(string Command, string Parameter)>(_rows.Count);
         for (int i = 0; i < _rows.Count; i++)
         {
+            if (_rows[i].IsTrailingPlaceholder) continue;
             list.Add((_rows[i].Command ?? string.Empty, _rows[i].Parameter ?? string.Empty));
         }
         return list;
@@ -1640,9 +1762,11 @@ public partial class SequencerEditorControl : UserControl, ISequencerEditorHost
                 LineNumber = i,
                 Command = snapshot[i].Command,
                 Parameter = snapshot[i].Parameter,
-                IsCurrentPC = false
+                IsCurrentPC = false,
+                IsTrailingPlaceholder = false
             });
         }
+        EnsureTrailingPlaceholderRow();
 
         SyncUIToProgram();
 

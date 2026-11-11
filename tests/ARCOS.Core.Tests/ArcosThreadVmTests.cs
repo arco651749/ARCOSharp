@@ -232,4 +232,268 @@ public class ArcosThreadVmTests
         Assert.True(engines.Io.GetPort("ParallelWorker1Done"));
         Assert.False(engines.Io.GetPort("Thread1#Run?"));
     }
+
+    [Fact]
+    public void SystemPrograms_DefaultCommandsAndPrivilegedHooks_ShouldWork()
+    {
+        var (vm, engines) = CreateVM();
+
+        // 1. 驗證預設系統程式區指令
+        var p94 = vm.GetProgram(94);
+        var p95 = vm.GetProgram(95);
+        var p96 = vm.GetProgram(96);
+        var p99 = vm.GetProgram(99);
+
+        Assert.Equal(1, p94.Count);
+        Assert.Equal("System@Resume", p94[1].Command);
+
+        Assert.Equal(1, p95.Count);
+        Assert.Equal("System@Pause", p95[1].Command);
+
+        Assert.Equal(1, p96.Count);
+        Assert.Equal("Thread@Run", p96[1].Command);
+        Assert.Equal("0,0", p96[1].RawParameter);
+
+        Assert.Equal(1, p99.Count);
+        Assert.Equal("Motion@Stop", p99[1].Command);
+        Assert.Equal("", p99[1].RawParameter);
+
+        // 2. 觸發 95: Pause On -> 產生 PauseOn& 並執行 System@Pause 進入全機暫停
+        var ctx95 = vm.TriggerSystemHook(95);
+        Assert.NotNull(ctx95);
+        Assert.Equal("PauseOn&", ctx95!.ThreadName);
+        Assert.True(ctx95.IsBypassPause);
+        vm.Tick();
+        Assert.True(engines.Timer.IsSystemPaused);
+
+        // 3. 在全機暫停期間，觸發 94: Pause Off -> PauseOff& 因尾端帶 "&" 可穿透暫停並執行 System@Resume 解除全機暫停
+        var ctx94 = vm.TriggerSystemHook(94);
+        Assert.NotNull(ctx94);
+        Assert.Equal("PauseOff&", ctx94!.ThreadName);
+        Assert.True(ctx94.IsBypassPause);
+        vm.Tick();
+        Assert.False(engines.Timer.IsSystemPaused);
+    }
+
+    [Fact]
+    public void MotionStop_WithoutArguments_ShouldStopAllMotionDevices()
+    {
+        var (vm, engines) = CreateVM();
+
+        var ctx = vm.MainThreads[0];
+        vm.Executor.ExecuteCommandLine(ctx, "Motion@AddMotor::AxisX,MockMotion");
+        vm.Executor.ExecuteCommandLine(ctx, "Motion@AddMotor::AxisY,MockMotion");
+
+        engines.Io.SetPort("AxisX#Busy?", true);
+        engines.Io.SetPort("AxisX#Done?", false);
+        engines.Io.SetPort("AxisY#Busy?", true);
+        engines.Io.SetPort("AxisY#Done?", false);
+
+        // 執行 99: EMG Stop 預設的無參數 Motion@Stop
+        var res = vm.Executor.ExecuteCommandLine(ctx, "Motion@Stop::");
+        Assert.Equal(CommandStatus.Completed, res.Status);
+
+        Assert.False(engines.Io.GetPort("AxisX#Busy?"));
+        Assert.True(engines.Io.GetPort("AxisX#Done?"));
+        Assert.False(engines.Io.GetPort("AxisY#Busy?"));
+        Assert.True(engines.Io.GetPort("AxisY#Done?"));
+    }
+
+    [Fact]
+    public void SystemCsviCommands_SessionLogFlush_ClearError_And_MissingCsviFails()
+    {
+        var (vm, engines) = CreateVM();
+        var ctx = vm.MainThreads[0];
+
+        // 1. 驗證已刪除 CSVI 的廢棄指令直接回傳 Error (絕不退回內建保底)
+        var resRemoved1 = vm.Executor.ExecuteCommandLine(ctx, "System@ParameterSet::A,123");
+        Assert.Equal(CommandStatus.Error, resRemoved1.Status);
+        var resRemoved2 = vm.Executor.ExecuteCommandLine(ctx, "System@AddExternalDriver::Motion,Mock");
+        Assert.Equal(CommandStatus.Error, resRemoved2.Status);
+        var resRemoved3 = vm.Executor.ExecuteCommandLine(ctx, "System@UserPanelCMD::Refresh");
+        Assert.Equal(CommandStatus.Error, resRemoved3.Status);
+
+        // 2. 驗證 Log Message -> Clear Message 會自動將訊息寫入當次 Session Log 檔 (LOGS/yyyyMMdd-HHmmss.log)
+        string sessionLogPath = ARCOS.Core.Common.ArcosPaths.SessionLogFilePath;
+        Assert.True(System.IO.File.Exists(sessionLogPath));
+
+        string uniqueMarker = $"SESSION_TEST_MSG_{Guid.NewGuid():N}";
+        vm.Executor.ExecuteCommandLine(ctx, $"System@Log Message::{uniqueMarker}");
+        var sysChannel = engines.Record.GetOrCreateChannel("SYSTEMLOG");
+        Assert.Contains(sysChannel.Entries, e => e.Message.Contains(uniqueMarker));
+
+        // 執行 Clear Message.csvi -> 清空記憶體並寫入 SessionLogFilePath
+        vm.Executor.ExecuteCommandLine(ctx, "System@Clear Message::");
+        Assert.Equal(0, sysChannel.Index);
+        string fileContent = System.IO.File.ReadAllText(sessionLogPath);
+        Assert.Contains(uniqueMarker, fileContent);
+
+        // 3. 驗證 Log Error.csvi 觸發 99: EMG Stop 並設 System#Error? = True，以及 Clear Error.csvi 復歸
+        vm.LoadProgram(0, ProgramTable.FromText("System@Log Error::CriticalServoAlarm;", 0, "Main"));
+        vm.StartThread(0, 0);
+        vm.Tick(); // 執行 Log Error -> 觸發 HandleError -> 啟動 EMGStop& (Prog 99)
+
+        Assert.True(engines.Io.GetPort("System#Error?"));
+        Assert.True(vm.SubThreads.ContainsKey("EMGStop&"));
+
+        // 執行 Clear Error.csvi -> 復歸 System#Error? = False 並清除 [ERROR] 紀錄
+        vm.Executor.ExecuteCommandLine(ctx, "System@Clear Error::");
+        Assert.False(engines.Io.GetPort("System#Error?"));
+        Assert.DoesNotContain(sysChannel.Entries, e => e.Message.Contains("[ERROR]"));
+    }
+
+    [Fact]
+    public void SystemCsviCommands_MessageBoxAndWarningBox_NonBlockingMicrostepFlow()
+    {
+        var (vm, engines) = CreateVM();
+
+        TaskCompletionSource? msgTcs = null;
+        TaskCompletionSource<bool>? warnTcs = null;
+
+        vm.OnMessageBoxRequested = (threadName, msg) =>
+        {
+            msgTcs = new TaskCompletionSource();
+            return msgTcs.Task;
+        };
+
+        vm.OnWarningBoxRequested = (threadName, msg) =>
+        {
+            warnTcs = new TaskCompletionSource<bool>();
+            return warnTcs.Task;
+        };
+
+        engines.Io.SetPort("DoorOpen", true);
+        vm.LoadProgram(0, ProgramTable.FromText("""
+            System@MessageBox::Please confirm fixture;
+            System@WarningBox::DoorOpen,Door is open! Continue?;
+            IO@SetPort::AfterWarningDone;
+            """, 0, "Main"));
+
+        vm.StartThread(0, 0);
+
+        // Tick 1: 進入 MessageBox，處於 Waiting 狀態，PC 停在 1
+        vm.Tick();
+        Assert.NotNull(msgTcs);
+        Assert.Equal(1, vm.MainThreads[0].ProgIndex);
+
+        // Tick 2: 使用者尚未按確定，維持 Waiting
+        vm.Tick();
+        Assert.Equal(1, vm.MainThreads[0].ProgIndex);
+
+        // 使用者按下確定 -> Tick 3 完成 MessageBox，推進至第 2 行 WarningBox
+        msgTcs!.SetResult();
+        vm.Tick();
+        Assert.Equal(2, vm.MainThreads[0].ProgIndex);
+
+        // Tick 4: 進入 WarningBox (DoorOpen=true)，處於 Waiting 狀態
+        vm.Tick();
+        Assert.NotNull(warnTcs);
+        Assert.Equal(2, vm.MainThreads[0].ProgIndex);
+
+        // 使用者選擇「停止執行 (false)」-> Tick 5 終止該執行緒，不執行第 3 行 AfterWarningDone
+        warnTcs!.SetResult(false);
+        vm.Tick();
+        Assert.False(vm.MainThreads[0].IsRunning);
+        Assert.False(engines.Io.GetPort("AfterWarningDone"));
+    }
+
+    [Fact]
+    public void ThreadCsviCommands_SubroutineCallReturn_NestedIf_MultiVarForeach_ConcurrentSubThread_ErrorRetryOffset_KeyLock()
+    {
+        var (vm, engines) = CreateVM();
+
+        // 設定副程式 Program 10 (SubRoutine10)
+        vm.LoadProgram(10, ProgramTable.FromText("""
+            Variable@Inc::CallCounter,10;
+            Thread@Return::;
+            Variable@Set::CallCounter,9999;
+            """, 10, "SubRoutine10"));
+
+        // 設定 Worker Program 2 (供 Thread@Run 測試以 Label 作為起始點)
+        vm.LoadProgram(2, ProgramTable.FromText("""
+            Variable@Set::RunResult,SkippedLine;
+            Thread@Label::EntryLabel;
+            Variable@Set::RunResult,StartedFromLabel;
+            """, 2, "WorkerProg2"));
+
+        // 設定主程式 Program 0
+        string mainScript = """
+            Variable@Set::CallCounter,5;
+            Thread@Call::10;
+            Thread@Call::SubRoutine10;
+            Variable@Set::OuterCond,1;
+            Variable@Set::InnerCond,0;
+            Thread@If::OuterCond == 1;
+                Thread@If::InnerCond == 1;
+                    Variable@Set::IfRes,WrongInner;
+                Thread@Else::;
+                    Variable@Set::IfRes,CorrectInnerElse;
+                Thread@EndIf::;
+            Thread@Else::;
+                Variable@Set::IfRes,WrongOuterElse;
+            Thread@EndIf::;
+            Variable@Set::ArrA,[X1;X2;X3];
+            Variable@Set::ArrB,[Y1;Y2;Y3];
+            Variable@Set::Joined,;
+            Thread@ForeachStart::LoopAB;
+                Variable@Append::Joined,$(ArrA)$(ArrB)_;
+                Thread@SubThreadStart::proc&&;
+                    Variable@Set::Snap_$(ArrA),$(ArrB),Global;
+                Thread@SubThreadEnd::proc&&;
+            Thread@ForeachLoop::LoopAB,ArrA,ArrB;
+            Thread@SubThreadWait::proc&&;
+            Thread@SubThreadWait::NonExistentSub,SKIPNOTFIND=1;
+            Thread@Run::2,1,EntryLabel;
+            Thread@Wait::1;
+            """;
+
+        vm.LoadProgram(0, ProgramTable.FromText(mainScript, 0, "Main"));
+        vm.StartThread(0, 0);
+
+        for (int i = 0; i < 200 && (vm.MainThreads[0].IsRunning || vm.MainThreads[1].IsRunning || vm.IsSubThreadRunning("proc&&")); i++)
+        {
+            vm.Tick();
+        }
+
+        // 1. 驗證 Thread@Call 與 Thread@Return (5 + 10 + 10 = 25)
+        Assert.Equal("25", engines.Variable.Get("CallCounter", vm.MainThreads[0].CurrentSection));
+
+        // 2. 驗證巢狀 If...Else...EndIf
+        Assert.Equal("CorrectInnerElse", engines.Variable.Get("IfRes", vm.MainThreads[0].CurrentSection));
+
+        // 3. 驗證 ForeachLoop 同步推進 ArrA 與 ArrB
+        Assert.Equal("X1Y1_X2Y2_X3Y3_", engines.Variable.Get("Joined", vm.MainThreads[0].CurrentSection));
+
+        // 4. 驗證 SubThread proc&& 併發多實例各自快照迴圈當下的陣列元素值
+        Assert.Equal("Y1", engines.Variable.Get("Snap_X1", "Global"));
+        Assert.Equal("Y2", engines.Variable.Get("Snap_X2", "Global"));
+        Assert.Equal("Y3", engines.Variable.Get("Snap_X3", "Global"));
+
+        // 5. 驗證 Thread@Run 支援以 Label 名稱作為起始行
+        Assert.Equal("StartedFromLabel", engines.Variable.Get("RunResult", vm.MainThreads[1].CurrentSection));
+
+        // 6. 驗證 SubThreadWait 若未帶 SKIPNOTFIND=1 且目標不存在，應回傳 Error
+        var waitErr = vm.Executor.ExecuteCommandLine(vm.MainThreads[0], "Thread@SubThreadWait::NoSuchSubThread;");
+        Assert.Equal(CommandStatus.Error, waitErr.Status);
+
+        // 7. 驗證 KeySectionLock.csvi 與 KeySectionUnLock.csvi 跨檔案共用鎖表
+        var lock1 = vm.Executor.ExecuteCommandLine(vm.MainThreads[0], "Thread@KeySectionLock::SharedRes,0.1,BusyTimeout;");
+        Assert.Equal(CommandStatus.Completed, lock1.Status);
+
+        var lock2 = vm.Executor.ExecuteCommandLine(vm.MainThreads[1], "Thread@KeySectionLock::SharedRes,0.1,BusyTimeout;");
+        Assert.Equal(CommandStatus.Waiting, lock2.Status);
+
+        var unlock1 = vm.Executor.ExecuteCommandLine(vm.MainThreads[0], "Thread@KeySectionUnLock::SharedRes;");
+        Assert.Equal(CommandStatus.Completed, unlock1.Status);
+
+        var lock2After = vm.Executor.ExecuteCommandLine(vm.MainThreads[1], "Thread@KeySectionLock::SharedRes,0.1,BusyTimeout;");
+        Assert.Equal(CommandStatus.Completed, lock2After.Status);
+        vm.Executor.ExecuteCommandLine(vm.MainThreads[1], "Thread@KeySectionUnLock::SharedRes;");
+
+        // 8. 驗證 ErrorRetry 支援 $offset (FailedPC + offset)
+        vm.MainThreads[0].FailedPC = 5;
+        var retryRes = vm.Executor.ExecuteCommandLine(vm.MainThreads[0], "Thread@ErrorRetry::1==1,-2;");
+        Assert.Equal(CommandStatus.Retry, retryRes.Status);
+        Assert.Equal(-2, retryRes.TargetLine);
+    }
 }

@@ -21,8 +21,12 @@ public class RecordEngine
 
     public RecordEngine()
     {
-        // 開機預設常駐 SYSTEMLOG 通道
-        _channels["SYSTEMLOG"] = new RecordChannel("SYSTEMLOG", DefaultCapacity);
+        // 開機預設建立當次開啟的 Session Log 檔 (LOGS/yyyyMMdd-HHmmss.log) 並綁定至 SYSTEMLOG 通道
+        Common.ArcosPaths.InitSessionLogFile();
+        _channels["SYSTEMLOG"] = new RecordChannel("SYSTEMLOG", DefaultCapacity)
+        {
+            AutoFlushFilePathProvider = () => Common.ArcosPaths.SessionLogFilePath
+        };
     }
 
     /// <summary>
@@ -37,6 +41,7 @@ public class RecordEngine
         if (string.Equals(message, "CLEAR", StringComparison.OrdinalIgnoreCase))
         {
             channel.Clear();
+            Cleared?.Invoke(recordName);
             return;
         }
 
@@ -51,10 +56,36 @@ public class RecordEngine
     }
 
     /// <summary>
+    /// 清除 SYSTEMLOG 中的錯誤訊息並通知 UI
+    /// </summary>
+    public void ClearSystemErrors()
+    {
+        var ch = GetOrCreateChannel("SYSTEMLOG");
+        ch.ClearMatching(m => m.Contains("[ERROR]", StringComparison.OrdinalIgnoreCase));
+        Cleared?.Invoke("SYSTEMLOG_ERROR");
+    }
+
+    /// <summary>
+    /// 將 SYSTEMLOG 尚未寫入檔案的紀錄沖刷至當次 Session Log 檔
+    /// </summary>
+    public void FlushSystemLogToFile()
+    {
+        if (_channels.TryGetValue("SYSTEMLOG", out var ch))
+        {
+            ch.FlushToFile();
+        }
+    }
+
+    /// <summary>
     /// 可選觀察者事件 (recordName, timestamp, message)。無訂閱者時零成本；
     /// 僅供 USER TAB 即時 LOG 等明確需要即時顯示的 UI 訂閱，Module Info 仍採 On-Demand Pull。
     /// </summary>
     public event Action<string, string, string>? Recorded;
+
+    /// <summary>
+    /// 當通道被清空時觸發 (recordName，例如 "SYSTEMLOG" 或 "SYSTEMLOG_ERROR")
+    /// </summary>
+    public event Action<string>? Cleared;
 
     /// <summary>
     /// 計算並取得指定 Record 的 Cycle Time 耗時秒數 (對應 System@LogRecordCycleTime)

@@ -257,21 +257,59 @@ Motion@GoSafe::M2,100,P2,Z=0;
     public void PointPathModule_SelectAndLocalModifications()
     {
         string script = @"
-Point&Path@Calculate::P1=(10,20,30);
+Point&Path@Calculate::P1=(10,20,30,0,0,0,12.5);
 Point&Path@Calculate::P2=(100,200,300);
 Point&Path@Select(X=A?B:C)::PSelected=1==1?P1:P2;
-Point&Path@AddXYZ::P1,(5,5,5);
+Point&Path@AddXYZ::P1,5,5,5;
 Point&Path@ReplaceH::P1,45.5;
+Point&Path@ReplaceH::P1,SetIO=P0.0;Pose=Left;
+Variable@GetPointElement::RadVal=H(P1);
+Variable@GetPointElement::PoseVal=H.Pose(P1);
+Point&Path@Calculate::WS=(0,0,50);
+Point&Path@InsertOnePoint::WS,(0,100,50);
+Point&Path@InsertOnePoint::WS,(100,0,50);
+Point&Path@Calculate::PT=(20,40,0);
+Point&Path@WS2Point::PT,WS;
+Point&Path@Calculate::Center=(50,50,0,0,0,0,20);
+Point&Path@Circle2DPath::Center,4,Angle=360;
+Point&Path@Calculate::RangeBox=(0,0,0);
+Point&Path@InsertOnePoint::RangeBox,(100,100,0);
+Point&Path@ChkInRangeXY::PT,RangeBox,InRangeFlag;
+Point&Path@ClearPoint::P2;
 ";
         var (ctx, executor, engines) = CreateHarness(script);
         RunToEnd(ctx, executor);
 
         var pSel = engines.Point.GetPoint("PSelected");
         Assert.Equal(10.0, pSel.X);
+        Assert.Equal(12.5, pSel.Radius);
 
         var p1 = engines.Point.GetPoint("P1");
         Assert.Equal(15.0, p1.X);
-        Assert.Equal(45.5, p1.H["Radius"]?.GetValue<double>());
+        Assert.Equal(25.0, p1.Y);
+        Assert.Equal(35.0, p1.Z);
+        Assert.Equal(45.5, p1.Radius);
+        Assert.Equal("Left", p1.GetHString("Pose"));
+        Assert.Equal("P0.0", p1.GetHString("SetIO"));
+        Assert.Equal("Left", engines.Variable.Get("PoseVal"));
+
+        // WS2Point test: WS=[(0,0,50), (0,100,50), (100,0,50)], PT=(20,40,0) -> (40, 20, 50)
+        var pt = engines.Point.GetPoint("PT");
+        Assert.Equal(40.0, pt.X, 3);
+        Assert.Equal(20.0, pt.Y, 3);
+        Assert.Equal(50.0, pt.Z, 3);
+
+        // Circle2DPath from single point + Radius=20 -> 4 points
+        var centerPallet = engines.Point.GetPointArray("Center");
+        Assert.Equal(4, centerPallet.Count);
+        Assert.Equal(70.0, centerPallet[0].X, 3);
+        Assert.Equal(50.0, centerPallet[0].Y, 3);
+
+        // ChkInRangeXY -> InRangeFlag = 1
+        Assert.Equal("1", engines.Variable.Get("InRangeFlag"));
+
+        // ClearPoint -> P2 cleared
+        Assert.Empty(engines.Point.GetPointArray("P2"));
     }
 
     [Fact]
@@ -316,6 +354,54 @@ Variable@Flush::Ev1;
         // Dynamic $DATE and $TIME test
         string date = engines.Variable.FilterParameters("$DATE");
         Assert.Equal(DateTime.Now.ToString("yyyyMMdd"), date);
+    }
+
+    [Fact]
+    public void VariableModule_CsviDrivenCommands_TrimInclusiveEnd_RegexSave_SubscribeWait_GetPointSection()
+    {
+        string saveFile = $"RegexSaveTest_{Guid.NewGuid():N}.ini";
+        string script = $@"
+Variable@Set::StrVar,ABCDEFG;
+Variable@Trim::StrVar,1,4;
+Point&Path@Calculate::PT2=(11.5,22.5,33.5);
+Variable@GetPointElement::YVal=Y(PT2),CustomSec;
+Variable@Set::Prod_1,Apple;
+Variable@Set::Prod_2,Banana;
+Variable@Set::Temp_Ignore,999;
+Variable@VariableSave::{saveFile},^Prod_[0-9]+$;
+Variable@Delete::Prod_1;
+Variable@Delete::Prod_2;
+Variable@Delete::Temp_Ignore;
+Variable@VariableLoad::{saveFile};
+";
+        var (ctx, executor, engines) = CreateHarness(script);
+        RunToEnd(ctx, executor);
+
+        // 1. 驗證 Trim 0-based 且包含 $end (1..4 of "ABCDEFG" -> "BCDE")
+        Assert.Equal("BCDE", engines.Variable.Get("StrVar"));
+
+        // 2. 驗證 GetPointElement 支援尾端 , $section
+        Assert.Equal("22.5", engines.Variable.Get("YVal", "CustomSec"));
+
+        // 3. 驗證 VariableSave 正規表示式篩選 (^Prod_[0-9]+$) 與 VariableLoad
+        Assert.Equal("Apple", engines.Variable.Get("Prod_1"));
+        Assert.Equal("Banana", engines.Variable.Get("Prod_2"));
+        Assert.Throws<KeyNotFoundException>(() => engines.Variable.Get("Temp_Ignore"));
+
+        string fullSavePath = Path.Combine(ARCOS.Core.Common.ArcosPaths.ScriptDirectory, saveFile);
+        if (File.Exists(fullSavePath)) File.Delete(fullSavePath);
+
+        // 4. 驗證 Subscribe 非阻塞微步輪詢 (未 Publish 時回傳 Waiting，Publish 後回傳 Completed)
+        var waitRes = executor.ExecuteCommandLine(ctx, "Variable@Subscribe::SyncSignal;");
+        Assert.Equal(CommandStatus.Waiting, waitRes.Status);
+
+        executor.ExecuteCommandLine(ctx, "Variable@Publish::SyncSignal;");
+        var doneRes = executor.ExecuteCommandLine(ctx, "Variable@Subscribe::SyncSignal;");
+        Assert.Equal(CommandStatus.Completed, doneRes.Status);
+
+        // 5. 驗證不存在的 Variable 指令直接報錯
+        var errRes = executor.ExecuteCommandLine(ctx, "Variable@NoSuchVarCmd::123;");
+        Assert.Equal(CommandStatus.Error, errRes.Status);
     }
 
     [Fact]
@@ -455,12 +541,14 @@ LaserMarking@StartMark::Text=SN12345;
         string expectedImgPath = Path.Combine(ARCOS.Core.Common.ArcosPaths.GetCameraPictureDirectory("CAM_INSPECT"), "Frame01.bmp");
         Assert.True(File.Exists(expectedImgPath));
 
-        // 5. ExecutionContext.Log writes to LOGS/yyyyMMdd.log
-        ctx.Log("Unit test verification log message");
-        string logPath = ARCOS.Core.Common.ArcosPaths.GetTodayLogFilePath();
+        // 5. ExecutionContext.Log records in SYSTEMLOG and flushes to SessionLogFilePath on Clear Message
+        string uniqueLogMsg = $"Unit test verification log message {Guid.NewGuid():N}";
+        ctx.Log(uniqueLogMsg);
+        executor.ExecuteCommandLine(ctx, "System@Clear Message::");
+        string logPath = ARCOS.Core.Common.ArcosPaths.SessionLogFilePath;
         Assert.True(File.Exists(logPath));
         string logContent = File.ReadAllText(logPath);
-        Assert.Contains("Unit test verification log message", logContent);
+        Assert.Contains(uniqueLogMsg, logContent);
 
         // 6. System@UserPanelOpen triggers VM callback
         var (ctxPanel, execPanel, enginesPanel) = CreateHarness("System@UserPanelOpen::CustomRecipePanel.csvi;");
@@ -738,5 +826,32 @@ Variable@Set::State,Handled;
         RunToEnd(ctx, executor);
 
         Assert.Equal("Handled", engines.Variable.Get("State"));
+    }
+
+    [Fact]
+    public void CallModule_ExecuteCommandLine_And_EmbeddedResources_WorkCorrectly()
+    {
+        var (ctx, executor, engines) = CreateHarness("System@DoNothing::;");
+
+        // 1. 驗證主視窗 CALL 模組 ▶ Run Test 所呼叫的 ExecuteCommandLine 可正常派發至 CallModule
+        var res = executor.ExecuteCommandLine(ctx, "Call@mycsvi.csvi&::15, 25, $RunTestOut;");
+        Assert.Equal(CommandStatus.Completed, res.Status);
+        Assert.Equal("40", engines.Variable.Get("RunTestOut"));
+
+        // 2. 驗證 ExternalModules/mycsvi.csvi 為完整 CSVI 3.0 單檔組件，具備 Wizard / Panel / Manifest / Source.Bundle
+        string csviPath = Path.Combine(ARCOS.Core.Common.ArcosPaths.ExternalModulesDirectory, "mycsvi.csvi");
+        Assert.True(File.Exists(csviPath), $"Expected mycsvi.csvi at {csviPath}");
+
+        var asm = System.Reflection.Assembly.Load(File.ReadAllBytes(csviPath));
+        var resNames = asm.GetManifestResourceNames();
+        Assert.Contains("CSVI.Manifest.json", resNames);
+        Assert.Contains("CSVI.RuntimeXaml.Wizard.axaml", resNames);
+        Assert.Contains("CSVI.RuntimeXaml.Panel.axaml", resNames);
+        Assert.Contains("CSVI.Source.Bundle", resNames);
+
+        var cmdType = asm.GetExportedTypes().FirstOrDefault(t =>
+            typeof(ICallCommand).IsAssignableFrom(t) &&
+            typeof(ARCOS.Core.Guidance.IParameterGuidance).IsAssignableFrom(t));
+        Assert.NotNull(cmdType);
     }
 }

@@ -90,37 +90,39 @@
                   CanUserSortColumns="False" CanUserResizeColumns="True"
                   GridLinesVisibility="All" HeadersVisibility="Column"
                   BorderThickness="0" Background="#FFFFFF"
-                  RowHeight="20" FontSize="10.5">
+                  RowHeight="22" FontSize="11">
             <DataGrid.Styles>
                 <Style Selector="DataGridColumnHeader">
                     <Setter Property="Background" Value="#0055AA"/>
                     <Setter Property="Foreground" Value="#FFFFFF"/>
                     <Setter Property="FontWeight" Value="Bold"/>
-                    <Setter Property="FontSize" Value="10"/>
+                    <Setter Property="FontSize" Value="10.5"/>
                     <Setter Property="Height" Value="22"/>
                     <Setter Property="Padding" Value="4,0"/>
+                    <Setter Property="HorizontalContentAlignment" Value="Left"/>
                 </Style>
                 <Style Selector="DataGridCell">
-                    <Setter Property="Padding" Value="2,0"/>
+                    <Setter Property="Padding" Value="3,0"/>
+                    <Setter Property="FontSize" Value="11"/>
                 </Style>
                 <Style Selector="DataGridRow:selected /template/ Rectangle#BackgroundRectangle">
                     <Setter Property="Fill" Value="#E0F2FE"/>
                 </Style>
             </DataGrid.Styles>
             <DataGrid.Columns>
-                <!-- 行號欄位 # (藍底白字序號，PC 當前運行行粉桃色高亮) -->
-                <DataGridTemplateColumn Header="#" Width="38">
+                <!-- 行號欄位 i (與編輯頁相同，PC 當前位置粉桃色高亮) -->
+                <DataGridTemplateColumn Header="i" Width="32" MinWidth="28">
                     <DataGridTemplateColumn.CellTemplate>
                         <DataTemplate>
                             <Panel HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
                                 <Border IsVisible="{Binding IsCurrentPC}" 
                                         Background="#FFE4E6" BorderBrush="#FDA4AF" BorderThickness="1" 
-                                        CornerRadius="2" Margin="1,0">
-                                    <TextBlock Text="{Binding LineNumber}" FontWeight="Black" FontSize="10" 
+                                        CornerRadius="2" Margin="1,1">
+                                    <TextBlock Text="{Binding LineNumber}" FontWeight="Black" FontSize="10.5" 
                                                Foreground="#9F1239" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                 </Border>
-                                <Border IsVisible="{Binding !IsCurrentPC}" Background="#F1F5F9" Margin="1,0">
-                                    <TextBlock Text="{Binding LineNumber}" FontSize="10" FontWeight="SemiBold" 
+                                <Border IsVisible="{Binding !IsCurrentPC}" Background="#F1F5F9" Margin="1,1">
+                                    <TextBlock Text="{Binding LineNumber}" FontSize="10.5" FontWeight="SemiBold" 
                                                Foreground="#0284C7" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                 </Border>
                             </Panel>
@@ -129,10 +131,26 @@
                 </DataGridTemplateColumn>
 
                 <!-- CMD 指令欄位 -->
-                <DataGridTextColumn Header="CMD" Binding="{Binding Command}" Width="105" FontWeight="SemiBold" Foreground="#003399"/>
+                <DataGridTemplateColumn Header="Command" Width="135" MinWidth="95">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <TextBlock Text="{Binding Command}" FontSize="11" FontWeight="SemiBold" 
+                                       Foreground="#003399" VerticalAlignment="Center" Margin="3,0"
+                                       TextTrimming="CharacterEllipsis"/>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
 
                 <!-- Parameters 參數欄位 -->
-                <DataGridTextColumn Header="Parameters" Binding="{Binding Parameter}" Width="*" Foreground="#1E293B"/>
+                <DataGridTemplateColumn Header="Parameters" Width="*" MinWidth="70">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <TextBlock Text="{Binding Parameter}" FontSize="11" 
+                                       Foreground="#1E293B" VerticalAlignment="Center" Margin="3,0"
+                                       TextTrimming="CharacterEllipsis"/>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
             </DataGrid.Columns>
         </DataGrid>
     </Grid>

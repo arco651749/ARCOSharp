@@ -157,6 +157,23 @@ public class PointEngine
     }
 
     /// <summary>
+    /// 清除指定點位的點資料記憶 (對應 ClearPoint)
+    /// </summary>
+    public void ClearPoint(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return;
+        lock (_lock)
+        {
+            if (_points.TryGetValue(name.Trim(), out var entry))
+            {
+                entry.Points.Clear();
+                entry.CurrentIndex = 0;
+                UpdateIoLastFlag(name.Trim(), true);
+            }
+        }
+    }
+
+    /// <summary>
     /// 重設料盤游標 (對應 ResetPalletIndex)
     /// </summary>
     public void ResetPalletIndex(string name, int index = 0)
@@ -267,8 +284,10 @@ public class PointEngine
 
             double deltaXx = (pXEnd.X - pOrigin.X) / (countX - 1);
             double deltaXy = (pXEnd.Y - pOrigin.Y) / (countX - 1);
+            double deltaXz = (pXEnd.Z - pOrigin.Z) / (countX - 1);
             double deltaYx = (pYEnd.X - pOrigin.X) / (countY - 1);
             double deltaYy = (pYEnd.Y - pOrigin.Y) / (countY - 1);
+            double deltaYz = (pYEnd.Z - pOrigin.Z) / (countY - 1);
 
             var list = new List<MachinePoint>(countX * countY);
 
@@ -279,11 +298,12 @@ public class PointEngine
                     var pt = new MachinePoint(
                         pOrigin.X + c * deltaXx + r * deltaYx,
                         pOrigin.Y + c * deltaXy + r * deltaYy,
-                        pOrigin.Z,
+                        pOrigin.Z + c * deltaXz + r * deltaYz,
                         pOrigin.U,
                         pOrigin.V,
                         pOrigin.W
                     );
+                    pt.H = pOrigin.Clone().H;
                     list.Add(pt);
                 }
             }
@@ -296,7 +316,7 @@ public class PointEngine
     }
 
     /// <summary>
-    /// 依 [0]圓心、[1]半徑參考點產生圓弧分割路徑 (對應 Circle2DPath)
+    /// 依 [0]圓心 (可由 center.Radius 或 [1]半徑參考點決定半徑) 產生圓弧分割路徑 (對應 Circle2DPath)
     /// </summary>
     public void GenerateCircle2DPath(string name, double startDeg, double endDeg, int segments)
     {
@@ -304,14 +324,19 @@ public class PointEngine
 
         lock (_lock)
         {
-            if (!_points.TryGetValue(name, out var entry) || entry.Points.Count < 2)
+            if (!_points.TryGetValue(name, out var entry) || entry.Points.Count < 1)
             {
-                throw new InvalidOperationException($"Circle2DPath requires point array '{name}' with [0] Center and [1] Radius point.");
+                throw new InvalidOperationException($"Circle2DPath requires point array '{name}' with at least [0] Center.");
             }
 
             var center = entry.Points[0];
-            var radiusPt = entry.Points[1];
-            double radius = Math.Sqrt(Math.Pow(radiusPt.X - center.X, 2) + Math.Pow(radiusPt.Y - center.Y, 2));
+            double radius = center.Radius;
+            if (radius <= 0 && entry.Points.Count >= 2)
+            {
+                var radiusPt = entry.Points[1];
+                radius = Math.Sqrt(Math.Pow(radiusPt.X - center.X, 2) + Math.Pow(radiusPt.Y - center.Y, 2));
+                center.Radius = radius;
+            }
 
             var list = new List<MachinePoint>(segments);
             double angleStep = (endDeg - startDeg) / (segments - 1);
@@ -327,6 +352,7 @@ public class PointEngine
                     center.V,
                     center.W
                 );
+                pt.Radius = radius;
                 list.Add(pt);
             }
 
@@ -338,44 +364,148 @@ public class PointEngine
     }
 
     /// <summary>
-    /// 機構座標與工作區座標偏移轉換 (Point2WS)
+    /// 以現有原點 ws[0] 及指定的 X 終點、Y 終點建立三點工作區 (對應 CoordWS(2Edge))
+    /// </summary>
+    public void CoordWS2Edge(string wsName, MachinePoint xEndPt, MachinePoint yEndPt)
+    {
+        if (string.IsNullOrWhiteSpace(wsName)) return;
+        lock (_lock)
+        {
+            var entry = _points.GetOrAdd(wsName.Trim(), _ => new PointArrayEntry());
+            var origin = entry.Points.Count > 0 ? entry.Points[0].Clone() : new MachinePoint();
+            entry.Points.Clear();
+            entry.Points.Add(origin);
+            entry.Points.Add(xEndPt.Clone());
+            entry.Points.Add(yEndPt.Clone());
+            entry.CurrentIndex = 0;
+            UpdateIoLastFlag(wsName.Trim(), false);
+        }
+    }
+
+    /// <summary>
+    /// 機構座標轉換為工作區座標 (Point2WS)
+    /// 當 ws 含 3 點 ([0]=Origin, [1]=X_End, [2]=Y_End) 時執行基底向量逆投影；僅 1 點時執行純平移
     /// </summary>
     public void Point2WS(string pointName, string wsName)
     {
         lock (_lock)
         {
-            if (_points.TryGetValue(pointName, out var ptEntry) && _points.TryGetValue(wsName, out var wsEntry))
+            if (!_points.TryGetValue(pointName, out var ptEntry) || !_points.TryGetValue(wsName, out var wsEntry) || wsEntry.Points.Count == 0)
+                return;
+
+            var origin = wsEntry.Points[0];
+            if (wsEntry.Points.Count >= 3)
             {
-                var ws = wsEntry.CurrentPoint;
+                var xEnd = wsEntry.Points[1];
+                var yEnd = wsEntry.Points[2];
+
+                double vxX = xEnd.X - origin.X;
+                double vxY = xEnd.Y - origin.Y;
+                double lenX = Math.Sqrt(vxX * vxX + vxY * vxY);
+                double exX = lenX > 1e-9 ? vxX / lenX : 1.0;
+                double exY = lenX > 1e-9 ? vxY / lenX : 0.0;
+
+                double vyX = yEnd.X - origin.X;
+                double vyY = yEnd.Y - origin.Y;
+                double lenY = Math.Sqrt(vyX * vyX + vyY * vyY);
+                double eyX = lenY > 1e-9 ? vyX / lenY : 0.0;
+                double eyY = lenY > 1e-9 ? vyY / lenY : 1.0;
+
+                double det = exX * eyY - exY * eyX;
+
                 foreach (var pt in ptEntry.Points)
                 {
-                    if (!double.IsInfinity(pt.X) && !double.IsInfinity(ws.X)) pt.X -= ws.X;
-                    if (!double.IsInfinity(pt.Y) && !double.IsInfinity(ws.Y)) pt.Y -= ws.Y;
-                    if (!double.IsInfinity(pt.Z) && !double.IsInfinity(ws.Z)) pt.Z -= ws.Z;
+                    if (!double.IsInfinity(pt.X) && !double.IsInfinity(pt.Y))
+                    {
+                        double dx = pt.X - origin.X;
+                        double dy = pt.Y - origin.Y;
+                        if (Math.Abs(det) > 1e-9)
+                        {
+                            pt.X = (dx * eyY - dy * eyX) / det;
+                            pt.Y = (-dx * exY + dy * exX) / det;
+                        }
+                        else
+                        {
+                            pt.X = dx;
+                            pt.Y = dy;
+                        }
+                    }
+                    if (!double.IsInfinity(pt.Z) && !double.IsInfinity(origin.Z))
+                    {
+                        pt.Z -= origin.Z;
+                    }
                 }
             }
-        }
-    }
-
-    public void WS2Point(string pointName, string wsName)
-    {
-        lock (_lock)
-        {
-            if (_points.TryGetValue(pointName, out var ptEntry) && _points.TryGetValue(wsName, out var wsEntry))
+            else
             {
-                var ws = wsEntry.CurrentPoint;
                 foreach (var pt in ptEntry.Points)
                 {
-                    if (!double.IsInfinity(pt.X) && !double.IsInfinity(ws.X)) pt.X += ws.X;
-                    if (!double.IsInfinity(pt.Y) && !double.IsInfinity(ws.Y)) pt.Y += ws.Y;
-                    if (!double.IsInfinity(pt.Z) && !double.IsInfinity(ws.Z)) pt.Z += ws.Z;
+                    if (!double.IsInfinity(pt.X) && !double.IsInfinity(origin.X)) pt.X -= origin.X;
+                    if (!double.IsInfinity(pt.Y) && !double.IsInfinity(origin.Y)) pt.Y -= origin.Y;
+                    if (!double.IsInfinity(pt.Z) && !double.IsInfinity(origin.Z)) pt.Z -= origin.Z;
                 }
             }
         }
     }
 
     /// <summary>
-    /// 剛體位移偏差補償 (SelfMotion)：Offset = NewPt - BasePt, Point += Offset
+    /// 工作區座標轉換回機構座標 (WS2Point)
+    /// 當 ws 含 3 點 ([0]=Origin, [1]=X_End, [2]=Y_End) 時執行 P = Origin + u * ex + v * ey
+    /// </summary>
+    public void WS2Point(string pointName, string wsName)
+    {
+        lock (_lock)
+        {
+            if (!_points.TryGetValue(pointName, out var ptEntry) || !_points.TryGetValue(wsName, out var wsEntry) || wsEntry.Points.Count == 0)
+                return;
+
+            var origin = wsEntry.Points[0];
+            if (wsEntry.Points.Count >= 3)
+            {
+                var xEnd = wsEntry.Points[1];
+                var yEnd = wsEntry.Points[2];
+
+                double vxX = xEnd.X - origin.X;
+                double vxY = xEnd.Y - origin.Y;
+                double lenX = Math.Sqrt(vxX * vxX + vxY * vxY);
+                double exX = lenX > 1e-9 ? vxX / lenX : 1.0;
+                double exY = lenX > 1e-9 ? vxY / lenX : 0.0;
+
+                double vyX = yEnd.X - origin.X;
+                double vyY = yEnd.Y - origin.Y;
+                double lenY = Math.Sqrt(vyX * vyX + vyY * vyY);
+                double eyX = lenY > 1e-9 ? vyX / lenY : 0.0;
+                double eyY = lenY > 1e-9 ? vyY / lenY : 1.0;
+
+                foreach (var pt in ptEntry.Points)
+                {
+                    if (!double.IsInfinity(pt.X) && !double.IsInfinity(pt.Y))
+                    {
+                        double u = pt.X;
+                        double v = pt.Y;
+                        pt.X = origin.X + u * exX + v * eyX;
+                        pt.Y = origin.Y + u * exY + v * eyY;
+                    }
+                    if (!double.IsInfinity(pt.Z) && !double.IsInfinity(origin.Z))
+                    {
+                        pt.Z += origin.Z;
+                    }
+                }
+            }
+            else
+            {
+                foreach (var pt in ptEntry.Points)
+                {
+                    if (!double.IsInfinity(pt.X) && !double.IsInfinity(origin.X)) pt.X += origin.X;
+                    if (!double.IsInfinity(pt.Y) && !double.IsInfinity(origin.Y)) pt.Y += origin.Y;
+                    if (!double.IsInfinity(pt.Z) && !double.IsInfinity(origin.Z)) pt.Z += origin.Z;
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// 剛體旋轉與平移偏差補償 (SelfMotion)
     /// </summary>
     public void SelfMotion(string pointName, string basePtName, string newPtName)
     {
@@ -387,13 +517,28 @@ public class PointEngine
             double dx = newPt.X - basePt.X;
             double dy = newPt.Y - basePt.Y;
             double dz = newPt.Z - basePt.Z;
+            double duDeg = (!double.IsInfinity(newPt.U) && !double.IsInfinity(basePt.U)) ? (newPt.U - basePt.U) : 0.0;
+            double rad = duDeg * Math.PI / 180.0;
+            double cosA = Math.Cos(rad);
+            double sinA = Math.Sin(rad);
 
             if (_points.TryGetValue(pointName, out var targetEntry))
             {
                 foreach (var pt in targetEntry.Points)
                 {
-                    if (!double.IsInfinity(pt.X)) pt.X += dx;
-                    if (!double.IsInfinity(pt.Y)) pt.Y += dy;
+                    if (Math.Abs(duDeg) > 1e-9 && !double.IsInfinity(pt.X) && !double.IsInfinity(pt.Y))
+                    {
+                        double rx = pt.X - basePt.X;
+                        double ry = pt.Y - basePt.Y;
+                        pt.X = basePt.X + (rx * cosA - ry * sinA) + dx;
+                        pt.Y = basePt.Y + (rx * sinA + ry * cosA) + dy;
+                        if (!double.IsInfinity(pt.U)) pt.U += duDeg;
+                    }
+                    else
+                    {
+                        if (!double.IsInfinity(pt.X)) pt.X += dx;
+                        if (!double.IsInfinity(pt.Y)) pt.Y += dy;
+                    }
                     if (!double.IsInfinity(pt.Z)) pt.Z += dz;
                 }
             }
@@ -402,14 +547,31 @@ public class PointEngine
 
     /// <summary>
     /// 檢查點位是否在矩形範圍內，寫入 $(pointName)#InRange?
+    /// 若 range 具有 [0] 與 [1] 兩點，判斷是否落在 [0]~(1) 構成的邊界矩形內；若僅 1 點則判斷 |X|<=|r.X| & |Y|<=|r.Y|
     /// </summary>
     public bool CheckInRangeXY(string pointName, string rangePtName)
     {
         var pt = GetPoint(pointName);
-        var rangePt = GetPoint(rangePtName);
+        bool inRange;
 
-        bool inRange = Math.Abs(pt.X) <= Math.Abs(rangePt.X) && Math.Abs(pt.Y) <= Math.Abs(rangePt.Y);
+        if (_points.TryGetValue(rangePtName, out var rangeEntry) && rangeEntry.Points.Count >= 2)
+        {
+            var r0 = rangeEntry.Points[0];
+            var r1 = rangeEntry.Points[1];
+            double minX = Math.Min(r0.X, r1.X);
+            double maxX = Math.Max(r0.X, r1.X);
+            double minY = Math.Min(r0.Y, r1.Y);
+            double maxY = Math.Max(r0.Y, r1.Y);
+            inRange = pt.X >= minX && pt.X <= maxX && pt.Y >= minY && pt.Y <= maxY;
+        }
+        else
+        {
+            var rangePt = GetPoint(rangePtName);
+            inRange = Math.Abs(pt.X) <= Math.Abs(rangePt.X) && Math.Abs(pt.Y) <= Math.Abs(rangePt.Y);
+        }
+
         _ioEngine?.SetPort($"{pointName}#InRange?", inRange);
+        _ioEngine?.SetPort($"{pointName}#InRangeXY?", !inRange);
         return inRange;
     }
 

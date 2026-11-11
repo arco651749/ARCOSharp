@@ -11,18 +11,14 @@ public class ThreadModuleHandler : IModuleHandler
 {
     public string ModuleName => "Thread";
 
-    private static readonly ConcurrentDictionary<string, string> ActiveKeyLocks = new(StringComparer.OrdinalIgnoreCase);
-
     private static readonly string[] Commands = new[]
     {
         "Label",
-        "Thread Label",
         "Jump",
         "Call",
         "Return",
         "Repeat",
         "Stop",
-        "Thread Stop",
         "GoOn",
         "RunNextCMD",
         "SkipNextCMD",
@@ -56,7 +52,6 @@ public class ThreadModuleHandler : IModuleHandler
     {
         // 1. Label 定位點 (純標記無動作)
         if (action.Equals("Label", StringComparison.OrdinalIgnoreCase) ||
-            action.Equals("Thread Label", StringComparison.OrdinalIgnoreCase) ||
             action.Equals("ErrorHandler", StringComparison.OrdinalIgnoreCase))
         {
             return CommandResult.Done();
@@ -117,8 +112,7 @@ public class ThreadModuleHandler : IModuleHandler
         }
 
         // 6. Stop 終止程式
-        if (action.Equals("Stop", StringComparison.OrdinalIgnoreCase) ||
-            action.Equals("Thread Stop", StringComparison.OrdinalIgnoreCase))
+        if (action.Equals("Stop", StringComparison.OrdinalIgnoreCase))
         {
             var parts = filteredParam.Split(',', 2, StringSplitOptions.TrimEntries);
             if (parts.Length > 0 && !string.IsNullOrWhiteSpace(parts[0]))
@@ -130,7 +124,7 @@ public class ThreadModuleHandler : IModuleHandler
             string? msg = parts.Length > 1 ? parts[1] : null;
             if (!string.IsNullOrEmpty(msg))
             {
-                ctx.Log($"Thread stopped: {msg}", isError: false);
+                ctx.Log($"Thread stopped with error: {msg}", isError: true);
             }
             return CommandResult.Stop(msg);
         }
@@ -179,17 +173,19 @@ public class ThreadModuleHandler : IModuleHandler
             return CommandResult.Done();
         }
 
-        // 8. If / ElseIf / Else / EndIf 分支邏輯
+        // 8. If / ElseIf / Else / EndIf 分支邏輯 (支援巢狀 If)
         if (action.Equals("If", StringComparison.OrdinalIgnoreCase))
         {
+            int depth = GetIfNestingDepth(ctx.Program, ctx.ProgIndex);
+            string takenKey = $"__IfTaken_{depth}";
             bool cond = LogicEvaluator.EvaluateLogic(filteredParam, ctx.Engines.Io, ctx.Engines.Variable, ctx.CurrentSection);
             if (cond)
             {
-                ctx.Engines.Variable.Set("__IfTaken", "1", ctx.CurrentSection);
+                ctx.Engines.Variable.Set(takenKey, "1", ctx.CurrentSection);
                 return CommandResult.Done();
             }
 
-            ctx.Engines.Variable.Set("__IfTaken", "0", ctx.CurrentSection);
+            ctx.Engines.Variable.Set(takenKey, "0", ctx.CurrentSection);
             int skipTo = FindMatchingBranch(ctx.Program, ctx.ProgIndex);
             if (skipTo > 0)
             {
@@ -200,8 +196,10 @@ public class ThreadModuleHandler : IModuleHandler
 
         if (action.Equals("ElseIf", StringComparison.OrdinalIgnoreCase))
         {
+            int depth = GetIfNestingDepth(ctx.Program, ctx.ProgIndex);
+            string takenKey = $"__IfTaken_{depth}";
             bool alreadyTaken = false;
-            try { alreadyTaken = ctx.Engines.Variable.Get("__IfTaken", ctx.CurrentSection) == "1"; } catch { }
+            try { alreadyTaken = ctx.Engines.Variable.Get(takenKey, ctx.CurrentSection) == "1"; } catch { }
 
             if (alreadyTaken)
             {
@@ -212,7 +210,7 @@ public class ThreadModuleHandler : IModuleHandler
             bool cond = LogicEvaluator.EvaluateLogic(filteredParam, ctx.Engines.Io, ctx.Engines.Variable, ctx.CurrentSection);
             if (cond)
             {
-                ctx.Engines.Variable.Set("__IfTaken", "1", ctx.CurrentSection);
+                ctx.Engines.Variable.Set(takenKey, "1", ctx.CurrentSection);
                 return CommandResult.Done();
             }
 
@@ -222,8 +220,10 @@ public class ThreadModuleHandler : IModuleHandler
 
         if (action.Equals("Else", StringComparison.OrdinalIgnoreCase))
         {
+            int depth = GetIfNestingDepth(ctx.Program, ctx.ProgIndex);
+            string takenKey = $"__IfTaken_{depth}";
             bool alreadyTaken = false;
-            try { alreadyTaken = ctx.Engines.Variable.Get("__IfTaken", ctx.CurrentSection) == "1"; } catch { }
+            try { alreadyTaken = ctx.Engines.Variable.Get(takenKey, ctx.CurrentSection) == "1"; } catch { }
 
             if (alreadyTaken)
             {
@@ -236,7 +236,9 @@ public class ThreadModuleHandler : IModuleHandler
 
         if (action.Equals("EndIf", StringComparison.OrdinalIgnoreCase))
         {
-            ctx.Engines.Variable.Set("__IfTaken", "0", ctx.CurrentSection);
+            int depth = GetIfNestingDepth(ctx.Program, ctx.ProgIndex);
+            string takenKey = $"__IfTaken_{depth}";
+            ctx.Engines.Variable.Set(takenKey, "0", ctx.CurrentSection);
             return CommandResult.Done();
         }
 
@@ -250,16 +252,32 @@ public class ThreadModuleHandler : IModuleHandler
         {
             var parts = filteredParam.Split(',', StringSplitOptions.TrimEntries);
             string label = parts[0];
-            string arrayVar = parts.Length > 1 ? parts[1] : "";
 
-            if (!string.IsNullOrEmpty(arrayVar))
+            bool anyHasMore = false;
+            for (int i = 1; i < parts.Length; i++)
             {
-                bool hasMore = ctx.Engines.Variable.LMoveNext(arrayVar, ctx.CurrentSection);
-                if (hasMore)
+                string arrayVar = parts[i].Trim().TrimStart('$');
+                if (!string.IsNullOrEmpty(arrayVar))
                 {
-                    return CommandResult.Jump(label);
+                    if (ctx.Engines.Variable.LMoveNext(arrayVar, ctx.CurrentSection))
+                    {
+                        anyHasMore = true;
+                    }
                 }
-                ctx.Engines.Variable.LResetIndex(arrayVar, 0, ctx.CurrentSection);
+            }
+
+            if (anyHasMore)
+            {
+                return CommandResult.Jump(label);
+            }
+
+            for (int i = 1; i < parts.Length; i++)
+            {
+                string arrayVar = parts[i].Trim().TrimStart('$');
+                if (!string.IsNullOrEmpty(arrayVar))
+                {
+                    ctx.Engines.Variable.LResetIndex(arrayVar, 0, ctx.CurrentSection);
+                }
             }
 
             return CommandResult.Done();
@@ -273,13 +291,26 @@ public class ThreadModuleHandler : IModuleHandler
                 if (!cond) return CommandResult.Done();
             }
 
+            int depth = 0;
             for (int i = ctx.ProgIndex + 1; i <= ctx.Program.Count; i++)
             {
                 var item = ctx.Program[i];
-                if (item.Module.Equals("Thread", StringComparison.OrdinalIgnoreCase) &&
-                    item.Action.Equals("ForeachLoop", StringComparison.OrdinalIgnoreCase))
+                if (!item.Module.Equals("Thread", StringComparison.OrdinalIgnoreCase)) continue;
+                if (item.Action.Equals("ForeachStart", StringComparison.OrdinalIgnoreCase)) depth++;
+                else if (item.Action.Equals("ForeachLoop", StringComparison.OrdinalIgnoreCase))
                 {
-                    return CommandResult.Jump(i + 1);
+                    if (depth == 0)
+                    {
+                        var loopParts = item.RawParameter.Split(',', StringSplitOptions.TrimEntries);
+                        for (int k = 1; k < loopParts.Length; k++)
+                        {
+                            string arrayVar = loopParts[k].Trim().TrimStart('$');
+                            if (!string.IsNullOrEmpty(arrayVar))
+                                ctx.Engines.Variable.LResetIndex(arrayVar, 0, ctx.CurrentSection);
+                        }
+                        return CommandResult.Jump(i + 1);
+                    }
+                    depth--;
                 }
             }
             return CommandResult.Done();
@@ -293,29 +324,41 @@ public class ThreadModuleHandler : IModuleHandler
                 if (!cond) return CommandResult.Done();
             }
 
+            int depth = 0;
             for (int i = ctx.ProgIndex + 1; i <= ctx.Program.Count; i++)
             {
                 var item = ctx.Program[i];
-                if (item.Module.Equals("Thread", StringComparison.OrdinalIgnoreCase) &&
-                    item.Action.Equals("ForeachLoop", StringComparison.OrdinalIgnoreCase))
+                if (!item.Module.Equals("Thread", StringComparison.OrdinalIgnoreCase)) continue;
+                if (item.Action.Equals("ForeachStart", StringComparison.OrdinalIgnoreCase)) depth++;
+                else if (item.Action.Equals("ForeachLoop", StringComparison.OrdinalIgnoreCase))
                 {
-                    return CommandResult.Jump(i);
+                    if (depth == 0) return CommandResult.Jump(i);
+                    depth--;
                 }
             }
             return CommandResult.Done();
         }
 
-        // 10. ErrorRetry 原處自癒重試
+        // 10. ErrorRetry 原處自癒重試 ($logic, $offset)
         if (action.Equals("ErrorRetry", StringComparison.OrdinalIgnoreCase))
         {
+            int offset = 0;
             if (!string.IsNullOrWhiteSpace(filteredParam))
             {
-                bool cond = LogicEvaluator.EvaluateLogic(filteredParam, ctx.Engines.Io, ctx.Engines.Variable, ctx.CurrentSection);
-                if (!cond) return CommandResult.Done();
+                var parts = filteredParam.Split(',', 2, StringSplitOptions.TrimEntries);
+                if (!string.IsNullOrWhiteSpace(parts[0]))
+                {
+                    bool cond = LogicEvaluator.EvaluateLogic(parts[0], ctx.Engines.Io, ctx.Engines.Variable, ctx.CurrentSection);
+                    if (!cond) return CommandResult.Done();
+                }
+                if (parts.Length > 1 && int.TryParse(parts[1], out int parsedOffset))
+                {
+                    offset = parsedOffset;
+                }
             }
 
-            ctx.Log($"Executing ErrorRetry: jumping back to failed line {ctx.FailedPC}");
-            return CommandResult.Retry();
+            ctx.Log($"Executing ErrorRetry: jumping back to line {Math.Max(1, ctx.FailedPC + offset)}");
+            return CommandResult.Retry(offset);
         }
 
         // 11. MutePopupMessage
@@ -325,17 +368,31 @@ public class ThreadModuleHandler : IModuleHandler
             return CommandResult.Done();
         }
 
-        // 12. Run 啟動指定主執行緒 (0~12)
+        // 12. Run 啟動指定主執行緒 (0~12)，支援 $index 為行號或 Label 名稱
         if (action.Equals("Run", StringComparison.OrdinalIgnoreCase))
         {
             var parts = filteredParam.Split(',', StringSplitOptions.TrimEntries);
             if (parts.Length >= 2 && int.TryParse(parts[0], out int progNo) && int.TryParse(parts[1], out int threadNo))
             {
-                int startIndex = parts.Length > 2 && int.TryParse(parts[2], out int idx) ? idx : 1;
                 if (parts.Length > 3 && !string.IsNullOrWhiteSpace(parts[3]))
                 {
                     bool cond = LogicEvaluator.EvaluateLogic(parts[3], ctx.Engines.Io, ctx.Engines.Variable, ctx.CurrentSection);
                     if (!cond) return CommandResult.Done();
+                }
+
+                int startIndex = 1;
+                if (parts.Length > 2 && !string.IsNullOrWhiteSpace(parts[2]))
+                {
+                    if (int.TryParse(parts[2], out int idx))
+                    {
+                        startIndex = idx;
+                    }
+                    else if (ctx.VM != null)
+                    {
+                        var targetProg = ctx.VM.GetProgram(progNo);
+                        int labelLine = targetProg.FindLabel(parts[2]);
+                        if (labelLine > 0) startIndex = labelLine;
+                    }
                 }
 
                 ctx.VM?.StartThread(threadNo, progNo, startIndex);
@@ -395,12 +452,6 @@ public class ThreadModuleHandler : IModuleHandler
             var parts = filteredParam.Split(',', 2, StringSplitOptions.TrimEntries);
             string subName = parts[0];
 
-            if (parts.Length > 1 && !string.IsNullOrWhiteSpace(parts[1]))
-            {
-                bool cond = LogicEvaluator.EvaluateLogic(parts[1], ctx.Engines.Io, ctx.Engines.Variable, ctx.CurrentSection);
-                if (!cond) return CommandResult.Done();
-            }
-
             int endLine = -1;
             for (int i = ctx.ProgIndex + 1; i <= ctx.Program.Count; i++)
             {
@@ -414,14 +465,23 @@ public class ThreadModuleHandler : IModuleHandler
                 }
             }
 
+            bool shouldStart = true;
+            if (parts.Length > 1 && !string.IsNullOrWhiteSpace(parts[1]))
+            {
+                shouldStart = LogicEvaluator.EvaluateLogic(parts[1], ctx.Engines.Io, ctx.Engines.Variable, ctx.CurrentSection);
+            }
+
             if (endLine > ctx.ProgIndex)
             {
-                var subProg = new ProgramTable { Name = subName };
-                for (int i = ctx.ProgIndex + 1; i < endLine; i++)
+                if (shouldStart)
                 {
-                    subProg.Add(ctx.Program[i]);
+                    var subProg = new ProgramTable { Name = subName };
+                    for (int i = ctx.ProgIndex + 1; i < endLine; i++)
+                    {
+                        subProg.Add(ctx.Program[i]);
+                    }
+                    ctx.VM?.StartSubThread(subName, subProg, 1, ctx.CurrentSection);
                 }
-                ctx.VM?.StartSubThread(subName, subProg, 1);
                 return CommandResult.Jump(endLine + 1);
             }
 
@@ -442,13 +502,33 @@ public class ThreadModuleHandler : IModuleHandler
         if (action.Equals("SubThreadWait", StringComparison.OrdinalIgnoreCase))
         {
             var parts = filteredParam.Split(',', StringSplitOptions.TrimEntries);
+            bool skipNotFind = parts.Any(p => p.Replace(" ", "").Equals("SKIPNOTFIND=1", StringComparison.OrdinalIgnoreCase));
+
             foreach (var sub in parts)
             {
-                if (sub.StartsWith("SKIPNOTFIND", StringComparison.OrdinalIgnoreCase)) continue;
-                string ioKey = $"{sub}#Run?";
-                if (ctx.Engines.Io.GetPort(ioKey))
+                if (string.IsNullOrWhiteSpace(sub) || sub.StartsWith("SKIPNOTFIND", StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                if (ctx.VM != null)
                 {
-                    return CommandResult.Wait();
+                    if (!ctx.VM.HasSubThread(sub) && !ctx.Engines.Io.GetAllPortNames().Contains($"{sub}#Run?", StringComparer.OrdinalIgnoreCase))
+                    {
+                        if (skipNotFind) continue;
+                        return CommandResult.Fail($"SubThread '{sub}' not found");
+                    }
+
+                    if (ctx.VM.IsSubThreadRunning(sub))
+                    {
+                        return CommandResult.Wait();
+                    }
+                }
+                else
+                {
+                    string ioKey = $"{sub}#Run?";
+                    if (ctx.Engines.Io.GetPort(ioKey))
+                    {
+                        return CommandResult.Wait();
+                    }
                 }
             }
             return CommandResult.Done();
@@ -460,11 +540,15 @@ public class ThreadModuleHandler : IModuleHandler
             if (parts.Length >= 2)
             {
                 string subName = parts[0];
-                string scriptFile = parts[1];
+                string scriptFile = ArcosPaths.ResolveInitPath(parts[1]);
                 if (File.Exists(scriptFile))
                 {
                     var subProg = ProgramTable.FromIniFile(scriptFile, 0, subName);
-                    ctx.VM?.StartSubThread(subName, subProg, 1);
+                    ctx.VM?.StartSubThread(subName, subProg, 1, ctx.CurrentSection);
+                }
+                else
+                {
+                    return CommandResult.Fail($"SubThreadScript file not found: {scriptFile}");
                 }
             }
             return CommandResult.Done();
@@ -482,13 +566,13 @@ public class ThreadModuleHandler : IModuleHandler
             long targetTimeoutMs = (long)(timeoutSec * 1000);
 
             // 若目前此鎖為當前執行緒持有，直接通行 (可重入)
-            if (ActiveKeyLocks.TryGetValue(lockName, out var owner) && owner == ctx.ThreadName)
+            if (ArcosThreadVM.ActiveKeyLocks.TryGetValue(lockName, out var owner) && owner == ctx.ThreadName)
             {
                 return CommandResult.Done();
             }
 
             // 若無人持有，嘗試奪取鎖
-            if (ActiveKeyLocks.TryAdd(lockName, ctx.ThreadName))
+            if (ArcosThreadVM.ActiveKeyLocks.TryAdd(lockName, ctx.ThreadName))
             {
                 ctx.State.Reset();
                 return CommandResult.Done();
@@ -520,9 +604,9 @@ public class ThreadModuleHandler : IModuleHandler
             string lockName = filteredParam.Trim();
             if (!string.IsNullOrEmpty(lockName))
             {
-                if (ActiveKeyLocks.TryGetValue(lockName, out var owner) && owner == ctx.ThreadName)
+                if (ArcosThreadVM.ActiveKeyLocks.TryGetValue(lockName, out var owner) && owner == ctx.ThreadName)
                 {
-                    ActiveKeyLocks.TryRemove(lockName, out _);
+                    ArcosThreadVM.ActiveKeyLocks.TryRemove(lockName, out _);
                 }
             }
             return CommandResult.Done();
@@ -531,7 +615,29 @@ public class ThreadModuleHandler : IModuleHandler
         return CommandResult.Done();
     }
 
-    private static int FindMatchingBranch(ProgramTable program, int ifLine)
+    public static int GetIfNestingDepth(ProgramTable program, int line)
+    {
+        int depth = 0;
+        for (int i = 1; i < line && i <= program.Count; i++)
+        {
+            var item = program[i];
+            if (!item.Module.Equals("Thread", StringComparison.OrdinalIgnoreCase)) continue;
+            if (item.Action.Equals("If", StringComparison.OrdinalIgnoreCase)) depth++;
+            else if (item.Action.Equals("EndIf", StringComparison.OrdinalIgnoreCase) && depth > 0) depth--;
+        }
+        if (line >= 1 && line <= program.Count)
+        {
+            var cur = program[line];
+            if (cur.Module.Equals("Thread", StringComparison.OrdinalIgnoreCase) &&
+                cur.Action.Equals("If", StringComparison.OrdinalIgnoreCase))
+            {
+                return depth + 1;
+            }
+        }
+        return depth;
+    }
+
+    public static int FindMatchingBranch(ProgramTable program, int ifLine)
     {
         int depth = 0;
         for (int i = ifLine + 1; i <= program.Count; i++)
@@ -557,7 +663,7 @@ public class ThreadModuleHandler : IModuleHandler
         return -1;
     }
 
-    private static int FindMatchingEndIf(ProgramTable program, int currentLine)
+    public static int FindMatchingEndIf(ProgramTable program, int currentLine)
     {
         int depth = 0;
         for (int i = currentLine + 1; i <= program.Count; i++)

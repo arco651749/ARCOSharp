@@ -30,6 +30,7 @@ public sealed class IoModuleHandler : ARCOS.Core.Execution.Handlers.IoModuleHand
 {
     private readonly ConcurrentDictionary<string, IParameterGuidance?> _guidanceCache = new(StringComparer.OrdinalIgnoreCase);
     private readonly string _ioDir;
+    private readonly bool _useCustomDirOnly;
     private FileSystemWatcher? _ioWatcher;
 
     public IoModuleHandler()
@@ -38,6 +39,7 @@ public sealed class IoModuleHandler : ARCOS.Core.Execution.Handlers.IoModuleHand
         _ioDir = !string.IsNullOrEmpty(asmDir) && Directory.Exists(asmDir)
             ? asmDir
             : Path.Combine(AppContext.BaseDirectory, "MODULES", "IO");
+        _useCustomDirOnly = false;
 
         SetupWatchers();
     }
@@ -45,6 +47,7 @@ public sealed class IoModuleHandler : ARCOS.Core.Execution.Handlers.IoModuleHand
     public IoModuleHandler(string customIoDir)
     {
         _ioDir = customIoDir;
+        _useCustomDirOnly = true;
         SetupWatchers();
     }
 
@@ -97,20 +100,10 @@ public sealed class IoModuleHandler : ARCOS.Core.Execution.Handlers.IoModuleHand
         {
             if (!Directory.Exists(dir)) continue;
 
-            // 1. 搜尋所有 *.csvi
+            // 搜尋所有 *.csvi
             foreach (var file in Directory.GetFiles(dir, "*.csvi"))
             {
                 ExtractCommandsFromFileNameOrAssembly(file, discovered);
-            }
-
-            // 2. 舊式相容備援
-            string legacyDir = Path.Combine(dir, "USERPARAMETEREDITOR");
-            if (Directory.Exists(legacyDir))
-            {
-                foreach (var file in Directory.GetFiles(legacyDir, "*.csvi"))
-                {
-                    ExtractCommandsFromFileNameOrAssembly(file, discovered);
-                }
             }
         }
 
@@ -242,8 +235,8 @@ public sealed class IoModuleHandler : ARCOS.Core.Execution.Handlers.IoModuleHand
             }
         }
 
-        // 3. 🛡️ 官方保底邏輯 (Default Fallback Implementation)
-        return base.Execute(action, filteredParam, ctx);
+        // 3. 缺少對應 <Action>.csvi 時絕不退回內建保底，直接報錯
+        return CommandResult.Fail($"Command CSVI not found: IO@{action} ({action}.csvi)");
     }
 
     /// <summary>
@@ -268,21 +261,16 @@ public sealed class IoModuleHandler : ARCOS.Core.Execution.Handlers.IoModuleHand
     {
         var candidatePaths = new List<string>
         {
-            // 1. MODULES/IO/<action>.csvi (最高優先)
             Path.Combine(_ioDir, $"{action}.csvi"),
             Path.Combine(_ioDir, $"io@{action}.csvi"),
-            Path.Combine(_ioDir, $"IO@{action}.csvi"),
-            Path.Combine(AppContext.BaseDirectory, "MODULES", "IO", $"{action}.csvi"),
-            Path.Combine(AppContext.BaseDirectory, "MODULES", "IO", $"io@{action}.csvi"),
-
-            // 2. 模組複合包 IO.csvi
-            Path.Combine(_ioDir, "IO.csvi"),
-            Path.Combine(AppContext.BaseDirectory, "MODULES", "IO", "IO.csvi"),
-
-            // 3. 歷史相容備援
-            Path.Combine(_ioDir, "USERPARAMETEREDITOR", $"{action}.csvi"),
-            Path.Combine(AppContext.BaseDirectory, "MODULES", "IO", "USERPARAMETEREDITOR", $"{action}.csvi")
+            Path.Combine(_ioDir, $"IO@{action}.csvi")
         };
+
+        if (!_useCustomDirOnly)
+        {
+            candidatePaths.Add(Path.Combine(AppContext.BaseDirectory, "MODULES", "IO", $"{action}.csvi"));
+            candidatePaths.Add(Path.Combine(AppContext.BaseDirectory, "MODULES", "IO", $"io@{action}.csvi"));
+        }
 
         foreach (var p in candidatePaths)
         {

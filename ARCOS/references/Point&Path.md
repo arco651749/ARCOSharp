@@ -87,7 +87,6 @@
 | **Pallet2D** | `$point, $numx, $numy` | 產生二維陣列 (`$point[0]`=原點, `point[1]`=X終點, `point[2]`=Y終點) |
 | **Circle2DPath** | `$point, $startangle, $endangle, $section` | 依據圓的點資料計算出弧線段路徑點陣列 |
 | **ResetPalletIndex**| `$point(, $index)` | 強制重設點陣列的內部執行索引 |
-| **CheckPalletLast?**| `$point` | 檢查該點資料現在是否走到最後一點，結果輸出到`$point`#Last? |
 
 ### 3. 座標系轉換與工作區 (Workspace)
 | 指令 | 參數範例 | 說明 |

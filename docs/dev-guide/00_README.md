@@ -26,6 +26,7 @@
 | **10** | [擴充者可用 API 總目錄 (Extension API Catalog)](./10_EXTENSION_API_CATALOG.md) | **【必讀】** 擴充者能調用的所有 Public API、子引擎、上下文與事件速查矩陣 |
 | **11** | [複合邏輯表達式編輯器使用指南 (Logic Editor Guide)](./11_LOGIC_EDITOR_GUIDE.md) | `$logic` 編輯器使用時機、運算子體系（IO/Variable/區間/空值）、操作方法與二次開發調用 |
 | **12** | [統一模組中心、內嵌 CSVI Studio 與 MCP 規格書 (Unified Modules Info Spec)](./12_UNIFIED_MODULES_INFO_SPEC.md) | 底部 6 大分頁、統一模組中心、CSVI Studio 內嵌 IDE、動態 MCP Server 與零依賴 Roslyn 編譯架構 |
+| **13** | [**【獨立完整聖經】主程式、Basic Engines 與模組/指令 CSVI 開發總手冊**](./13_COMPLETE_MODULE_AND_CSVI_DEV_GUIDE.md) | **【後續開發首選單檔】** 涵蓋主程式架構、`BasicEngines` 7 大子引擎完整函式用法、模組建立流程、`Modules Info` 用的 `<Module>.csvi` 格式與單一指令 `<Action>.csvi` 格式範本 |
 
 ---
 

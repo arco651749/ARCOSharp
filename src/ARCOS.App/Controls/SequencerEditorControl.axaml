@@ -301,8 +301,8 @@
                         <!-- 左側垂直雙按鈕 (鎖定 + 關閉) -->
                         <StackPanel Grid.Column="0" Spacing="4" Margin="0,0,4,0" VerticalAlignment="Center">
                             <Button x:Name="BtnLockSup" Width="26" Height="24" Padding="0" 
-                                    Background="#FFFFFF" BorderBrush="#CBD5E1" BorderThickness="1" CornerRadius="3" ToolTip.Tip="鎖定">
-                                <Path Data="{StaticResource IconLock}" Fill="#64748B" Width="11" Height="11" Stretch="Uniform"/>
+                                    Background="#FFFFFF" BorderBrush="#CBD5E1" BorderThickness="1" CornerRadius="3" ToolTip.Tip="帳戶管理器 (Administrator 帳號密碼管理)">
+                                <Path Data="{StaticResource IconLock}" Fill="#0284C7" Width="11" Height="11" Stretch="Uniform"/>
                             </Button>
                             <Button x:Name="BtnCrossSup" Width="26" Height="24" Padding="0" 
                                     Background="#FEF2F2" BorderBrush="#FECACA" BorderThickness="1" CornerRadius="3" ToolTip.Tip="中止">

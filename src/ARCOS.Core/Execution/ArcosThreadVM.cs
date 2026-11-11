@@ -13,6 +13,12 @@ public sealed class ArcosThreadVM
     private readonly ProgramTable[] _programs = new ProgramTable[100];
     private readonly ExecutionContext[] _mainThreads = new ExecutionContext[13];
     private readonly ConcurrentDictionary<string, ExecutionContext> _subThreads = new(StringComparer.OrdinalIgnoreCase);
+    private int _concurrentSubCounter;
+
+    /// <summary>
+    /// 跨執行緒共用之互斥資源鎖表 (供 KeySectionLock.csvi 與 KeySectionUnLock.csvi 共享)
+    /// </summary>
+    public static ConcurrentDictionary<string, string> ActiveKeyLocks { get; } = new(StringComparer.OrdinalIgnoreCase);
     private readonly CommandExecutor _executor;
     private readonly BasicEngines _engines;
     private readonly DriverManager _drivers;
@@ -31,7 +37,20 @@ public sealed class ArcosThreadVM
     public IReadOnlyDictionary<string, ExecutionContext> SubThreads => _subThreads;
 
     public event Action<string, bool>? OnProgramLoaded;
+    public event Action<int>? OnProgramChanged;
     public event Action<string>? OnUserPanelOpenRequested;
+
+    /// <summary>
+    /// 系統彈窗通知委派 (System@MessageBox::$message)
+    /// 參數：(threadName, message) => Task (等待操作員按下確定)
+    /// </summary>
+    public Func<string, string, Task>? OnMessageBoxRequested { get; set; }
+
+    /// <summary>
+    /// 系統警告確認框委派 (System@WarningBox::$logic, $message)
+    /// 參數：(threadName, message) => Task&lt;bool&gt; (回傳 true 代表繼續執行，false 代表停止該執行緒)
+    /// </summary>
+    public Func<string, string, Task<bool>>? OnWarningBoxRequested { get; set; }
 
     public void NotifyProgramLoaded(string filePath, bool isPro)
     {
@@ -52,8 +71,11 @@ public sealed class ArcosThreadVM
         // 初始化 100 個程式區段插槽 (Program 0 ~ 99)
         for (int i = 0; i < 100; i++)
         {
-            _programs[i] = new ProgramTable { ProgramNumber = i, Name = $"Program_{i}" };
+            _programs[i] = new ProgramTable { ProgramNumber = i, Name = GetDefaultProgramSlotName(i) };
         }
+
+        // 寫入系統事件程式區 (94~99) 的出廠預設指令
+        InitializeDefaultSystemPrograms();
 
         // 初始化 13 個主執行緒 (Thread 0 ~ 12)
         for (int i = 0; i < 13; i++)
@@ -66,6 +88,58 @@ public sealed class ArcosThreadVM
             };
             _engines.Io.AddVirtualIO($"{tName}#Run?", false);
             _engines.Io.AddVirtualIO($"{tName}#Pause?", false);
+        }
+    }
+
+    public static string GetDefaultProgramSlotName(int slotNumber) => slotNumber switch
+    {
+        0 => "Main",
+        94 => "Pause Off",
+        95 => "Pause On",
+        96 => "Execute On",
+        97 => "Execute Off",
+        98 => "End Script",
+        99 => "EMG Stop",
+        _ => $"Prog {slotNumber}"
+    };
+
+    /// <summary>
+    /// 初始化系統事件程式區 (94~99) 預設指令：
+    /// 94 (Pause Off): System@Resume
+    /// 95 (Pause On):  System@Pause
+    /// 96 (Execute On): Thread@Run::0,0
+    /// 99 (EMG Stop):  Motion@Stop
+    /// </summary>
+    public void InitializeDefaultSystemPrograms()
+    {
+        if (_programs[94].Count == 0)
+        {
+            _programs[94].Name = "Pause Off";
+            _programs[94].Add(CommandItem.Parse("System@Resume\t", 0));
+        }
+
+        if (_programs[95].Count == 0)
+        {
+            _programs[95].Name = "Pause On";
+            _programs[95].Add(CommandItem.Parse("System@Pause\t", 0));
+        }
+
+        if (_programs[96].Count == 0)
+        {
+            _programs[96].Name = "Execute On";
+            _programs[96].Add(CommandItem.Parse("Thread@Run\t0,0", 0));
+        }
+
+        if (string.IsNullOrWhiteSpace(_programs[97].Name))
+            _programs[97].Name = "Execute Off";
+
+        if (string.IsNullOrWhiteSpace(_programs[98].Name))
+            _programs[98].Name = "End Script";
+
+        if (_programs[99].Count == 0)
+        {
+            _programs[99].Name = "EMG Stop";
+            _programs[99].Add(CommandItem.Parse("Motion@Stop\t", 0));
         }
     }
 
@@ -177,6 +251,17 @@ public sealed class ArcosThreadVM
 
         _programs[progNo] = program ?? throw new ArgumentNullException(nameof(program));
         _programs[progNo].ProgramNumber = progNo;
+
+        // 同步更新預設綁定或當前正在指向此 progNo 的主執行緒 Program 參照
+        for (int i = 0; i < _mainThreads.Length; i++)
+        {
+            if (_mainThreads[i] != null && (_mainThreads[i].Program == null || _mainThreads[i].Program.ProgramNumber == progNo || (!_mainThreads[i].IsRunning && i == progNo)))
+            {
+                _mainThreads[i].Program = _programs[progNo];
+            }
+        }
+
+        OnProgramChanged?.Invoke(progNo);
     }
 
     public ProgramTable GetProgram(int progNo)
@@ -184,6 +269,36 @@ public sealed class ArcosThreadVM
         if (progNo < 0 || progNo >= 100)
             throw new ArgumentOutOfRangeException(nameof(progNo), "Program number must be 0..99");
         return _programs[progNo];
+    }
+
+    /// <summary>
+    /// 依程式區段編號 ("0"~"99", "Prog 1") 或區段名稱尋找對應的 ProgramTable
+    /// </summary>
+    public ProgramTable? FindProgram(string? progNumberOrName)
+    {
+        if (string.IsNullOrWhiteSpace(progNumberOrName)) return null;
+        string key = progNumberOrName.Trim();
+
+        if (int.TryParse(key, out int progNo) && progNo >= 0 && progNo < 100)
+        {
+            return _programs[progNo];
+        }
+
+        if (key.StartsWith("Prog ", StringComparison.OrdinalIgnoreCase) &&
+            int.TryParse(key.Substring(5).Trim(), out int pNum) && pNum >= 0 && pNum < 100)
+        {
+            return _programs[pNum];
+        }
+
+        for (int i = 0; i < _programs.Length; i++)
+        {
+            if (_programs[i] != null && string.Equals(_programs[i].Name, key, StringComparison.OrdinalIgnoreCase))
+            {
+                return _programs[i];
+            }
+        }
+
+        return null;
     }
 
     /// <summary>
@@ -205,11 +320,13 @@ public sealed class ArcosThreadVM
             ctx.IsLocalPaused = false;
             ctx.IsRunning = true;
             _engines.Io.SetPort($"{ctx.ThreadName}#Run?", true);
+        }
 
-            if (AutoSpawnBackgroundLoop)
-            {
-                ctx.StartBackgroundLoop(_executor);
-            }
+        OnProgramChanged?.Invoke(progNo);
+
+        if (AutoSpawnBackgroundLoop)
+        {
+            ctx.StartBackgroundLoop(_executor);
         }
     }
 
@@ -246,30 +363,49 @@ public sealed class ArcosThreadVM
     }
 
     /// <summary>
-    /// 啟動動態平行執行緒 (SubThread，本質與一般 Thread 完全相同，支援帶 & 特權後綴)
+    /// 啟動動態平行執行緒 (SubThread，支援單行程、& 特權免暫停後綴、以及 && 併發多實例後綴)
     /// </summary>
-    public ExecutionContext StartSubThread(string subName, ProgramTable program, int startIndex = 1)
+    public ExecutionContext StartSubThread(string subName, ProgramTable program, int startIndex = 1, string? parentSection = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(subName);
         ArgumentNullException.ThrowIfNull(program);
 
         string cleanName = subName.Trim();
-        if (_subThreads.TryGetValue(cleanName, out var oldCtx))
+        bool isConcurrentMulti = cleanName.EndsWith("&&", StringComparison.Ordinal);
+
+        string instanceKey = cleanName;
+        if (isConcurrentMulti)
+        {
+            int seq = Interlocked.Increment(ref _concurrentSubCounter);
+            // 保留尾端 '&' 使 IsBypassPause 生效，或以 cleanName + "_" + seq 命名
+            instanceKey = $"{cleanName}_{seq}";
+        }
+        else if (_subThreads.TryGetValue(cleanName, out var oldCtx))
         {
             oldCtx.StopBackgroundLoop(resetRunningFlag: true);
         }
 
-        var ctx = new ExecutionContext(100 + _subThreads.Count, cleanName, program, _engines, _drivers)
+        string sectionToUse = isConcurrentMulti ? instanceKey : (string.IsNullOrWhiteSpace(parentSection) ? cleanName : parentSection);
+        if (isConcurrentMulti)
+        {
+            _engines.Variable.SnapshotCurrentValuesToSection(parentSection ?? "Global", sectionToUse);
+        }
+
+        var ctx = new ExecutionContext(100 + _subThreads.Count, instanceKey, program, _engines, _drivers)
         {
             ProgIndex = startIndex,
             IsRunning = true,
-            CurrentSection = cleanName,
+            CurrentSection = sectionToUse,
             VM = this
         };
 
-        _subThreads[cleanName] = ctx;
-        _engines.Io.AddVirtualIO($"{cleanName}#Run?", true);
-        _engines.Io.AddVirtualIO($"{cleanName}#Pause?", false);
+        _subThreads[instanceKey] = ctx;
+        _engines.Io.AddVirtualIO($"{instanceKey}#Run?", true);
+        _engines.Io.AddVirtualIO($"{instanceKey}#Pause?", false);
+        if (isConcurrentMulti)
+        {
+            _engines.Io.AddVirtualIO($"{cleanName}#Run?", true);
+        }
 
         if (AutoSpawnBackgroundLoop)
         {
@@ -280,27 +416,99 @@ public sealed class ArcosThreadVM
     }
 
     /// <summary>
-    /// 掛起/終止指定 SubThread
+    /// 檢查指定的 SubThread（或 && 併發群組）是否曾經被宣告/啟動過
+    /// </summary>
+    public bool HasSubThread(string subName)
+    {
+        if (string.IsNullOrWhiteSpace(subName)) return false;
+        string clean = subName.Trim();
+        if (_subThreads.ContainsKey(clean)) return true;
+
+        string prefix = clean + "_";
+        foreach (var key in _subThreads.Keys)
+        {
+            if (key.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// 檢查指定的 SubThread（或 && 併發群組的任何一個實例）是否仍在運行中
+    /// </summary>
+    public bool IsSubThreadRunning(string subName)
+    {
+        if (string.IsNullOrWhiteSpace(subName)) return false;
+        string clean = subName.Trim();
+        if (_subThreads.TryGetValue(clean, out var directCtx) && directCtx.IsRunning)
+        {
+            return true;
+        }
+        if (_engines.Io.GetPort($"{clean}#Run?") && !clean.EndsWith("&&", StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        string prefix = clean + "_";
+        bool anyRunning = false;
+        foreach (var kvp in _subThreads)
+        {
+            if (kvp.Key.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) && kvp.Value.IsRunning)
+            {
+                anyRunning = true;
+                break;
+            }
+        }
+
+        if (clean.EndsWith("&&", StringComparison.Ordinal))
+        {
+            _engines.Io.SetPort($"{clean}#Run?", anyRunning);
+        }
+        return anyRunning;
+    }
+
+    /// <summary>
+    /// 掛起/終止指定 SubThread（若為 && 併發群組則終止所有對應實例）
     /// </summary>
     public void SuspendSubThread(string subName)
     {
         if (string.IsNullOrWhiteSpace(subName)) return;
-        if (_subThreads.TryGetValue(subName.Trim(), out var ctx))
+        string clean = subName.Trim();
+        if (_subThreads.TryGetValue(clean, out var ctx))
         {
             ctx.StopBackgroundLoop(resetRunningFlag: true);
         }
+
+        string prefix = clean + "_";
+        foreach (var kvp in _subThreads)
+        {
+            if (kvp.Key.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            {
+                kvp.Value.StopBackgroundLoop(resetRunningFlag: true);
+            }
+        }
+        _engines.Io.SetPort($"{clean}#Run?", false);
     }
 
     /// <summary>
     /// 觸發系統硬體事件鉤子程式區段 (Program 94~99)
-    /// 以獨立非同步 SubThread 啟動，避免阻塞主流程
+    /// 以獨立非同步平行執行緒啟動 (名稱結尾必帶 & 特權，確保暫停時亦可執行)
     /// </summary>
-    public void TriggerSystemHook(int hookProgNo)
+    public ExecutionContext? TriggerSystemHook(int hookProgNo)
     {
-        if (hookProgNo < 90 || hookProgNo > 99) return;
+        if (hookProgNo < 90 || hookProgNo > 99) return null;
         var prog = GetProgram(hookProgNo);
-        string hookName = $"SystemHook_{hookProgNo}&"; // 帶 & 特權確保暫停時亦可執行
-        StartSubThread(hookName, prog, 1);
+        string hookName = hookProgNo switch
+        {
+            94 => "PauseOff&",
+            95 => "PauseOn&",
+            96 => "ExecuteOn&",
+            97 => "ExecuteOff&",
+            98 => "EndScript&",
+            99 => "EMGStop&",
+            _ => $"SystemHook_{hookProgNo}&"
+        };
+        return StartSubThread(hookName, prog, 1);
     }
 
     /// <summary>
@@ -362,6 +570,7 @@ public sealed class ArcosThreadVM
         {
             SuspendSubThread(key);
         }
+        ActiveKeyLocks.Clear();
     }
 
     /// <summary>

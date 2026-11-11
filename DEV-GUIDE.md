@@ -184,9 +184,12 @@ flowchart TD
         PROG["Master.prog (INI 格式)"]
         PROG --> Sec0["[0] Main (主管理行程)"]
         PROG --> Sec1["[1] Station_Feeder (工位子腳本)"]
-        PROG --> Sec94["[94] Pause Off (UI 按鈕回呼)"]
-        PROG --> Sec96["[96] Execute On (Run 按鈕回呼)"]
-        PROG --> Sec99["[99] EMG Stop (急停回呼)"]
+        PROG --> Sec94["[94] Pause Off (預設 System@Resume)"]
+        PROG --> Sec95["[95] Pause On (預設 System@Pause)"]
+        PROG --> Sec96["[96] Execute On (預設 Thread@Run::0,0)"]
+        PROG --> Sec97["[97] Execute Off (停止/完成回呼)"]
+        PROG --> Sec98["[98] End Script (視窗關閉前執行完畢才結束)"]
+        PROG --> Sec99["[99] EMG Stop (預設 Motion@Stop 全軸停止)"]
     end
 
     subgraph SectionLevel["區段層級：.init (Single Section Script File)"]
@@ -203,7 +206,7 @@ flowchart TD
 - **架構定義**：代表**整個機台專案**的所有程式區集合（0~99 區段，共 100 個槽位）。
 - **底層格式**：採用標準 Windows INI 格式儲存（`[0]`, `[1]`, ..., `[99]`），內含區段 `Name`、`Type`、`Size` 與各行指令。
 - **UI 交互按鈕**：
-  - `[ 📁 READ .PROG ]`：將磁碟中的 `.prog` 載入至記憶體與當前專案。
+  - `[ 📁 READ .PROG ]`：將磁碟中的 `.prog` 載入至記憶體與當前專案（若專案檔未覆寫 94/95/96/99，自動保留系統預設指令）。
   - `[ 💾 SAVE .PROG ]`：將當前 100 個程式區段整體序列化並寫入 `.prog`。
 - **路徑解析**：透過 `ArcosPaths.ResolveProgPath(fileName)` 自動定位於應用程式根目錄，若找不到 `.prog` 則自動嘗試同名 `.pro` 舊檔。
 
@@ -225,25 +228,67 @@ ARCOSharp 支援在腳本執行時或載入時動態變更程式區段的語意�
    - `System@ProgramSection, $name`：單一參數模式，將**目前執行中之區段**直接命名為 `$name`。
 2. **UI ProgSelector 即時聯動**：
    - 排程編輯器之程式區下拉選單（`ProgSelector`）即時呈現格式化標籤：
-     `0: Main`、`1: Station_Feeder`、`94: Pause Off`、`96: Execute On`、`99: EMG Stop`。
-   - 若區段未自訂名稱，則依慣例顯示預設編號（如 `12: Prog 12`）。
+     `0: Main`、`1: Station_Feeder`、`94: Pause Off`、`95: Pause On`、`96: Execute On`、`97: Execute Off`、`98: End Script`、`99: EMG Stop`。
+   - 若區段未自訂名稱，則依慣例顯示預設編號（如 `12: Thread 12`）。
 
-### ⚡ 四、排程器高速編輯互動規範 (Ctrl+Click Insertion Acceleration & Section Operations)
+### 🛡️ 四、系統事件程式區（94~99）、預設指令、按鍵映射與 `&` 特權執行緒
 
-為大幅加速工程師編輯與測試腳本，排程器實作快捷交互與行/區操作守衛：
+ARCOSharp 的 `94` ~ `99` 號程式區為系統保留事件程式區，開機或新建專案時由 `ArcosThreadVM.InitializeDefaultSystemPrograms()` 自動寫入預設指令，並與主畫面按鈕及視窗生命週期緊密綁定：
+
+| 程式區編號與名稱 | 對應 UI 按鍵 / 系統事件 | 觸發之 SubThread 名稱 | 系統預設指令 | 行為與設計規範 |
+| :--- | :--- | :--- | :--- | :--- |
+| **`94: Pause Off`** | 左下角 `PAUSE` 按鍵<br>*(解除暫停時觸發)* | `PauseOff&` | `System@Resume` | 尾端帶 `&` 享有免暫停特權，可在全機暫停狀態下穿透執行 `System@Resume` 解除全機暫停。 |
+| **`95: Pause On`** | 左下角 `PAUSE` 按鍵<br>*(進入暫停時觸發)* | `PauseOn&` | `System@Pause` | 尾端帶 `&` 享有免暫停特權，觸發後執行 `System@Pause` 進入全機暫停，並可接續執行安全防護動作（如關雷射、亮黃燈）。 |
+| **`96: Execute On`** | Operator 面板 `Run` 按鍵<br>*(啟動時觸發)* | `ExecuteOn&` | `Thread@Run::0,0` | 預設啟動 `ThreadMain (0)` 執行 `0: Main` 主程式區。 |
+| **`97: Execute Off`** | Operator 面板 `Run` 按鍵<br>*(停止或主程式結束時觸發)* | `ExecuteOff&` | *(空，供使用者自訂)* | 當主執行緒自然執行完畢或於 Operator 模式點擊停止時自動觸發，用於收尾復歸。 |
+| **`98: End Script`** | ARCOSharp 主視窗關閉<br>(`MainWindow.OnClosing`) | `EndScript&` | *(空，供使用者自訂)* | 當關閉 ARCOSharp 時，若 `98: End Script` 有指令，系統會先攔截視窗關閉 (`e.Cancel = true`) 並啟動 `EndScript&`，**必須等待 `98: End Script` 完整執行完畢後才正式關閉程式**。 |
+| **`99: EMG Stop`** | 左下角 `!! STOP !!` 按鍵 | `EMGStop&` | `Motion@Stop` | 無參數 `Motion@Stop` 預設會遍歷全機所有已掛載之 Motion Device 全部下達 `Stop`，並將各軸 `#Busy?` 設為 `False`、`#Done?` 設為 `True`。 |
+
+> **【防無窮遞迴守衛】**：因為 `95: Pause On` 預設包含 `System@Pause` 指令（且 `94: Pause Off` 預設包含 `System@Resume`），當腳本執行 `System@Pause` / `System@Resume` 時，`SetGlobalPause(isPaused, triggerHook: false)` 不會再次反向觸發 95 / 94 號程式區，徹底避免遞迴死循環。
+
+### ⚙️ 五、獨立平行 ThreadVM 與 `System@Pause` / `System@Resume` 雙層暫停架構
+
+1. **獨立平行執行緒單元 (Autonomous Parallel ExecutionContext)**：
+   - 每個執行緒（`ThreadMain (0)`、`Thread1`~`Thread12`、動態 `SubThread`、`TestThread&`）皆封裝獨立的 `StartBackgroundLoop` 背景高速直譯迴圈，彼此真正平行運作、互不阻塞。
+   - 在 `Modules Info -> THREAD` 分頁中，`Thread Main (0)` 與 `Thread 1~12` 均綁定 `OnProgramChanged` 與動態 `Program` 參考偵測，像編輯頁一樣即時顯示完整指令列表與左欄 `i` 的粉紅 PC 執行位置高亮。
+2. **雙層暫停機制（Global Pause vs. Local Pause）與快速條件語法**：
+   - **指令格式**：
+     - `System@Pause(::[$THREAD][,CONDITION=$IOLOGIC])`（相容別名 `SystemPause`）
+     - `System@Resume(::[$THREAD][,CONDITION=$IOLOGIC])`（相容別名 `SystemResume`）
+   - **預設條件**：當省略 `CONDITION=$IOLOGIC` 時，預設條件恆為 `True`（立即生效）；當指定 `CONDITION=$IOLOGIC`（如 `CONDITION=!SensorA*SensorB`）時，唯有邏輯表達式計算為 `True` 才執行暫停或恢復。
+   - **第一層：分站局部暫停 (Thread-Local Pause)**：
+     - 當指定 `$THREAD`（如 `System@Pause::Thread1` 或 `System@Pause::Thread1,Thread2,CONDITION=P0.0`）時，僅將目標執行緒設為局部暫停（`ctx.IsLocalPaused = true`，同步更新 `<ThreadName>#Pause? = True`），**其餘分站執行緒繼續全速運行**。
+   - **第二層：全機全域暫停 (System-Wide Global Pause)**：
+     - 當省略 `$THREAD`（如 `System@Pause::` 或 `System@Pause::CONDITION=DoorOpen`）時，啟動全機暫停（`System#Pause? = True`），凍結所有一般執行緒與系統計時器，**唯有執行緒名稱尾端帶有 `&` 的特權執行緒（如 `PauseOn&`、`PauseOff&`、`TestThread&`、`SafetyMonitor&`）不受全機暫停影響，可照常執行**。
+
+### 🔐 六、`OPERATOR` / `SUPERVISOR` 權限控管、`Ctrl+T` 限制與 `Administrator.json` 帳戶管理器
+
+1. **雙模式權限邊界**：
+   - **`OPERATOR` 模式（預設啟動模式）**：排程編輯器鎖定為唯讀（`IsLocked = true`），禁止任何指令編輯、插入、刪除、搬移與 `Ctrl+Z`/`Ctrl+Y`，且**禁止使用 `Ctrl+T` 呼叫 `TestThreadWindow`**。當從 `SUPERVISOR` 切回 `OPERATOR` 時，若 `TestThreadWindow` 已開啟會自動最小化收起。
+   - **`SUPERVISOR` 模式**：解鎖排程編輯器所有編輯與除錯功能，並**允許使用 `Ctrl+T` 喚醒 `TestThreadWindow`**。
+2. **帳戶管理器 (`AdministratorAccountManager` / `Administrator.json`)**：
+   - 帳號與密碼統一儲存於應用程式根目錄之 `Administrator.json`。
+   - **未設定帳密時**：若 `Administrator.json` 不存在或帳號密碼為空，操作員可自由在 `OPERATOR` 與 `SUPERVISOR` 之間無縫切換。
+   - **已設定帳密時**：由 `OPERATOR` 點擊切換至 `SUPERVISOR` 時，自動彈出登入驗證對話框（`AdministratorAccountDialog.PromptLoginAsync`），驗證通過方可切換。
+   - **修改或清除帳密**：在 `SUPERVISOR` 面板點擊左側鎖頭按鈕（`BtnLockSup`），即可開啟「SUPERVISOR 帳戶管理器」設定新帳號密碼，或一鍵清除密碼恢復自由切換。
+
+### ⚡ 七、排程器高速編輯互動規範與尾端空白佔位列 (`IsTrailingPlaceholder`)
+
+為大幅加速工程師編輯與測試腳本，排程器（`SequencerEditorControl` 與 `TestThreadWindow`）實作快捷交互與尾端空白佔位列機制：
+- **尾端永遠多一行空白佔位列 (`IsTrailingPlaceholder`)**：
+  - 為解決當程式區指令很多、捲軸（Scrollbar）拉到最底部時無法點擊空白處插入到最下面的問題，UI 的 `_rows` 集合尾端永遠自動維持一行 `IsTrailingPlaceholder = true` 的空白列（由 `EnsureTrailingPlaceholderRow()` 自動維護）。
+  - 使用者將捲軸拉到最底部時，直接單擊、`Ctrl+Click`（複製插入）或 `Ctrl+Alt+Click`（搬移）點擊該尾端空白列，即可直接在程式最尾端新增、貼上或搬移指令。
+  - 在同步回 `ProgramTable`（`SyncUIToProgram()`）、建立 Undo/Redo 快照或儲存 `.prog`/`.init` 時，系統會自動過濾掉 `IsTrailingPlaceholder`，絕不將空白佔位列寫入實際程式或檔案中。
 - **`Ctrl + 滑鼠單擊 Command 欄位`**：
   - 功能完全等同於工具列之 `+`（`BtnAdd`）插入按鈕。
-  - **精確插入於當前游標所在列位置（`cur`）**，原列及後續指令順延下移一格（非插入至下一列）。
-  - 自動彈出指令選擇視窗（`ComSelectWindow`）；若選定指令，則無縫接續開啟**參數導引視窗（`ParameterGuidance`）**，取消時不殘留空行，實現零鍵盤指令建構體驗。
+  - **精確插入於當前游標所在列位置（`cur`）**，原列及後續指令順延下移一格（若點擊在尾端空白列則插入於最尾端）。
+  - 自動彈出指令選擇視窗（`ComSelectWindow`）；若選定指令，則無縫接續開啟**參數導引視窗（`ParameterGuidance`）**，取消時不殘留空行。
 - **工具列 `+` 按鈕 (`BtnAdd`)**：
   - 若有選取行，於該選取行位置插入（原行下移）；若無選取，則新增至末端。
-  - 同樣自動開啟 `ComSelectWindow` 與 `ParameterGuidance` 進行配置。
-- **表格空白處單擊 (Empty Area Click)**：
-  - 於指令表末端新增一行，並自動跳出 `ComSelectWindow` 挑選指令與引導參數（避免殘留預設值行）。
 - **工具列 `-` 按鈕 (`BtnMinusLine`)**：
   - 刪除目前選取之單一指令行（Delete Row），具備完整 Undo/Redo 歷程防護。
 - **工具列 `X` 按鈕 (`BtnDelete`)**：
-  - **清空當前這一個程式區 (Clear Current Program Section)**，將當前 Program Slot 所有指令行清空並同步回 VM，支援 `Ctrl+Z` 完整復原。
+  - **清空當前這一個程式區 (Clear Current Program Section)**，將當前 Program Slot 所有指令行清空並同步回 VM（仍保留一行尾端空白佔位列供隨時點擊新增），支援 `Ctrl+Z` 完整復原。
 
 ---
 

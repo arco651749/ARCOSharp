@@ -313,6 +313,41 @@ public partial class MainWindow : Window
             }, DispatcherPriority.Background);
         };
 
+        _engines.Record.Cleared += recName =>
+        {
+            if (string.Equals(recName, "SYSTEMLOG", StringComparison.OrdinalIgnoreCase))
+            {
+                Dispatcher.UIThread.Post(() =>
+                {
+                    var txtLogs = this.FindControl<TextBox>("TxtUserLogs");
+                    if (txtLogs != null)
+                    {
+                        txtLogs.Text = string.Empty;
+                        txtLogs.CaretIndex = 0;
+                    }
+                }, DispatcherPriority.Background);
+            }
+            else if (string.Equals(recName, "SYSTEMLOG_ERROR", StringComparison.OrdinalIgnoreCase))
+            {
+                Dispatcher.UIThread.Post(() =>
+                {
+                    var txtLogs = this.FindControl<TextBox>("TxtUserLogs");
+                    if (txtLogs != null && !string.IsNullOrEmpty(txtLogs.Text))
+                    {
+                        var remainingLines = txtLogs.Text
+                            .Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries)
+                            .Where(line => !line.Contains("[ERROR]", StringComparison.OrdinalIgnoreCase));
+                        var joined = string.Join(Environment.NewLine, remainingLines);
+                        txtLogs.Text = string.IsNullOrEmpty(joined) ? string.Empty : joined + Environment.NewLine;
+                        txtLogs.CaretIndex = txtLogs.Text.Length;
+                    }
+                }, DispatcherPriority.Background);
+            }
+        };
+
+        _vm.OnMessageBoxRequested = ShowSystemMessageBoxAsync;
+        _vm.OnWarningBoxRequested = ShowSystemWarningBoxAsync;
+
 
 
         // 初始系統就緒記錄 (不預載腳本，靜候使用者載入)
@@ -789,7 +824,7 @@ public partial class MainWindow : Window
 
     {
 
-        // 1. PAUSE 按鈕 (Prog 95)
+        // 1. PAUSE 按鈕 (對應 95: Pause On 與 94: Pause Off，觸發之 ThreadName 尾端帶 "&")
 
         var btnPause = this.FindControl<Button>("BtnUserPause");
 
@@ -803,7 +838,19 @@ public partial class MainWindow : Window
 
                 bool isPaused = _engines.Timer.IsSystemPaused;
 
-                _vm.SetGlobalPause(!isPaused, triggerHook: true);
+                int hookProg = isPaused ? 94 : 95; // 94: Pause Off (System@Resume), 95: Pause On (System@Pause)
+
+                var hookCtx = _vm.TriggerSystemHook(hookProg);
+
+                if (hookCtx == null)
+
+                {
+
+                    // 若程式區 94/95 被清空，直接切換 Global Pause
+
+                    _vm.SetGlobalPause(!isPaused, triggerHook: false);
+
+                }
 
             };
 
@@ -811,7 +858,7 @@ public partial class MainWindow : Window
 
 
 
-        // 2. !!STOP!! 緊急停機按鈕 (Prog 99)
+        // 2. !!STOP!! 緊急停機按鈕 (對應 99: EMG Stop，預設 Motion@Stop 停止所有軸)
 
         var btnStop = this.FindControl<Button>("BtnUserStop");
 
@@ -1459,6 +1506,8 @@ public partial class MainWindow : Window
 
         var pnlDaq = this.FindControl<Grid>("PnlModuleDaq");
 
+        var pnlDynamic = this.FindControl<ContentControl>("PnlModuleDynamicHost");
+
 
 
         lstModules.SelectionChanged += (_, _) =>
@@ -1468,6 +1517,8 @@ public partial class MainWindow : Window
             if (lstModules.SelectedItem is ModuleListItem selected)
 
             {
+
+                bool isBuiltIn = selected.Name is "SYSTEM" or "THREAD" or "VARIABLE" or "POINT&PATH" or "CALL" or "IO" or "CAPTURE" or "IMAQ" or "MOTION" or "DAQ";
 
                 if (pnlSys != null) pnlSys.IsVisible = selected.Name == "SYSTEM";
 
@@ -1486,6 +1537,8 @@ public partial class MainWindow : Window
                 if (pnlMotion != null) pnlMotion.IsVisible = selected.Name == "MOTION";
 
                 if (pnlDaq != null) pnlDaq.IsVisible = selected.Name == "DAQ";
+
+                if (pnlDynamic != null) pnlDynamic.IsVisible = !isBuiltIn;
 
 
 
@@ -1526,6 +1579,42 @@ public partial class MainWindow : Window
                 {
 
                     RefreshDaqTab();
+
+                }
+
+                else if (!isBuiltIn && pnlDynamic != null)
+
+                {
+
+                    var dynPanel = ARCOS.App.Guidance.ParameterGuidanceManager.Instance.GetFrontPanel(selected.Name);
+
+                    if (dynPanel is Control ctrl)
+
+                    {
+
+                        pnlDynamic.Content = ctrl;
+
+                        var m1 = ctrl.GetType().GetMethod("RefreshFromEngines") ?? ctrl.GetType().GetMethod("Init");
+
+                        if (m1 != null)
+
+                        {
+
+                            m1.Invoke(ctrl, new object[] { _engines });
+
+                        }
+
+                        else if (ctrl.DataContext != null)
+
+                        {
+
+                            var m2 = ctrl.DataContext.GetType().GetMethod("RefreshFromEngines") ?? ctrl.DataContext.GetType().GetMethod("Init");
+
+                            m2?.Invoke(ctrl.DataContext, new object[] { _engines });
+
+                        }
+
+                    }
 
                 }
 
@@ -1675,7 +1764,7 @@ public partial class MainWindow : Window
 
     {
 
-        if (root is TextBox tb && !string.IsNullOrWhiteSpace(tb.Text))
+        if (root is TextBox tb && !tb.IsReadOnly && root.IsVisible && !string.IsNullOrWhiteSpace(tb.Text))
 
         {
 
@@ -1683,7 +1772,7 @@ public partial class MainWindow : Window
 
         }
 
-        else if (root is Panel p)
+        else if (root is Panel p && p.IsVisible)
 
         {
 
@@ -1697,7 +1786,7 @@ public partial class MainWindow : Window
 
         }
 
-        else if (root is ContentControl cc && cc.Content is Control childCtrl)
+        else if (root is ContentControl cc && cc.IsVisible && cc.Content is Control childCtrl)
 
         {
 
@@ -1705,7 +1794,7 @@ public partial class MainWindow : Window
 
         }
 
-        else if (root is Border b && b.Child is Control bc)
+        else if (root is Border b && b.IsVisible && b.Child is Control bc)
 
         {
 
@@ -1713,7 +1802,7 @@ public partial class MainWindow : Window
 
         }
 
-        else if (root is ScrollViewer sv && sv.Content is Control svc)
+        else if (root is ScrollViewer sv && sv.IsVisible && sv.Content is Control svc)
 
         {
 
@@ -2130,6 +2219,26 @@ public partial class MainWindow : Window
             btnStudio.Click += (_, _) =>
 
             {
+
+                string target = txtSelected?.Text ?? "";
+
+                if (!string.IsNullOrEmpty(target) && target != "None")
+
+                {
+
+                    string resolvedPath = ARCOS.Core.Common.ArcosPaths.ResolveExternalModuleCsviPath(target);
+
+                    var studioCtrl = this.FindControl<ARCOS.CsviStudio.Controls.CsviStudioControl>("StudioControl");
+
+                    if (studioCtrl != null && System.IO.File.Exists(resolvedPath))
+
+                    {
+
+                        studioCtrl.LoadFile(resolvedPath);
+
+                    }
+
+                }
 
                 var mainTab = this.FindControl<TabControl>("MainTabControl");
 
@@ -3637,7 +3746,7 @@ public partial class MainWindow : Window
                 var txtDroW = this.FindControl<TextBlock>("TxtDroW");
                 if (txtDroW != null) txtDroW.Text = $"W: {curPt.W:F3}";
                 var txtDroH = this.FindControl<TextBlock>("TxtDroH");
-                if (txtDroH != null) txtDroH.Text = $"H: {(int)curPt.H}";
+                if (txtDroH != null) txtDroH.Text = $"H: {curPt.GetHString()}";
                 return;
             }
         }
@@ -3895,6 +4004,25 @@ public partial class MainWindow : Window
 
         };
 
+        _vm.OnProgramChanged += (progNo) =>
+        {
+            Dispatcher.UIThread.Post(() =>
+            {
+                if (mMain?.Context?.Program?.ProgramNumber == progNo)
+                {
+                    mMain.ReloadProgram();
+                }
+                for (int i = 1; i <= 12; i++)
+                {
+                    var mw = this.FindControl<ThreadMonitorControl>($"MonitorThread{i}");
+                    if (mw?.Context?.Program?.ProgramNumber == progNo)
+                    {
+                        mw.ReloadProgram();
+                    }
+                }
+            });
+        };
+
 
 
         // SubThread 工具列與清單綁定
@@ -4041,11 +4169,287 @@ public partial class MainWindow : Window
 
     public TestThreadWindow? TestThreadWindow => _testThreadWindow;
 
+    private bool _endScriptExecuted = false;
+
+    private bool _isExecutingEndScript = false;
+
+
+
+    protected override void OnClosing(WindowClosingEventArgs e)
+
+    {
+
+        if (!_endScriptExecuted)
+
+        {
+
+            var endProg = _vm.GetProgram(98);
+
+            if (endProg != null && endProg.Count > 0)
+
+            {
+
+                e.Cancel = true;
+
+                if (_isExecutingEndScript) return;
+
+                _isExecutingEndScript = true;
+
+
+
+                _vm.MainThreads[0].Log("[SYSTEM] Executing 98: End Script before exit...");
+
+                var endCtx = _vm.TriggerSystemHook(98);
+
+                if (endCtx != null)
+
+                {
+
+                    endCtx.OnExecutionStopped += _ =>
+
+                    {
+
+                        _endScriptExecuted = true;
+
+                        _isExecutingEndScript = false;
+
+                        Dispatcher.UIThread.Post(() => this.Close());
+
+                    };
+
+                    if (!_vm.AutoSpawnBackgroundLoop)
+
+                    {
+
+                        endCtx.StartBackgroundLoop(_vm.Executor);
+
+                    }
+
+                }
+
+                else
+
+                {
+
+                    _endScriptExecuted = true;
+
+                    _isExecutingEndScript = false;
+
+                    Dispatcher.UIThread.Post(() => this.Close());
+
+                }
+
+                return;
+
+            }
+
+            _endScriptExecuted = true;
+
+        }
+
+        _engines.Record.FlushSystemLogToFile();
+
+        base.OnClosing(e);
+
+    }
+
+    private Task ShowSystemMessageBoxAsync(string threadName, string message)
+    {
+        var tcs = new System.Threading.Tasks.TaskCompletionSource(System.Threading.Tasks.TaskCreationOptions.RunContinuationsAsynchronously);
+        Dispatcher.UIThread.Post(async () =>
+        {
+            try
+            {
+                var btnOk = new Button
+                {
+                    Name = "BtnMsgBoxOk",
+                    Content = "確定 (OK)",
+                    Width = 110,
+                    HorizontalContentAlignment = HorizontalAlignment.Center,
+                    Background = new SolidColorBrush(Color.Parse("#0284C7")),
+                    Foreground = Brushes.White,
+                    FontWeight = FontWeight.Bold,
+                    Padding = new Thickness(12, 6),
+                    CornerRadius = new CornerRadius(4)
+                };
+
+                var dlg = new Window
+                {
+                    Name = "SystemMessageBoxWindow",
+                    Title = $"ARCOS MessageBox [{threadName}]",
+                    Width = 420,
+                    Height = 190,
+                    CanResize = false,
+                    Topmost = true,
+                    WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                    Background = new SolidColorBrush(Color.Parse("#F8FAFC")),
+                    Content = new Grid
+                    {
+                        RowDefinitions = new RowDefinitions("*,Auto"),
+                        Margin = new Thickness(18),
+                        Children =
+                        {
+                            new Border
+                            {
+                                Background = Brushes.White,
+                                BorderBrush = new SolidColorBrush(Color.Parse("#CBD5E1")),
+                                BorderThickness = new Thickness(1),
+                                CornerRadius = new CornerRadius(6),
+                                Padding = new Thickness(14),
+                                Child = new TextBlock
+                                {
+                                    Name = "TxtMsgBoxContent",
+                                    Text = message,
+                                    FontSize = 14,
+                                    FontWeight = FontWeight.SemiBold,
+                                    Foreground = new SolidColorBrush(Color.Parse("#1E293B")),
+                                    TextWrapping = TextWrapping.Wrap,
+                                    VerticalAlignment = VerticalAlignment.Center
+                                }
+                            },
+                            new StackPanel
+                            {
+                                [Grid.RowProperty] = 1,
+                                Orientation = Orientation.Horizontal,
+                                HorizontalAlignment = HorizontalAlignment.Right,
+                                Margin = new Thickness(0, 12, 0, 0),
+                                Children = { btnOk }
+                            }
+                        }
+                    }
+                };
+
+                btnOk.Click += (_, _) => dlg.Close();
+                dlg.KeyDown += (_, ke) =>
+                {
+                    if (ke.Key == Key.Enter || ke.Key == Key.Escape) dlg.Close();
+                };
+
+                await dlg.ShowDialog(this);
+                tcs.TrySetResult();
+            }
+            catch
+            {
+                tcs.TrySetResult();
+            }
+        });
+        return tcs.Task;
+    }
+
+    private Task<bool> ShowSystemWarningBoxAsync(string threadName, string message)
+    {
+        var tcs = new System.Threading.Tasks.TaskCompletionSource<bool>(System.Threading.Tasks.TaskCreationOptions.RunContinuationsAsynchronously);
+        Dispatcher.UIThread.Post(async () =>
+        {
+            try
+            {
+                bool resultChoice = false;
+                var btnYes = new Button
+                {
+                    Name = "BtnWarnBoxYes",
+                    Content = "繼續執行 (Yes)",
+                    Width = 130,
+                    HorizontalContentAlignment = HorizontalAlignment.Center,
+                    Background = new SolidColorBrush(Color.Parse("#16A34A")),
+                    Foreground = Brushes.White,
+                    FontWeight = FontWeight.Bold,
+                    Padding = new Thickness(12, 6),
+                    CornerRadius = new CornerRadius(4)
+                };
+
+                var btnNo = new Button
+                {
+                    Name = "BtnWarnBoxNo",
+                    Content = "停止執行 (No)",
+                    Width = 130,
+                    HorizontalContentAlignment = HorizontalAlignment.Center,
+                    Background = new SolidColorBrush(Color.Parse("#DC2626")),
+                    Foreground = Brushes.White,
+                    FontWeight = FontWeight.Bold,
+                    Padding = new Thickness(12, 6),
+                    CornerRadius = new CornerRadius(4)
+                };
+
+                var dlg = new Window
+                {
+                    Name = "SystemWarningBoxWindow",
+                    Title = $"ARCOS WarningBox [{threadName}]",
+                    Width = 460,
+                    Height = 210,
+                    CanResize = false,
+                    Topmost = true,
+                    WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                    Background = new SolidColorBrush(Color.Parse("#FFFBEB")),
+                    Content = new Grid
+                    {
+                        RowDefinitions = new RowDefinitions("*,Auto"),
+                        Margin = new Thickness(18),
+                        Children =
+                        {
+                            new Border
+                            {
+                                Background = Brushes.White,
+                                BorderBrush = new SolidColorBrush(Color.Parse("#F59E0B")),
+                                BorderThickness = new Thickness(1.5),
+                                CornerRadius = new CornerRadius(6),
+                                Padding = new Thickness(14),
+                                Child = new TextBlock
+                                {
+                                    Name = "TxtWarnBoxContent",
+                                    Text = $"⚠️ {message}\n\n是否繼續往下執行？",
+                                    FontSize = 14,
+                                    FontWeight = FontWeight.SemiBold,
+                                    Foreground = new SolidColorBrush(Color.Parse("#92400E")),
+                                    TextWrapping = TextWrapping.Wrap,
+                                    VerticalAlignment = VerticalAlignment.Center
+                                }
+                            },
+                            new StackPanel
+                            {
+                                [Grid.RowProperty] = 1,
+                                Orientation = Orientation.Horizontal,
+                                HorizontalAlignment = HorizontalAlignment.Right,
+                                Spacing = 10,
+                                Margin = new Thickness(0, 12, 0, 0),
+                                Children = { btnYes, btnNo }
+                            }
+                        }
+                    }
+                };
+
+                btnYes.Click += (_, _) => { resultChoice = true; dlg.Close(); };
+                btnNo.Click += (_, _) => { resultChoice = false; dlg.Close(); };
+
+                await dlg.ShowDialog(this);
+                tcs.TrySetResult(resultChoice);
+            }
+            catch
+            {
+                tcs.TrySetResult(false);
+            }
+        });
+        return tcs.Task;
+    }
+
 
 
     public void ToggleTestThreadWindow()
 
     {
+
+        // 必須切換至 SUPERVISOR 模式才能按 Ctrl+T 叫出 Test Thread
+
+        if (Sequencer == null || !Sequencer.IsSupervisorMode)
+
+        {
+
+            _vm.MainThreads[0].Log("[AUTH] 請先切換至 SUPERVISOR 模式才可使用 Ctrl+T 呼叫 Test Thread 視窗。");
+
+            return;
+
+        }
+
+
 
         if (_testThreadWindow == null)
 

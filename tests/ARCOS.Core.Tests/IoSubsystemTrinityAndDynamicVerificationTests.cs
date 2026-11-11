@@ -12,7 +12,6 @@ using ARCOS.Core.Guidance;
 using ARCOS.Core.Model;
 using ARCOS.Driver.MockIO;
 using ARCOS.Module.IO;
-using ARCOS.Module.IO.Guidance;
 using Xunit;
 using ExecutionContext = ARCOS.Core.Execution.ExecutionContext;
 
@@ -238,10 +237,13 @@ public class IoSubsystemTrinityAndDynamicVerificationTests
         Assert.Contains("OutStart=p0.0", txtGenerated.Text ?? "");
         Assert.True(txtGenerated.Text?.Contains("InputStart=p4.0") == true || txtGenerated.Text?.Contains("InStart=p4.0") == true);
 
-        // 3. 驗證指令級 IParameterGuidance (例如 IoSetPortGuidance)
-        var setPortGuidance = new IoSetPortGuidance();
-        Assert.Equal("IO@SetPort", setPortGuidance.CommandKey);
+        // 3. 驗證指令級 IParameterGuidance (從 MODULES/IO/SetPort.csvi 動態載入)
+        var registry = ModuleRegistry.CreateDefault();
+        var setPortHandler = registry.LoadCommandCsviHandler("IO", "SetPort");
+        Assert.NotNull(setPortHandler);
+        var setPortGuidance = setPortHandler as IParameterGuidance;
         Assert.NotNull(setPortGuidance);
+        Assert.Equal("IO@SetPort", setPortGuidance!.CommandKey);
 
         // 驗證輕量執行
         setPortGuidance.Execute(engines, "P0.5");
