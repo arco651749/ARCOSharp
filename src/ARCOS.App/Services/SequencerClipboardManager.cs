@@ -58,4 +58,13 @@ public sealed class SequencerClipboardManager
         EndLine = null;
         SelectionChanged?.Invoke(null);
     }
+
+    public void ClearAll()
+    {
+        SourceEditor = null;
+        StartLine = null;
+        EndLine = null;
+        Buffer.Clear();
+        SelectionChanged?.Invoke(null);
+    }
 }

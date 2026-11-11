@@ -775,17 +775,27 @@ public partial class TestThreadWindow : Window
     // =========================================================
     private int? _anchorStartLine = null;
 
+    private bool _isClearingRange = false;
     public void ClearRangeSelection()
     {
-        _anchorStartLine = null;
-        foreach (var r in _rows)
+        if (_isClearingRange) return;
+        _isClearingRange = true;
+        try
         {
-            if (r.IsRangeSelected)
-                r.IsRangeSelected = false;
+            _anchorStartLine = null;
+            foreach (var r in _rows)
+            {
+                if (r.IsRangeSelected)
+                    r.IsRangeSelected = false;
+            }
+            if (SequencerClipboardManager.Instance.SourceEditor == this || SequencerClipboardManager.Instance.HasSelection)
+            {
+                SequencerClipboardManager.Instance.ClearAll();
+            }
         }
-        if (SequencerClipboardManager.Instance.SourceEditor == this)
+        finally
         {
-            SequencerClipboardManager.Instance.ClearSelection();
+            _isClearingRange = false;
         }
     }
 
@@ -906,17 +916,20 @@ public partial class TestThreadWindow : Window
 
             if (_anchorStartLine == null)
             {
-                // 首次 Shift+點擊：選取該行，並同時 JUMP 到該行
+                // 首次 Shift+點擊：單行選取！記錄錨點並立即存入剪貼簿供後續動作使用
                 _anchorStartLine = row.LineNumber;
                 foreach (var r in _rows)
                 {
                     r.IsRangeSelected = (r.LineNumber == _anchorStartLine.Value);
                 }
                 JumpToRow(row.LineNumber);
+
+                var singleItem = new[] { (row.Command ?? "", row.Parameter ?? "") };
+                SequencerClipboardManager.Instance.SetSelection(this, row.LineNumber, row.LineNumber, singleItem);
             }
             else
             {
-                // 接續 Shift+點擊：形成區域選取 [start, end]
+                // 接續第二次 Shift+點擊：形成區域選取 [start, end]
                 int start = Math.Min(_anchorStartLine.Value, row.LineNumber);
                 int end = Math.Max(_anchorStartLine.Value, row.LineNumber);
 
@@ -927,19 +940,13 @@ public partial class TestThreadWindow : Window
 
                 var selectedItems = _rows
                     .Where(r => r.IsRangeSelected)
-                    .Select(r => (r.Command, r.Parameter))
+                    .Select(r => (r.Command ?? "", r.Parameter ?? ""))
                     .ToList();
 
                 SequencerClipboardManager.Instance.SetSelection(this, start, end, selectedItems);
                 _anchorStartLine = null;
             }
             return true;
-        }
-
-        // 若不是 Shift 點擊（例如：一般點擊行、點擊單元格查看/編輯），自動取消先前的範圍選取
-        if (_anchorStartLine != null || _rows.Any(r => r.IsRangeSelected) || SequencerClipboardManager.Instance.HasSelection)
-        {
-            ClearRangeSelection();
         }
 
         // 2. Ctrl + Alt + 滑鼠左鍵 (本地搬移)
@@ -964,6 +971,12 @@ public partial class TestThreadWindow : Window
             e.Handled = true;
             ExecuteLocalDelete(row);
             return true;
+        }
+
+        // 5. 若不是以上任何快捷鍵操作 (例如：一般點擊行、點擊單元格查看/編輯)，清空先前的選取區
+        if (_anchorStartLine != null || _rows.Any(r => r.IsRangeSelected) || SequencerClipboardManager.Instance.HasSelection)
+        {
+            ClearRangeSelection();
         }
 
         return false;
@@ -1048,10 +1061,9 @@ public partial class TestThreadWindow : Window
         for (int i = 0; i < _rows.Count; i++)
         {
             _rows[i].LineNumber = i;
-            _rows[i].IsRangeSelected = false;
         }
 
-        SequencerClipboardManager.Instance.ClearSelection();
+        ClearRangeSelection();
         SyncUIToProgram();
         UpdateUndoRedoButtonState();
     }
@@ -1075,10 +1087,9 @@ public partial class TestThreadWindow : Window
                 for (int i = 0; i < _rows.Count; i++)
                 {
                     _rows[i].LineNumber = i;
-                    _rows[i].IsRangeSelected = false;
                 }
 
-                SequencerClipboardManager.Instance.ClearSelection();
+                ClearRangeSelection();
                 SyncUIToProgram();
                 UpdateUndoRedoButtonState();
                 return;

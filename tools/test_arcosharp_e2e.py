@@ -326,6 +326,16 @@ def run_tests():
     assert not any(r.get("isRangeSelected") for r in st_after_insert.get("sequencerRows", [])), "執行貼上插入後，選取範圍應自動取消"
     print("  ✓ 執行其他動作 (複製插入) 後，選取範圍自動取消")
 
+    # 10.4 第一次 Shift+Click 單行選取與操作後清空
+    call_mcp("arcos_clipboard_action", {"action": "select", "start": 2, "end": 2})
+    st_single = call_mcp("arcos_get_state", {})
+    selected_single = [r for r in st_single.get("sequencerRows", []) if r.get("isRangeSelected")]
+    assert len(selected_single) == 1, f"第一次 Shift+Click 應為單行選取: 實際 {len(selected_single)}"
+    call_mcp("arcos_clipboard_action", {"action": "copy_insert", "index": 5})
+    st_single_after = call_mcp("arcos_get_state", {})
+    assert not any(r.get("isRangeSelected") for r in st_single_after.get("sequencerRows", [])), "單行操作完後應立即清空選取區"
+    print("  ✓ 第一次 Shift+Click 單行選取操作並在操作後清空選取區")
+
     # -------------------------------------------------------------
     # Phase 11: 清空程式區 (X 按鈕) 與 Undo 復原
     # -------------------------------------------------------------

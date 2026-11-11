@@ -234,50 +234,62 @@ public class SequencerVisualAndSelectionTests
         Assert.Equal("System@Delay", ARCOS.App.Services.SequencerClipboardManager.Instance.Buffer[0].Command);
         Assert.Equal("P0.0,1", ARCOS.App.Services.SequencerClipboardManager.Instance.Buffer[1].Parameter);
 
-        // 驗證 Escape 或 ClearSelection 快捷鍵清除
-        ARCOS.App.Services.SequencerClipboardManager.Instance.ClearSelection();
+        // 驗證 Escape 或 ClearAll 快捷鍵清空選取區與快取
+        ARCOS.App.Services.SequencerClipboardManager.Instance.ClearAll();
         Assert.False(ARCOS.App.Services.SequencerClipboardManager.Instance.HasSelection);
-        Assert.True(ARCOS.App.Services.SequencerClipboardManager.Instance.HasItems); // 剪貼簿緩衝區依然保留
+        Assert.False(ARCOS.App.Services.SequencerClipboardManager.Instance.HasItems);
     }
 
     [Fact]
-    public void RangeSelection_AutoClearedAfterAction_RetainsClipboardBuffer()
+    public void SingleAndRangeSelection_FirstShiftClickIsSingleRow_SecondShiftClickIsRange_OperationClearsSelectionAndBuffer()
     {
-        // 驗證需求：選取完做其他動作後，自動取消選取範圍 (反白消失)，但快取資料保留供貼上使用
+        // 驗證規範：
+        // 1. 第一次按 SHIFT+CLICK 是單行選取，可直接供 CTRL+CLICK、ALT+CLICK、CTRL+ALT+CLICK 操作，操作完清空選取區與快取
+        // 2. 第一次按 SHIFT+CLICK 再按第二次 SHIFT+CLICK 變範圍選取，操作完清空選取區與快取，避免後續誤動作
         var rows = Enumerable.Range(0, 5).Select(i => new SequencerRowViewModel
         {
             LineNumber = i,
             Command = $"Cmd_{i}",
             Parameter = $"{i}"
         }).ToList();
-
-        // 模擬 Shift 選取第 1 ~ 3 行
-        int start = 1, end = 3;
-        foreach (var r in rows)
-        {
-            r.IsRangeSelected = (r.LineNumber >= start && r.LineNumber <= end);
-        }
-        var selected = rows.Where(r => r.IsRangeSelected).Select(r => (r.Command, r.Parameter)).ToList();
         var editorMock = new object();
-        ARCOS.App.Services.SequencerClipboardManager.Instance.SetSelection(editorMock, start, end, selected);
+
+        // 階段 1：第一次 Shift+Click (點擊 Line 2) -> 單行選取！
+        int singleLine = 2;
+        rows[singleLine].IsRangeSelected = true;
+        var singleItem = new[] { (rows[singleLine].Command, rows[singleLine].Parameter) };
+        ARCOS.App.Services.SequencerClipboardManager.Instance.SetSelection(editorMock, singleLine, singleLine, singleItem);
+
+        Assert.Single(rows.Where(r => r.IsRangeSelected));
+        Assert.True(ARCOS.App.Services.SequencerClipboardManager.Instance.HasSelection);
+        Assert.Single(ARCOS.App.Services.SequencerClipboardManager.Instance.Buffer);
+        Assert.Equal("Cmd_2", ARCOS.App.Services.SequencerClipboardManager.Instance.Buffer[0].Command);
+
+        // 模擬執行操作 (例如 Ctrl+Click 複製貼上單行)，操作完清空選取區與快取
+        foreach (var r in rows) r.IsRangeSelected = false;
+        ARCOS.App.Services.SequencerClipboardManager.Instance.ClearAll();
+
+        Assert.All(rows, r => Assert.False(r.IsRangeSelected));
+        Assert.False(ARCOS.App.Services.SequencerClipboardManager.Instance.HasSelection);
+        Assert.False(ARCOS.App.Services.SequencerClipboardManager.Instance.HasItems); // 快取已清空，徹底防止誤動作
+
+        // 階段 2：重新選取 -> 第一次按 Shift+Click (Line 1)，接續按第二次 Shift+Click (Line 3) -> 變範圍選取！
+        int start = 1, end = 3;
+        for (int i = start; i <= end; i++) rows[i].IsRangeSelected = true;
+        var rangeItems = rows.Where(r => r.IsRangeSelected).Select(r => (r.Command, r.Parameter)).ToList();
+        ARCOS.App.Services.SequencerClipboardManager.Instance.SetSelection(editorMock, start, end, rangeItems);
 
         Assert.Equal(3, rows.Count(r => r.IsRangeSelected));
         Assert.True(ARCOS.App.Services.SequencerClipboardManager.Instance.HasSelection);
-        Assert.True(ARCOS.App.Services.SequencerClipboardManager.Instance.HasItems);
+        Assert.Equal(3, ARCOS.App.Services.SequencerClipboardManager.Instance.Buffer.Count);
 
-        // 模擬做其他動作 (例如點擊其他行、點擊空白處或執行貼上)，觸發 ClearRangeSelection
-        foreach (var r in rows)
-        {
-            r.IsRangeSelected = false;
-        }
-        ARCOS.App.Services.SequencerClipboardManager.Instance.ClearSelection();
+        // 模擬執行操作 (例如 Alt+Click 刪除範圍)，操作完清空選取區與快取
+        foreach (var r in rows) r.IsRangeSelected = false;
+        ARCOS.App.Services.SequencerClipboardManager.Instance.ClearAll();
 
-        // 驗證：視覺選取完全取消，不殘留反白
         Assert.All(rows, r => Assert.False(r.IsRangeSelected));
         Assert.False(ARCOS.App.Services.SequencerClipboardManager.Instance.HasSelection);
-        // 驗證：剪貼簿快取依然保留，需要時仍可使用或再次選取
-        Assert.True(ARCOS.App.Services.SequencerClipboardManager.Instance.HasItems);
-        Assert.Equal(3, ARCOS.App.Services.SequencerClipboardManager.Instance.Buffer.Count);
+        Assert.False(ARCOS.App.Services.SequencerClipboardManager.Instance.HasItems); // 快取已清空
     }
 
     [Fact]
