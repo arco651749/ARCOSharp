@@ -330,4 +330,45 @@ public class CommandExecutorTests
         Assert.True(engines.Io.GetPort("Station2#OK?"));
         Assert.True(engines.Io.GetPort("Station1#NG?"));
     }
+
+    [Fact]
+    public void ExecuteStep_MissingErrorLabel_PopsMessageBoxAndLogsWithoutEmgStop()
+    {
+        string script = """
+            IO@WaitPortOn::NonExistingPort?,0.01,[[NoSuchLabel]]Cylinder Down Timeout;
+            IO@SetPort::P0.0;
+            """;
+
+        var (ctx, executor, engines, drivers) = CreateTestHarness(script);
+        var vm = new ArcosThreadVM(engines, drivers, executor);
+        ctx.VM = vm;
+
+        string? capturedMsgBox = null;
+        vm.OnMessageBoxRequested = (threadName, msg) =>
+        {
+            capturedMsgBox = msg;
+            return Task.CompletedTask;
+        };
+
+        // Step 1: 進入 Wait
+        executor.ExecuteStep(ctx);
+        Thread.Sleep(25);
+
+        // Step 2: 超時觸發錯誤，因 [[NoSuchLabel]] 不存在，應彈出 MessageBox、寫入 Log，且不觸發 EMGStop& (Prog 99)
+        var res = executor.ExecuteStep(ctx);
+        Assert.Equal(CommandStatus.Error, res.Status);
+
+        // 1. 確認沒有觸發 99: EMG Stop
+        Assert.False(vm.SubThreads.ContainsKey("EMGStop&"));
+
+        // 2. 確認彈出了 MessageBox，且同一視窗訊息同時包含原錯誤與「[[NoSuchLabel]] 沒有找到」
+        Assert.NotNull(capturedMsgBox);
+        Assert.Contains("Cylinder Down Timeout", capturedMsgBox);
+        Assert.Contains("[[NoSuchLabel]]", capturedMsgBox);
+
+        // 3. 確認視窗內容已同步寫入 SYSTEMLOG
+        var sysLog = engines.Record.GetOrCreateChannel("SYSTEMLOG");
+        var logs = sysLog.Entries.Take(sysLog.Index).Select(e => e.Message).ToList();
+        Assert.Contains(logs, m => m.Contains("[MessageBox]") && m.Contains("Cylinder Down Timeout") && m.Contains("[[NoSuchLabel]]"));
+    }
 }

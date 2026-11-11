@@ -75,7 +75,7 @@
 | 指令 | 參數範例 | 說明 |
 | :--- | :--- | :--- |
 | **Calculate** | `$point=$point1`<br>`$point=$point1+$point2`<br>`$point<=($X,$Y...)` | 處理所有點位宣告、算術運算與陣列添加 |
-| **Select(X=A?B:C)**| `$point=$logic ? $point1 : $point2` | 三元運算。若邏輯為真選 P1，否則選 P2 |
+| **Select** | `$point=$logic ? $point1 : $point2` | 三元運算。若邏輯為真選 P1，否則選 P2 |
 | **EnableAxis** | `$point, $axis` | 選擇該點位要作動的軸向 |
 | **InsertOnePoint** | `$point=$point1` 或 `(X,Y...)` | 插入單一點資料到陣列中 |
 | **ClearPoint** | `$point` | 清除該點資料記憶 |

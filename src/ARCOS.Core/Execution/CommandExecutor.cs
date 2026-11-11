@@ -207,24 +207,26 @@ public sealed class CommandExecutor
     private CommandResult HandleError(ExecutionContext ctx, CommandItem item, CommandResult errorResult, string filteredParam)
     {
         ctx.FailedPC = ctx.ProgIndex;
-        string errorMsg = errorResult.ErrorMessage ?? "Unknown command error";
-        ctx.Log($"Error at line {ctx.ProgIndex} ({item.Command}): {errorMsg}", isError: true);
 
-        // 檢查是否有指定自癒標籤
+        // 自動從參數尾端解析 [[Label]]Message（即使指令 CSVI 未自行解析 errorLabel / errorMsg 也能自動生效）
         string? errorLabel = errorResult.ErrorLabel;
-        if (string.IsNullOrWhiteSpace(errorLabel))
+        string errorMsg = errorResult.ErrorMessage ?? "Unknown command error";
+
+        var parsed = ArgParaHelper.ParseKeyValueArgs(filteredParam, out _);
+        if (string.IsNullOrWhiteSpace(errorLabel) && parsed.TryGetValue("_ErrorLabel", out var tag))
         {
-            var parsed = ArgParaHelper.ParseKeyValueArgs(filteredParam, out _);
-            if (parsed.TryGetValue("_ErrorLabel", out var tag))
-            {
-                errorLabel = tag;
-            }
+            errorLabel = tag;
+        }
+        if (parsed.TryGetValue("_ErrorMsg", out var customMsg) && !string.IsNullOrWhiteSpace(customMsg))
+        {
+            errorMsg = customMsg;
         }
 
         // 搜尋目前 ProgramTable 中的 [[Label]] 或通用 ErrorHandler
         int healingLine = ctx.Program.FindErrorHandler(errorLabel);
         if (healingLine > 0)
         {
+            ctx.Log($"Error at line {ctx.ProgIndex} ({item.Command}): {errorMsg}", isError: true);
             ctx.Log($"Self-healing jump: redirecting from line {ctx.ProgIndex} to ErrorHandler at line {healingLine} [[{errorLabel}]]");
             ctx.ProgIndex = healingLine;
             ctx.State.Reset();
@@ -232,12 +234,33 @@ public sealed class CommandExecutor
             return CommandResult.Jump(healingLine);
         }
 
-        // 無對應自癒標籤，停止該執行緒，並觸發 99: EMG Stop 系統錯誤處理程序
-        ctx.IsRunning = false;
-        if (ctx.Program.ProgramNumber != 99 && !ctx.ThreadName.Equals("EMGStop&", StringComparison.OrdinalIgnoreCase))
+        // 若為 System@Log Error 指令，依規格觸發 99: EMG Stop 系統急停程序
+        bool isExplicitLogError = item.Module.Equals("System", StringComparison.OrdinalIgnoreCase) &&
+                                  item.Action.Equals("Log Error", StringComparison.OrdinalIgnoreCase);
+        if (isExplicitLogError)
         {
-            ctx.VM?.TriggerSystemHook(99);
+            ctx.Log($"Error at line {ctx.ProgIndex} ({item.Command}): {errorMsg}", isError: true);
+            ctx.IsRunning = false;
+            if (ctx.Program.ProgramNumber != 99 && !ctx.ThreadName.Equals("EMGStop&", StringComparison.OrdinalIgnoreCase))
+            {
+                ctx.VM?.TriggerSystemHook(99);
+            }
+            return errorResult;
         }
+
+        // 一般指令錯誤且找不到對應的 [[$label]] (或無 ErrorHandler)：
+        // 不觸發 99: EMG Stop，而是將錯誤訊息與「[[$label]] 沒有找到」合併顯示於同一 MessageBox 視窗，並將視窗內容同步寫入 Log！
+        string msgBoxText = string.IsNullOrWhiteSpace(errorLabel)
+            ? $"Line {ctx.ProgIndex} ({item.Command}): {errorMsg}"
+            : $"Line {ctx.ProgIndex} ({item.Command}): {errorMsg} (找不到對應的 ErrorHandler 標籤: [[{errorLabel}]])";
+
+        ctx.Log($"[MessageBox] {msgBoxText}", isError: true);
+        if (!ctx.IsMuted && ctx.VM?.OnMessageBoxRequested != null)
+        {
+            _ = ctx.VM.OnMessageBoxRequested(ctx.ThreadName, msgBoxText);
+        }
+
+        ctx.IsRunning = false;
         return errorResult;
     }
 

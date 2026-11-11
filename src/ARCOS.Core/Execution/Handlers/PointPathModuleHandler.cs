@@ -15,7 +15,7 @@ public class PointPathModuleHandler : IModuleHandler
     private static readonly string[] Commands = new[]
     {
         "Calculate",
-        "Select(X=A?B:C)",
+        "Select",
         "EnableAxis",
         "InsertOnePoint",
         "ClearPoint",

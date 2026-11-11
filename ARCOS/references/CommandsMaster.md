@@ -97,7 +97,7 @@
 | **Pallet2D** | `Point&Path@Pallet2D::$point, $nx, $ny` | `$point[0]`原點, `[1]`X終點, `[2]`Y終點 | 自動產生 2D 矩陣陣列 | `$point` 內必須預先具備 3 個基準點 |
 | **Circle2DPath** | `Point&Path@Circle2DPath::$P, $deg1, $deg2, $sec` | 圓心[0], 起點[1], 終點[2], 起迄角, 分割數 | 自動依圓弧分割出點陣列路徑 | 配合 `Motion@AddPath` 跑圓弧運動 |
 | **ResetPalletIndex**| `Point&Path@ResetPalletIndex::$point(, $idx)` | 重設料盤內部游標，未給預設 0 | 滿盤換盤後必須呼叫此指令歸零 | 換新 Tray 盤時必備 |
-| **Select(X=A?B:C)** | `Point&Path@Select(X=A?B:C)::$P=$logic ? $P1 : $P2` | 三元條件選擇點位 | 依據條件動態二選一目標點 | 條件式 `$logic` 內嚴禁帶 `$` 前綴 |
+| **Select** | `Point&Path@Select::$P=$logic ? $P1 : $P2` | 三元條件選擇點位 | 依據條件動態二選一目標點 | 條件式 `$logic` 內嚴禁帶 `$` 前綴 |
 | **Point2WS** | `Point&Path@Point2WS::$point, $ws` | 機構座標轉換為工作區座標 | 多相機、多手臂手眼校正換算 | 需先以 `Calculate` 建立好 `$ws` 原點與軸向 |
 | **WS2Point** | `Point&Path@WS2Point::$point, $ws` | 工作區座標轉回機構實際座標 | 讓機構移動至視覺辨識出的空間位置 | 影像對位轉手臂座標最常用指令 |
 | **SelfMotion** | `Point&Path@SelfMotion::$point, $base, $new` | 剛體旋轉與平移轉換 | 工件角度補正 | 以 `$base` 與 `$new` 之偏差做旋轉 |

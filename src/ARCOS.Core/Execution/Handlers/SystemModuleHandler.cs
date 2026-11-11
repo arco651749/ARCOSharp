@@ -13,7 +13,6 @@ public class SystemModuleHandler : IModuleHandler
     private static readonly string[] Commands = new[]
     {
         "Note",
-        "#Comment----->>",
         "Log Message",
         "Log Error",
         "Clear Message",
@@ -75,7 +74,7 @@ public class SystemModuleHandler : IModuleHandler
 
         if (action.Equals("MessageBox", StringComparison.OrdinalIgnoreCase))
         {
-            if (ctx.VM?.OnMessageBoxRequested == null)
+            if (ctx.IsMuted || ctx.VM?.OnMessageBoxRequested == null)
             {
                 ctx.Log($"[MessageBox] {filteredParam}");
                 return CommandResult.Done();
@@ -121,7 +120,7 @@ public class SystemModuleHandler : IModuleHandler
                 }
 
                 ctx.Log($"[WarningBox] {msg}");
-                if (ctx.VM?.OnWarningBoxRequested == null)
+                if (ctx.IsMuted || ctx.VM?.OnWarningBoxRequested == null)
                 {
                     return CommandResult.Done();
                 }

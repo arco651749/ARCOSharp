@@ -259,7 +259,7 @@ Motion@GoSafe::M2,100,P2,Z=0;
         string script = @"
 Point&Path@Calculate::P1=(10,20,30,0,0,0,12.5);
 Point&Path@Calculate::P2=(100,200,300);
-Point&Path@Select(X=A?B:C)::PSelected=1==1?P1:P2;
+Point&Path@Select::PSelected=1==1?P1:P2;
 Point&Path@AddXYZ::P1,5,5,5;
 Point&Path@ReplaceH::P1,45.5;
 Point&Path@ReplaceH::P1,SetIO=P0.0;Pose=Left;

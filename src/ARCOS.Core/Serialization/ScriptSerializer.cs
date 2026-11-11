@@ -195,7 +195,7 @@ public static class ScriptSerializer
             string trimmed = raw.Trim();
             if (trimmed.StartsWith("//") || trimmed.StartsWith(';'))
             {
-                prog.Add(new CommandItem(lineNum, raw, "", "System", "#Comment", trimmed.TrimStart('/', ';', ' '), true, false));
+                prog.Add(new CommandItem(lineNum, raw, "System@Note", "System", "Note", trimmed.TrimStart('/', ';', ' '), true, false));
                 lineNum++;
             }
             else

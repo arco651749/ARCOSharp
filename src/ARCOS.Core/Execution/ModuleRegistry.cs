@@ -83,32 +83,14 @@ public sealed class ModuleRegistry
     }
 
     /// <summary>
-    /// 尋找單一指令對應的 MODULES/&lt;Module&gt;/&lt;Action&gt;.csvi 檔案路徑
+    /// 尋找單一指令對應的 MODULES/&lt;Module&gt;/&lt;Action&gt;.csvi 檔案路徑 (1:1 同名對應)
     /// </summary>
     public static string? ResolveCommandCsviPath(string moduleName, string actionName, string? customRoot = null)
     {
         var modDirs = FindModuleDirectories(moduleName, customRoot);
         if (modDirs.Count == 0) return null;
 
-        string act = actionName.Trim();
-        if (act.StartsWith("#Comment", StringComparison.OrdinalIgnoreCase))
-        {
-            act = "Comment";
-        }
-
-        var candidateFileNames = new List<string> { $"{act}.csvi" };
-        if (moduleName.Equals("System", StringComparison.OrdinalIgnoreCase))
-        {
-            if (act.Equals("Pause", StringComparison.OrdinalIgnoreCase))
-                candidateFileNames.Add("SystemPause.csvi");
-            else if (act.Equals("Resume", StringComparison.OrdinalIgnoreCase))
-                candidateFileNames.Add("SystemResume.csvi");
-        }
-        else if (moduleName.Equals("Point&Path", StringComparison.OrdinalIgnoreCase))
-        {
-            if (act.StartsWith("Select", StringComparison.OrdinalIgnoreCase))
-                candidateFileNames.Add("Select.csvi");
-        }
+        string targetFileName = $"{actionName.Trim()}.csvi";
 
         foreach (var modDir in modDirs)
         {
@@ -123,12 +105,9 @@ public sealed class ModuleRegistry
                     continue;
                 }
 
-                foreach (var cand in candidateFileNames)
+                if (string.Equals(fileName, targetFileName, StringComparison.OrdinalIgnoreCase))
                 {
-                    if (string.Equals(fileName, cand, StringComparison.OrdinalIgnoreCase))
-                    {
-                        return file;
-                    }
+                    return file;
                 }
             }
         }
@@ -151,20 +130,6 @@ public sealed class ModuleRegistry
             if (string.Equals(nameNoExt, moduleName.Trim(), StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(nameNoExt, "UserPanel", StringComparison.OrdinalIgnoreCase))
             {
-                continue;
-            }
-
-            if (string.Equals(nameNoExt, "Comment", StringComparison.OrdinalIgnoreCase) &&
-                moduleName.Equals("System", StringComparison.OrdinalIgnoreCase))
-            {
-                cmds.Add("#Comment----->>");
-                continue;
-            }
-
-            if (string.Equals(nameNoExt, "Select", StringComparison.OrdinalIgnoreCase) &&
-                moduleName.Equals("Point&Path", StringComparison.OrdinalIgnoreCase))
-            {
-                cmds.Add("Select(X=A?B:C)");
                 continue;
             }
 

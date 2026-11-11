@@ -466,18 +466,12 @@ MODULES/<MODULE_NAME>/
    - **若找不到對應的 `<Action>.csvi` 檔案，系統絕對不會退回任何舊版內建 switch-case 保底，而是直接回傳 `CommandResult.Fail("Command CSVI file not found: ...")` 報錯！**
    - 找到 `<Action>.csvi` 後，`ModuleRegistry.LoadCommandCsviHandler(csviPath)` 會載入該 `.csvi` 組件內的 `IModuleHandler` 實例（並依據檔案 `LastWriteTimeUtc` 自動快取；一旦 `.csvi` 檔案重新編譯更新，下一次執行即自動熱重載最新邏輯）。
 
-### 3.3 特殊字元指令與 Windows 檔名映射規則
+### 3.3 指令命名與 Windows 檔名 1:1 對應規範
 
-由於 Windows 檔案系統禁止檔名包含 `?`、`:`、`*`、`<`、`>` 等字元，若指令名稱含有特殊字元，在 [`ModuleRegistry.cs`](file:///d:/AntiGravity/ARCOSharp/src/ARCOS.Core/Execution/ModuleRegistry.cs#L88-L175) 中定義了標準雙向映射：
+在 CSVI 3.0 架構中，所有模組的指令皆遵循 **100% 零特例的 1:1 同名映射原則**（即 `<Module>@<Action>` 直接對應 `MODULES/<Module>/<Action>.csvi`，見 [`ModuleRegistry.cs`](file:///d:/AntiGravity/ARCOSharp/src/ARCOS.Core/Execution/ModuleRegistry.cs#L88-L140)）：
 
-| 腳本中的指令名稱 (`<Module>@<Action>`) | 對應的實體 `.csvi` 檔案名稱 | 備註 |
-|---|---|---|
-| `System@#Comment----->>` | `MODULES/SYSTEM/Comment.csvi` | 註解指令 |
-| `Point&Path@Select(X=A?B:C)` | `MODULES/POINT&PATH/Select.csvi` | 因含 `?` 與 `:`，檔名固定為 `Select.csvi` |
-| `Point&Path@CoordWS(2Edge)` | `MODULES/POINT&PATH/CoordWS(2Edge).csvi` | 括號 `()` 在 Windows 檔名中合法，直接同名 |
-| 一般指令（如 `IO@SetPort`） | `MODULES/IO/SetPort.csvi` | 1:1 與 `<Action>` 完全同名 |
-
-若您未來新增的指令名稱含有 `?` 或 `:`，請將實體檔名取為不含特殊字元的純英文名稱，並在 [`ModuleRegistry.ResolveCommandCsviPath`](file:///d:/AntiGravity/ARCOSharp/src/ARCOS.Core/Execution/ModuleRegistry.cs#L88-L137) 與 [`ModuleRegistry.GetCsviCommandsForModule`](file:///d:/AntiGravity/ARCOSharp/src/ARCOS.Core/Execution/ModuleRegistry.cs#L142-L175) 加入映射規則。
+- **命名鐵律**：所有指令名稱 `<Action>` **必須符合 Windows 檔案系統命名規範**，嚴禁包含 `?`、`:`、`*`、`"`、`<`、`>`、`|`、`/`、`\` 等非法檔名字元。
+- 只要符合 Windows 檔名規範（例如 `System@Note` ➔ `Note.csvi`、`Point&Path@Select` ➔ `Select.csvi`、`IO@SetPort` ➔ `SetPort.csvi`），系統即自動完成指令掃描、分派與熱重載，無須任何額外映射設定。
 
 ### 3.4 微步非阻塞狀態機 (`ctx.State`) 開發鐵律
 
