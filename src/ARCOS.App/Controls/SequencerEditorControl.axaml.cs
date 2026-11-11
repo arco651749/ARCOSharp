@@ -1164,8 +1164,6 @@ public partial class SequencerEditorControl : UserControl, ISequencerEditorHost
         StepOnce();
     }
 
-    private CancellationTokenSource? _highSpeedRunCts;
-
     private void BtnAuto_Click(object? sender, RoutedEventArgs e)
     {
         ClearRangeSelection();
@@ -1174,100 +1172,31 @@ public partial class SequencerEditorControl : UserControl, ISequencerEditorHost
 
         var ctx = GetActiveContext();
         int totalRows = _rows.Count;
-        if (!ctx.IsRunning || ctx.ProgIndex > totalRows || ctx.ProgIndex < 1)
-        {
-            int startIdx = (ctx.ProgIndex >= 1 && ctx.ProgIndex <= totalRows) ? ctx.ProgIndex : 1;
-            _vm.StartThread(ctx.ThreadId, _currentProgNo, startIdx);
-        }
+        int startIdx = (ctx.ProgIndex >= 1 && ctx.ProgIndex <= totalRows) ? ctx.ProgIndex : 1;
+
+        ctx.OnExecutionStopped -= OnActiveContextStopped;
+        ctx.OnExecutionStopped += OnActiveContextStopped;
 
         UpdateMachineStatus("RUNNING");
-        StartHighSpeedExecutionLoop(ctx, totalRows);
+        _vm.StartThread(ctx.ThreadId, _currentProgNo, startIdx);
+        if (!_vm.AutoSpawnBackgroundLoop)
+        {
+            ctx.StartBackgroundLoop(_vm.Executor);
+        }
     }
 
-    private void StartHighSpeedExecutionLoop(ExecutionContext ctx, int totalRows)
+    private void OnActiveContextStopped(ARCOS.Core.Execution.ExecutionContext stoppedCtx)
     {
-        _highSpeedRunCts?.Cancel();
-        var cts = new CancellationTokenSource();
-        _highSpeedRunCts = cts;
-        var token = cts.Token;
-
-        Task.Run(async () =>
+        Dispatcher.UIThread.Post(() =>
         {
-            int burstCount = 0;
-            try
+            if (GetActiveContext() == stoppedCtx)
             {
-                while (!token.IsCancellationRequested && _vm != null)
-                {
-                    if (!ctx.IsRunning || ctx.ProgIndex > totalRows)
-                    {
-                        break;
-                    }
-
-                    // 若處於 SystemPause 且非 & 特權執行緒，短暫讓出等待 Resume
-                    if (_vm.Engines.Timer.IsSystemPaused && !ctx.IsBypassPause)
-                    {
-                        await Task.Delay(5, token).ConfigureAwait(false);
-                        continue;
-                    }
-
-                    int prevPC = ctx.ProgIndex;
-                    _vm.Executor.ExecuteStep(ctx);
-                    UpdatePCPointer(ctx.ProgIndex);
-
-                    // 若有其他背景 Worker 執行緒 (Thread 1..12 或 SubThreads) 正在運行，同步推進一步
-                    for (int t = 0; t < 13; t++)
-                    {
-                        var wt = _vm.MainThreads[t];
-                        if (wt != ctx && wt.IsRunning && (!_vm.Engines.Timer.IsSystemPaused || wt.IsBypassPause))
-                        {
-                            _vm.Executor.ExecuteStep(wt);
-                        }
-                    }
-                    foreach (var kvp in _vm.SubThreads)
-                    {
-                        var st = kvp.Value;
-                        if (st != ctx && st.IsRunning && (!_vm.Engines.Timer.IsSystemPaused || st.IsBypassPause))
-                        {
-                            _vm.Executor.ExecuteStep(st);
-                        }
-                    }
-
-                    // 若處於非阻塞等待狀態 (如 System@Delay, IO@WaitPort 等 PC 尚未推進)，讓出 1ms 避免空轉吃滿 CPU
-                    if (ctx.ProgIndex == prevPC)
-                    {
-                        burstCount = 0;
-                        await Task.Delay(1, token).ConfigureAwait(false);
-                    }
-                    else
-                    {
-                        // 瞬時指令 (如 System@Note, System@Record, Variable@Set, IO@SetPort)：零延遲全速衝刺！
-                        burstCount++;
-                        if (burstCount >= 128)
-                        {
-                            burstCount = 0;
-                            Thread.Yield();
-                        }
-                    }
-                }
+                _autoTimer.Stop();
+                UpdateMachineStatus("IDLE");
+                UpdatePCPointer(stoppedCtx.ProgIndex);
+                DrainPCPointer();
             }
-            catch (OperationCanceledException)
-            {
-            }
-            finally
-            {
-                Dispatcher.UIThread.Post(() =>
-                {
-                    if (!ctx.IsRunning || ctx.ProgIndex > _rows.Count)
-                    {
-                        ctx.IsRunning = false;
-                        _autoTimer.Stop();
-                        UpdateMachineStatus("IDLE");
-                    }
-                    UpdatePCPointer(ctx.ProgIndex);
-                    DrainPCPointer();
-                });
-            }
-        }, token);
+        });
     }
 
     private void AutoTimer_Tick(object? sender, EventArgs e)
@@ -1290,20 +1219,21 @@ public partial class SequencerEditorControl : UserControl, ISequencerEditorHost
     private void BtnPause_Click(object? sender, RoutedEventArgs e)
     {
         if (_vm == null) return;
-        bool isPaused = _vm.Engines.Timer.IsSystemPaused;
-        _vm.Engines.Timer.SetSystemPause(!isPaused);
-        UpdateMachineStatus(!isPaused ? "PAUSED" : "RUNNING");
+        var ctx = GetActiveContext();
+        bool nextPause = !ctx.IsLocalPaused;
+        ctx.IsLocalPaused = nextPause;
+        UpdateMachineStatus(ctx.IsEffectivelyPaused ? "PAUSED" : (ctx.IsRunning ? "RUNNING" : "IDLE"));
     }
 
     private void BtnReset_Click(object? sender, RoutedEventArgs e)
     {
         ClearRangeSelection();
-        _highSpeedRunCts?.Cancel();
         _autoTimer.Stop();
         if (_vm != null)
         {
             var ctx = GetActiveContext();
-            ctx.IsRunning = false;
+            ctx.StopBackgroundLoop(resetRunningFlag: true);
+            ctx.IsLocalPaused = false;
             ctx.ProgIndex = 1;
             ctx.State.Reset();
             UpdatePCPointer(1);

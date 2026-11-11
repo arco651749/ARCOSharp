@@ -27,6 +27,8 @@ public class SystemModuleHandler : IModuleHandler
         "TimerCheck",
         "CounterReset",
         "CounterCheck",
+        "Pause",
+        "Resume",
         "SystemPause",
         "SystemResume",
         "ProgramSection",
@@ -124,18 +126,19 @@ public class SystemModuleHandler : IModuleHandler
             }
 
             long targetMs = (long)(seconds * 1000);
+            long nowActiveMs = ctx.GetActiveClockMs();
 
-            // 利用 CommandState 實現零阻塞延遲 (Micro-step non-blocking delay)
+            // 利用 CommandState 實現零阻塞延遲，並自動扣除 Local/Global Pause 暫停期間的時鐘
             if (ctx.State.Value == 0 && !ctx.State.HasData)
             {
                 ctx.State.Value = 1;
                 ctx.State["targetMs"] = targetMs;
-                ctx.State["startTicks"] = Environment.TickCount64;
+                ctx.State["startActiveMs"] = nowActiveMs;
                 return CommandResult.Wait();
             }
 
-            long startTicks = ctx.State["startTicks"]?.GetValue<long>() ?? Environment.TickCount64;
-            long elapsed = Environment.TickCount64 - startTicks;
+            long startActiveMs = ctx.State["startActiveMs"]?.GetValue<long>() ?? nowActiveMs;
+            long elapsed = nowActiveMs - startActiveMs;
 
             if (elapsed >= targetMs)
             {
@@ -175,15 +178,17 @@ public class SystemModuleHandler : IModuleHandler
             return CommandResult.Done();
         }
 
-        if (action.Equals("SystemPause", StringComparison.OrdinalIgnoreCase))
+        if (action.Equals("Pause", StringComparison.OrdinalIgnoreCase) ||
+            action.Equals("SystemPause", StringComparison.OrdinalIgnoreCase))
         {
-            ctx.Engines.Timer.SetSystemPause(true);
+            ExecutePauseOrResume(filteredParam, ctx, isPause: true);
             return CommandResult.Done();
         }
 
-        if (action.Equals("SystemResume", StringComparison.OrdinalIgnoreCase))
+        if (action.Equals("Resume", StringComparison.OrdinalIgnoreCase) ||
+            action.Equals("SystemResume", StringComparison.OrdinalIgnoreCase))
         {
-            ctx.Engines.Timer.SetSystemPause(false);
+            ExecutePauseOrResume(filteredParam, ctx, isPause: false);
             return CommandResult.Done();
         }
 
@@ -372,6 +377,67 @@ public class SystemModuleHandler : IModuleHandler
 
         return CommandResult.Done();
     }
+
+    private static void ExecutePauseOrResume(string filteredParam, ExecutionContext ctx, bool isPause)
+    {
+        var kvArgs = ArgParaHelper.ParseKeyValueArgs(filteredParam, out var posArgs);
+
+        // 1. 檢查 CONDITION=$IOLOGIC (預設為 TRUE)
+        string? condExpr = null;
+        if (kvArgs.TryGetValue("CONDITION", out var c1))
+        {
+            condExpr = c1;
+        }
+        else if (kvArgs.TryGetValue("COND", out var c2))
+        {
+            condExpr = c2;
+        }
+        else if (kvArgs.TryGetValue("LOGIC", out var c3))
+        {
+            condExpr = c3;
+        }
+
+        if (!string.IsNullOrWhiteSpace(condExpr))
+        {
+            bool condOk = LogicEvaluator.EvaluateLogic(condExpr, ctx.Engines.Io, ctx.Engines.Variable, ctx.CurrentSection);
+            if (!condOk)
+            {
+                return;
+            }
+        }
+
+        // 亦支援 THREAD=$THREAD 具名寫法
+        if (kvArgs.TryGetValue("THREAD", out var namedThread) && !string.IsNullOrWhiteSpace(namedThread))
+        {
+            posArgs.Add(namedThread);
+        }
+
+        // 2. 若有指定目標 $THREAD -> 設定該 Thread 的 Local Pause
+        if (posArgs.Count > 0)
+        {
+            if (ctx.VM != null)
+            {
+                ctx.VM.SetThreadLocalPause(posArgs, isPause);
+            }
+            else if (posArgs.Any(t => t.Equals(ctx.ThreadName, StringComparison.OrdinalIgnoreCase) ||
+                                      t.Equals(ctx.ThreadId.ToString(), StringComparison.OrdinalIgnoreCase)))
+            {
+                ctx.IsLocalPaused = isPause;
+            }
+            return;
+        }
+
+        // 3. 未指定 $THREAD -> 設定 Global Pause (除帶 & 特權外的全部 Thread 暫停/恢復)
+        if (ctx.VM != null)
+        {
+            ctx.VM.SetGlobalPause(isPause, triggerHook: true);
+        }
+        else
+        {
+            ctx.Engines.Timer.SetSystemPause(isPause);
+        }
+    }
+
     private static string? FindModuleInitCsvi(string modName)
     {
         var roots = new[]

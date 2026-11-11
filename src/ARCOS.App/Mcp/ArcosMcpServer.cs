@@ -1351,6 +1351,24 @@ public static class ArcosMcpServer
                 {
                     vm.SuspendThread(threadId);
                 }
+                else if (action == "pause")
+                {
+                    if (!string.IsNullOrEmpty(name))
+                        vm.SetThreadLocalPause(name.Split(',', StringSplitOptions.TrimEntries), true);
+                    else if (args?["threadId"] != null)
+                        vm.MainThreads[threadId].IsLocalPaused = true;
+                    else
+                        vm.SetGlobalPause(true);
+                }
+                else if (action == "resume")
+                {
+                    if (!string.IsNullOrEmpty(name))
+                        vm.SetThreadLocalPause(name.Split(',', StringSplitOptions.TrimEntries), false);
+                    else if (args?["threadId"] != null)
+                        vm.MainThreads[threadId].IsLocalPaused = false;
+                    else
+                        vm.SetGlobalPause(false);
+                }
                 else if (action == "stop_all")
                 {
                     vm.StopAll();
@@ -1361,11 +1379,14 @@ public static class ArcosMcpServer
                 {
                     success = true,
                     engine = "THREAD",
+                    isSystemPaused = engines.Timer.IsSystemPaused,
                     threads = vm.MainThreads.Select(t => new
                     {
                         t.ThreadId,
                         t.ThreadName,
                         t.IsRunning,
+                        t.IsLocalPaused,
+                        t.IsEffectivelyPaused,
                         t.ProgIndex,
                         programNumber = t.Program?.ProgramNumber ?? 0
                     }).ToList(),
@@ -1373,6 +1394,8 @@ public static class ArcosMcpServer
                     {
                         s.ThreadName,
                         s.IsRunning,
+                        s.IsLocalPaused,
+                        s.IsEffectivelyPaused,
                         s.ProgIndex,
                         programNumber = s.Program?.ProgramNumber ?? 0
                     }).ToList(),

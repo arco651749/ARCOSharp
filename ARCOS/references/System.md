@@ -35,8 +35,8 @@
 | **TimerCheck** | `$timer` | 檢查計時器是否已超時。若超時，系統自動將 IO `$(timer)#Timeout?` 設為 On |
 | **CounterReset** | `$counter, $times` | 初始化計數器 `$counter` 並設定計數總次數 |
 | **CounterCheck** | `$counter` | 檢查計數器是否已歸零 (執行減 1)。若歸零，系統自動將 IO `$(counter)#Over?` 設為 On |
-| **SystemPause** | (無) | 全域暫停 ARCOS 系統運作，並自動執行 `Pause On` 程式區 |
-| **SystemResume** | (無) | 全域恢復 ARCOS 系統運作，並自動執行 `Pause Off` 程式區 |
+| **Pause** / **SystemPause** | `($thread)(, CONDITION=$iologic)` | 當 `CONDITION` 為 True (預設為 True) 時：若未帶 `$thread`，全域暫停除 `&` 外的全部 Thread 並執行 `Pause On` (Prog 95)；若帶有 `$thread` 則僅設定該 Thread 的 Local Pause (`<Thread>#Pause? = True`)，不影響其他工位 Thread |
+| **Resume** / **SystemResume** | `($thread)(, CONDITION=$iologic)` | 當 `CONDITION` 為 True (預設為 True) 時：若未帶 `$thread`，全域恢復 ARCOS 系統運作並執行 `Pause Off` (Prog 94)；若帶有 `$thread` 則解除該 Thread 的 Local Pause 繼續執行 |
 
 ### 3. 資源載入與參數儲存 (Parameters & External Loading)
 | 指令 | 參數範例 | 說明 |

@@ -159,9 +159,9 @@ public partial class MainWindow : Window
 
 
 
-        // 3. 建立多執行緒排程虛擬機
+        // 3. 建立多執行緒排程虛擬機 (啟用每個 Thread 獨立平行背景迴圈)
 
-        _vm = new ArcosThreadVM(_engines, _driverManager);
+        _vm = new ArcosThreadVM(_engines, _driverManager) { AutoSpawnBackgroundLoop = true };
 
 
 
@@ -803,9 +803,7 @@ public partial class MainWindow : Window
 
                 bool isPaused = _engines.Timer.IsSystemPaused;
 
-                _engines.Timer.SetSystemPause(!isPaused);
-
-                _vm.TriggerSystemHook(!isPaused ? 95 : 94);
+                _vm.SetGlobalPause(!isPaused, triggerHook: true);
 
             };
 

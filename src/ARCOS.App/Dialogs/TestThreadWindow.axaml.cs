@@ -383,7 +383,7 @@ public partial class TestThreadWindow : Window, ISequencerEditorHost
             };
         }
 
-        // Auto / Run (背景高速執行迴圈)
+        // Auto / Run (直接啟動此平行單元的內建高速迴圈)
         var btnRun = this.FindControl<Button>("BtnRun");
         var btnAuto = this.FindControl<Button>("BtnAuto");
         Action toggleAuto = () =>
@@ -392,9 +392,9 @@ public partial class TestThreadWindow : Window, ISequencerEditorHost
             if (_testContext.IsRunning)
             {
                 _autoTimer.Stop();
-                _testContext.IsRunning = false;
+                _testContext.StopBackgroundLoop(resetRunningFlag: true);
             }
-            else
+            else if (_vm != null)
             {
                 SyncUIToProgram();
                 int totalRows = _rows.Count;
@@ -402,47 +402,22 @@ public partial class TestThreadWindow : Window, ISequencerEditorHost
                 {
                     _testContext.ProgIndex = 1;
                 }
-                _testContext.IsRunning = true;
-                Task.Run(async () =>
-                {
-                    int burst = 0;
-                    while (_testContext.IsRunning && _testContext.ProgIndex <= totalRows && _vm != null)
-                    {
-                        int prevPC = _testContext.ProgIndex;
-                        _vm.Executor.ExecuteStep(_testContext);
-                        UpdatePCPointer(_testContext.ProgIndex);
-
-                        if (_testContext.ProgIndex == prevPC)
-                        {
-                            burst = 0;
-                            await Task.Delay(1).ConfigureAwait(false);
-                        }
-                        else if (++burst >= 128)
-                        {
-                            burst = 0;
-                            Thread.Yield();
-                        }
-                    }
-                    _testContext.IsRunning = false;
-                    Dispatcher.UIThread.Post(() =>
-                    {
-                        UpdatePCPointer(_testContext.ProgIndex);
-                        DrainPCPointer();
-                    });
-                });
+                _testContext.IsLocalPaused = false;
+                _testContext.OnExecutionStopped -= OnTestContextStopped;
+                _testContext.OnExecutionStopped += OnTestContextStopped;
+                _testContext.StartBackgroundLoop(_vm.Executor);
             }
         };
         if (btnRun != null) btnRun.Click += (_, _) => toggleAuto();
         if (btnAuto != null) btnAuto.Click += (_, _) => toggleAuto();
 
-        // Pause
+        // Pause (切換此平行單元的 Local Pause)
         var btnPause = this.FindControl<Button>("BtnPause");
         if (btnPause != null)
         {
             btnPause.Click += (_, _) =>
             {
-                _autoTimer.Stop();
-                _testContext.IsRunning = false;
+                _testContext.IsLocalPaused = !_testContext.IsLocalPaused;
             };
         }
 
@@ -454,7 +429,8 @@ public partial class TestThreadWindow : Window, ISequencerEditorHost
             {
                 ClearRangeSelection();
                 _autoTimer.Stop();
-                _testContext.IsRunning = false;
+                _testContext.StopBackgroundLoop(resetRunningFlag: true);
+                _testContext.IsLocalPaused = false;
                 _testContext.ProgIndex = 1;
                 _testContext.CallStack.Clear();
                 _testContext.State.Reset();
@@ -721,6 +697,15 @@ public partial class TestThreadWindow : Window, ISequencerEditorHost
             if (p.Count > 0) progs.Add(p);
         }
         return progs;
+    }
+
+    private void OnTestContextStopped(ARCOS.Core.Execution.ExecutionContext stoppedCtx)
+    {
+        Dispatcher.UIThread.Post(() =>
+        {
+            UpdatePCPointer(stoppedCtx.ProgIndex);
+            DrainPCPointer();
+        });
     }
 
     private void AutoTimer_Tick(object? sender, EventArgs e)

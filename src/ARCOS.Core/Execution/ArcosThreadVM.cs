@@ -18,6 +18,12 @@ public sealed class ArcosThreadVM
     private readonly DriverManager _drivers;
     private readonly object _lock = new();
 
+    /// <summary>
+    /// 是否在 StartThread / StartSubThread 時自動啟動該 Thread 專屬的平行背景高速迴圈
+    /// (App Runtime 啟用為 true；純手動單步測試可保持 false 由 Tick() 推進)
+    /// </summary>
+    public bool AutoSpawnBackgroundLoop { get; set; } = false;
+
     public CommandExecutor Executor => _executor;
     public BasicEngines Engines => _engines;
     public DriverManager Drivers => _drivers;
@@ -59,6 +65,105 @@ public sealed class ArcosThreadVM
                 VM = this
             };
             _engines.Io.AddVirtualIO($"{tName}#Run?", false);
+            _engines.Io.AddVirtualIO($"{tName}#Pause?", false);
+        }
+    }
+
+    /// <summary>
+    /// 依編號 ("0".."12") 或名稱 ("ThreadMain", "Thread1", SubThread 名稱) 尋找平行執行單元
+    /// </summary>
+    public ExecutionContext? FindThread(string nameOrIndex)
+    {
+        if (string.IsNullOrWhiteSpace(nameOrIndex)) return null;
+        string key = nameOrIndex.Trim();
+
+        if (int.TryParse(key, out int idx) && idx >= 0 && idx < _mainThreads.Length)
+        {
+            return _mainThreads[idx];
+        }
+
+        if (key.Equals("Main", StringComparison.OrdinalIgnoreCase) ||
+            key.Equals("ThreadMain", StringComparison.OrdinalIgnoreCase))
+        {
+            return _mainThreads[0];
+        }
+
+        for (int i = 0; i < _mainThreads.Length; i++)
+        {
+            if (_mainThreads[i].ThreadName.Equals(key, StringComparison.OrdinalIgnoreCase))
+            {
+                return _mainThreads[i];
+            }
+        }
+
+        if (_subThreads.TryGetValue(key, out var subCtx))
+        {
+            return subCtx;
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// 設定單一或多個指定 Thread 的 Local Pause 狀態 (System@Pause::$Thread / System@Resume::$Thread)
+    /// </summary>
+    public int SetThreadLocalPause(IEnumerable<string> targets, bool isPaused)
+    {
+        int count = 0;
+        foreach (var rawTarget in targets)
+        {
+            if (string.IsNullOrWhiteSpace(rawTarget)) continue;
+            string key = rawTarget.Trim();
+
+            var ctx = FindThread(key);
+            if (ctx != null)
+            {
+                ctx.IsLocalPaused = isPaused;
+                count++;
+                continue;
+            }
+
+            // 亦支援前綴匹配併發 SubThread (如 process&&_1, process&&_2)
+            foreach (var kvp in _subThreads)
+            {
+                if (kvp.Key.StartsWith(key, StringComparison.OrdinalIgnoreCase))
+                {
+                    kvp.Value.IsLocalPaused = isPaused;
+                    count++;
+                }
+            }
+        }
+        return count;
+    }
+
+    /// <summary>
+    /// 設定全機 Global Pause 狀態，同步通知所有平行單元結算暫停時鐘，並觸發 Prog 95 (Pause On) / Prog 94 (Pause Off)
+    /// </summary>
+    public void SetGlobalPause(bool isPaused, bool triggerHook = true)
+    {
+        bool prev = _engines.Timer.IsSystemPaused;
+        _engines.Timer.SetSystemPause(isPaused);
+
+        if (prev != isPaused)
+        {
+            for (int i = 0; i < _mainThreads.Length; i++)
+            {
+                _mainThreads[i].OnGlobalPauseChanged(isPaused);
+            }
+            foreach (var kvp in _subThreads)
+            {
+                kvp.Value.OnGlobalPauseChanged(isPaused);
+            }
+
+            if (triggerHook)
+            {
+                int hookProg = isPaused ? 95 : 94;
+                var prog = GetProgram(hookProg);
+                if (prog.Count > 0)
+                {
+                    TriggerSystemHook(hookProg);
+                }
+            }
         }
     }
 
@@ -92,17 +197,24 @@ public sealed class ArcosThreadVM
         var ctx = _mainThreads[threadNo];
         lock (_lock)
         {
+            ctx.StopBackgroundLoop(resetRunningFlag: false);
             ctx.Program = GetProgram(progNo);
             ctx.ProgIndex = startIndex;
             ctx.CallStack.Clear();
             ctx.State.Reset();
+            ctx.IsLocalPaused = false;
             ctx.IsRunning = true;
             _engines.Io.SetPort($"{ctx.ThreadName}#Run?", true);
+
+            if (AutoSpawnBackgroundLoop)
+            {
+                ctx.StartBackgroundLoop(_executor);
+            }
         }
     }
 
     /// <summary>
-    /// 掛起/暫停主執行緒
+    /// 掛起/停止主執行緒
     /// </summary>
     public void SuspendThread(int threadNo)
     {
@@ -110,8 +222,7 @@ public sealed class ArcosThreadVM
         var ctx = _mainThreads[threadNo];
         lock (_lock)
         {
-            ctx.IsRunning = false;
-            _engines.Io.SetPort($"{ctx.ThreadName}#Run?", false);
+            ctx.StopBackgroundLoop(resetRunningFlag: true);
         }
     }
 
@@ -124,13 +235,18 @@ public sealed class ArcosThreadVM
         var ctx = _mainThreads[threadNo];
         lock (_lock)
         {
+            ctx.IsLocalPaused = false;
             ctx.IsRunning = true;
             _engines.Io.SetPort($"{ctx.ThreadName}#Run?", true);
+            if (AutoSpawnBackgroundLoop)
+            {
+                ctx.StartBackgroundLoop(_executor);
+            }
         }
     }
 
     /// <summary>
-    /// 啟動動態 SubThread (支援帶 & 特權後綴)
+    /// 啟動動態平行執行緒 (SubThread，本質與一般 Thread 完全相同，支援帶 & 特權後綴)
     /// </summary>
     public ExecutionContext StartSubThread(string subName, ProgramTable program, int startIndex = 1)
     {
@@ -138,6 +254,11 @@ public sealed class ArcosThreadVM
         ArgumentNullException.ThrowIfNull(program);
 
         string cleanName = subName.Trim();
+        if (_subThreads.TryGetValue(cleanName, out var oldCtx))
+        {
+            oldCtx.StopBackgroundLoop(resetRunningFlag: true);
+        }
+
         var ctx = new ExecutionContext(100 + _subThreads.Count, cleanName, program, _engines, _drivers)
         {
             ProgIndex = startIndex,
@@ -148,6 +269,13 @@ public sealed class ArcosThreadVM
 
         _subThreads[cleanName] = ctx;
         _engines.Io.AddVirtualIO($"{cleanName}#Run?", true);
+        _engines.Io.AddVirtualIO($"{cleanName}#Pause?", false);
+
+        if (AutoSpawnBackgroundLoop)
+        {
+            ctx.StartBackgroundLoop(_executor);
+        }
+
         return ctx;
     }
 
@@ -159,8 +287,7 @@ public sealed class ArcosThreadVM
         if (string.IsNullOrWhiteSpace(subName)) return;
         if (_subThreads.TryGetValue(subName.Trim(), out var ctx))
         {
-            ctx.IsRunning = false;
-            _engines.Io.SetPort($"{ctx.ThreadName}#Run?", false);
+            ctx.StopBackgroundLoop(resetRunningFlag: true);
         }
     }
 
@@ -178,20 +305,18 @@ public sealed class ArcosThreadVM
 
     /// <summary>
     /// 單步排程輪詢 (Single Scheduling Tick)
-    /// 遍歷所有活動執行緒執行單步指令，落實 SystemPause 與 & 特權閘門控制
+    /// 遍歷所有活動執行緒執行單步指令，落實 LocalPause、SystemPause 與 & 特權閘門控制
     /// </summary>
     public void Tick()
     {
-        bool isPaused = _engines.Timer.IsSystemPaused;
-
         // 1. 執行 13 個主執行緒
         for (int i = 0; i < 13; i++)
         {
             var ctx = _mainThreads[i];
             if (!ctx.IsRunning) continue;
 
-            // Pause 閘門控制：若全機暫停且該執行緒不具 & 特權，跳過此輪
-            if (isPaused && !ctx.IsBypassPause)
+            // Pause 閘門控制：若該 Thread 處於 Local Pause 或全機暫停 (且不具 & 特權)，跳過此輪
+            if (ctx.IsEffectivelyPaused)
             {
                 continue;
             }
@@ -210,7 +335,7 @@ public sealed class ArcosThreadVM
             var ctx = kvp.Value;
             if (!ctx.IsRunning) continue;
 
-            if (isPaused && !ctx.IsBypassPause)
+            if (ctx.IsEffectivelyPaused)
             {
                 continue;
             }

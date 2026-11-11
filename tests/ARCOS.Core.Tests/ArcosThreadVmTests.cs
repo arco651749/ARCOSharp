@@ -146,4 +146,90 @@ public class ArcosThreadVmTests
         vm.Tick();
         Assert.True(engines.Io.GetPort("AllDone"));
     }
+
+    [Fact]
+    public void SystemPauseAndResume_LocalThreadPauseWithCondition_FreezesOnlyTargetStationThread()
+    {
+        var (vm, engines) = CreateVM();
+
+        // Station 1 (Thread 1): 2 步動作
+        vm.LoadProgram(1, ProgramTable.FromText("""
+            IO@SetPort::St1_Step1;
+            IO@SetPort::St1_Step2;
+            """, 1, "Station1"));
+
+        // Station 2 (Thread 2): 2 步動作
+        vm.LoadProgram(2, ProgramTable.FromText("""
+            IO@SetPort::St2_Step1;
+            IO@SetPort::St2_Step2;
+            """, 2, "Station2"));
+
+        // Controller (Thread 0): 測試帶 CONDITION 的 Local Pause 與 Local Resume
+        vm.LoadProgram(0, ProgramTable.FromText("""
+            System@Pause::Thread1,CONDITION=Sensor_Fault;
+            System@Pause::Thread1,CONDITION=Sensor_BlockSt1;
+            System@Resume::Thread1,CONDITION=Sensor_ClearSt1;
+            """, 0, "MainController"));
+
+        // 預設 Sensor_Fault = false, Sensor_BlockSt1 = true, Sensor_ClearSt1 = true
+        engines.Io.SetPort("Sensor_Fault", false);
+        engines.Io.SetPort("Sensor_BlockSt1", true);
+        engines.Io.SetPort("Sensor_ClearSt1", true);
+
+        vm.StartThread(0, 0);
+        vm.StartThread(1, 1);
+        vm.StartThread(2, 2);
+
+        // Tick 1:
+        // Thread 0 執行第 1 行 System@Pause::Thread1,CONDITION=Sensor_Fault (因 Sensor_Fault=false 不生效)
+        // Thread 1 執行 St1_Step1
+        // Thread 2 執行 St2_Step1
+        vm.Tick();
+        Assert.False(vm.MainThreads[1].IsLocalPaused);
+        Assert.False(engines.Io.GetPort("Thread1#Pause?"));
+        Assert.True(engines.Io.GetPort("St1_Step1"));
+        Assert.True(engines.Io.GetPort("St2_Step1"));
+
+        // Tick 2:
+        // Thread 0 執行第 2 行 System@Pause::Thread1,CONDITION=Sensor_BlockSt1 (Sensor_BlockSt1=true -> Thread 1 進入 Local Pause!)
+        // Thread 1 因剛被 Thread 0 設為 LocalPaused，此輪被凍結，不執行 St1_Step2！
+        // Thread 2 完全不受影響，順利執行 St2_Step2！
+        vm.Tick();
+        Assert.True(vm.MainThreads[1].IsLocalPaused);
+        Assert.True(engines.Io.GetPort("Thread1#Pause?"));
+        Assert.False(engines.Io.GetPort("St1_Step2")); // Station 1 確實被凍結！
+        Assert.True(engines.Io.GetPort("St2_Step2"));  // Station 2 照常運作完成！
+
+        // Tick 3:
+        // Thread 0 執行第 3 行 System@Resume::Thread1,CONDITION=Sensor_ClearSt1 -> 解除 Thread 1 的 Local Pause!
+        // Thread 1 同輪立即恢復並執行 St1_Step2！
+        vm.Tick();
+        Assert.False(vm.MainThreads[1].IsLocalPaused);
+        Assert.False(engines.Io.GetPort("Thread1#Pause?"));
+        Assert.True(engines.Io.GetPort("St1_Step2"));
+    }
+
+    [Fact]
+    public async Task IndependentParallelThreadVM_AutoSpawnLoop_RunsIndependentlyWithZeroDelay()
+    {
+        var (vm, engines) = CreateVM();
+        vm.AutoSpawnBackgroundLoop = true;
+
+        vm.LoadProgram(1, ProgramTable.FromText("""
+            System@Note::Fast1;
+            System@Note::Fast2;
+            IO@SetPort::ParallelWorker1Done;
+            """, 1, "FastWorker1"));
+
+        vm.StartThread(1, 1);
+
+        // 等待幾毫秒讓獨立平行單元自己跑完
+        for (int i = 0; i < 50 && !engines.Io.GetPort("ParallelWorker1Done"); i++)
+        {
+            await Task.Delay(5);
+        }
+
+        Assert.True(engines.Io.GetPort("ParallelWorker1Done"));
+        Assert.False(engines.Io.GetPort("Thread1#Run?"));
+    }
 }

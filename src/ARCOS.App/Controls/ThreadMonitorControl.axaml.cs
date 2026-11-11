@@ -136,7 +136,7 @@ public partial class ThreadMonitorControl : UserControl
         if (_context == null) return;
 
         bool isRunning = _context.IsRunning;
-        bool isPaused = _context.VM?.Engines.Timer.IsSystemPaused == true && !_context.IsBypassPause;
+        bool isPaused = _context.IsEffectivelyPaused;
         int pc1Based = _context.ReportedProgIndex;
         int targetRow = pc1Based >= 1 ? pc1Based - 1 : 0;
 
