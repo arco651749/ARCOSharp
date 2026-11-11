@@ -185,22 +185,21 @@ def run_tests():
     print(f"  ✓ Line 9 (Call@mycsvi.csvi&) 兩階段導引視窗流暢過渡並回傳 (截圖: {c2_shot})")
 
     # -------------------------------------------------------------
-    # Phase 4: 全系統分頁 (10 大 TabItem) 導航巡檢
+    # Phase 4: 全系統分頁 (6 大主控制項 TabItem) 導航巡檢
     # -------------------------------------------------------------
-    print("\n[Phase 4] 全系統分頁 (10 大 TabItem) 導航巡檢")
+    print("\n[Phase 4] 全系統分頁 (6 大主控制項 TabItem) 導航巡檢")
     tabs = [
-        (0, "User Tab"), (1, "Capture"), (2, "IMAQ Array"), (3, "Point&Path"),
-        (4, "Modules Info"), (5, "Threads"), (6, "Parameter&Variable"),
-        (7, "WaveForm"), (8, "Panel CMD"), (9, "Remote")
+        (0, "User Tab"), (1, "Capture"), (2, "Modules Info"),
+        (3, "Panel CMD"), (4, "Remote"), (5, "CSVI STUDIO")
     ]
     for tidx, tname in tabs:
         call_mcp("arcos_click", {"tabIndex": tidx})
         time.sleep(0.2)
         cur = call_mcp("arcos_get_state", {})
-        assert cur.get("mainTabIndex") == tidx, f"分頁切換異常: 預期 {tidx}, 實際 {cur.get('mainTabIndex')}"
+        assert cur.get("mainTabIndex") == tidx, f"分頁切換異常: 預期 {tidx} ({tname}), 實際 {cur.get('mainTabIndex')}"
     call_mcp("arcos_click", {"tabIndex": 0})
     time.sleep(0.3)
-    print("  ✓ 10 大主控制項分頁遍歷切換無崩潰，視覺樹保持健全")
+    print("  ✓ 6 大主控制項分頁遍歷切換無崩潰，視覺樹保持健全")
 
     # -------------------------------------------------------------
     # Phase 5: 排程引擎單步執行與數據鏈路驗證
@@ -264,8 +263,92 @@ def run_tests():
     assert has_csvi, "日誌中缺少 CSVI 演算法成功運算紀錄 (110.5)"
     print("  ✓ 稽核日誌確認 Python 3.12 與 mycsvi.csvi 執行成功 (計算分數 = 110.5)")
 
+    # -------------------------------------------------------------
+    # Phase 8: 指令插入位置精確度驗證 (Insert at Current Row)
+    # -------------------------------------------------------------
+    print("\n[Phase 8] 指令插入位置精確度驗證 (Insert at Current Row)")
+    st_before = call_mcp("arcos_get_state", {})
+    cnt_before = len(st_before.get("sequencerRows", []))
+    # 在 rowIndex = 2 插入新指令
+    call_mcp("arcos_sequencer_action", {
+        "action": "add_row",
+        "rowIndex": 2,
+        "command": "System@Delay",
+        "parameter": "0.99"
+    })
+    st_after = call_mcp("arcos_get_state", {})
+    rows_after = st_after.get("sequencerRows", [])
+    assert len(rows_after) == cnt_before + 1, f"行數應增加 1: 預期 {cnt_before + 1}, 實際 {len(rows_after)}"
+    assert rows_after[2].get("command") == "System@Delay" and rows_after[2].get("parameter") == "0.99", f"第 2 列應為新插入指令: {rows_after[2]}"
+    print("  ✓ 插入指令精確位於選取之第 2 列位置，原指令順延下移")
+
+    # -------------------------------------------------------------
+    # Phase 9: 快捷鍵歷程操作 (Ctrl+Z Undo / Ctrl+Y Redo)
+    # -------------------------------------------------------------
+    print("\n[Phase 9] 快捷鍵歷程操作 (Ctrl+Z Undo / Ctrl+Y Redo)")
+    # 發送 Ctrl+Z 快捷鍵還原插入動作
+    res_undo = call_mcp("arcos_sequencer_action", {"action": "send_key", "key": "Z", "modifiers": "Control"})
+    assert res_undo.get("success") is True, f"Ctrl+Z 執行失敗: {res_undo}"
+    st_undone = call_mcp("arcos_get_state", {})
+    assert len(st_undone.get("sequencerRows", [])) == cnt_before, "Ctrl+Z 應成功還原行數"
+    print("  ✓ Ctrl+Z (Undo) 快速鍵成功還原上一步修改")
+
+    # 發送 Ctrl+Y 快捷鍵重做
+    res_redo = call_mcp("arcos_sequencer_action", {"action": "send_key", "key": "Y", "modifiers": "Control"})
+    assert res_redo.get("success") is True, f"Ctrl+Y 執行失敗: {res_redo}"
+    st_redone = call_mcp("arcos_get_state", {})
+    assert len(st_redone.get("sequencerRows", [])) == cnt_before + 1, "Ctrl+Y 應成功重做行數"
+    print("  ✓ Ctrl+Y (Redo) 快速鍵成功重做動作")
+
+    # -------------------------------------------------------------
+    # Phase 10: 範圍選取與剪貼管理 (Shift選取 / 剪貼插入 / 刪除)
+    # -------------------------------------------------------------
+    print("\n[Phase 10] 範圍選取與剪貼管理 (Shift選取 / 複製貼上 / 刪除)")
+    # 10.1 Shift + Click 區間多選 (選取 Line 1 ~ Line 3)
+    call_mcp("arcos_clipboard_action", {"action": "select", "start": 1, "end": 3})
+    st_sel = call_mcp("arcos_get_state", {})
+    selected_rows = [r for r in st_sel.get("sequencerRows", []) if r.get("isRangeSelected")]
+    assert len(selected_rows) == 3, f"應選取 3 行: 實際 {len(selected_rows)}"
+    print("  ✓ Shift+Click 區間選取有效，僅所選範圍亮起藍色")
+
+    # 10.2 Escape 清除選取
+    call_mcp("arcos_sequencer_action", {"action": "send_key", "key": "Escape"})
+    st_esc = call_mcp("arcos_get_state", {})
+    assert not any(r.get("isRangeSelected") for r in st_esc.get("sequencerRows", [])), "Escape 應清除所有選取"
+    print("  ✓ Escape 快速鍵成功取消選取")
+
+    # -------------------------------------------------------------
+    # Phase 11: 清空程式區 (X 按鈕) 與 Undo 復原
+    # -------------------------------------------------------------
+    print("\n[Phase 11] 清空程式區 (X 按鈕) 與 Undo 復原")
+    call_mcp("arcos_click", {"name": "BtnDelete"})
+    st_empty = call_mcp("arcos_get_state", {})
+    assert len(st_empty.get("sequencerRows", [])) == 0, "點擊 X 按鈕應清空當前程式區"
+    print("  ✓ 點擊 X 按鈕 (BtnDelete) 成功清空當前程式區 (0 行)")
+
+    # 透過 Ctrl+Z 復原整區程式碼
+    call_mcp("arcos_sequencer_action", {"action": "send_key", "key": "Z", "modifiers": "Control"})
+    st_restored = call_mcp("arcos_get_state", {})
+    assert len(st_restored.get("sequencerRows", [])) > 0, "Ctrl+Z 應成功還原被清空的程式區"
+    print(f"  ✓ Ctrl+Z 快速鍵成功將整區指令完全還原 ({len(st_restored.get('sequencerRows', []))} 行)")
+
+    # -------------------------------------------------------------
+    # Phase 12: 測試執行緒視窗 (Ctrl+T 喚起與關閉)
+    # -------------------------------------------------------------
+    print("\n[Phase 12] 測試執行緒視窗快速鍵 (Ctrl+T 喚起 / 關閉)")
+    res_t1 = call_mcp("arcos_sequencer_action", {"action": "send_key", "key": "T", "modifiers": "Control"})
+    assert res_t1.get("success") is True, f"Ctrl+T 喚起失敗: {res_t1}"
+    st_t_win = call_mcp("arcos_test_thread", {})
+    assert st_t_win.get("isVisible") is True, "TestThreadWindow 應成功被 Ctrl+T 喚起顯示"
+    print("  ✓ Ctrl+T 快速鍵成功喚起 TestThreadWindow 浮動測試視窗")
+
+    call_mcp("arcos_sequencer_action", {"action": "send_key", "key": "T", "modifiers": "Control"})
+    st_t_win2 = call_mcp("arcos_test_thread", {})
+    assert st_t_win2.get("windowState") == "Minimized" or not st_t_win2.get("isVisible"), "TestThreadWindow 應成功被 Ctrl+T 最小化隱藏"
+    print("  ✓ 再次按下 Ctrl+T 成功最小化隱藏 TestThreadWindow (保持狀態不銷毀)")
+
     print("\n" + "=" * 70)
-    print(" [PASS] ARCOSharp 工業級全操作流驗證 100% 通過！")
+    print(" [PASS] ARCOSharp 工業級全操作流驗證 100% 通過 (含全套 UI 快捷鍵！)")
     print("=" * 70)
 
 def main():

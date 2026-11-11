@@ -818,6 +818,21 @@ public partial class SequencerEditorControl : UserControl
         BtnDelete_Click(null, new RoutedEventArgs());
     }
 
+    public void TriggerClearSection()
+    {
+        BtnClearSection_Click(null, new RoutedEventArgs());
+    }
+
+    public void SimulateKeyDown(Key key, KeyModifiers modifiers = KeyModifiers.None)
+    {
+        OnSequencerKeyDown(this, new KeyEventArgs
+        {
+            RoutedEvent = KeyDownEvent,
+            Key = key,
+            KeyModifiers = modifiers
+        });
+    }
+
     private void BindToolbarButtons()
     {
         // 核心流程控制 (Run, Step, Jump, Pause, Reset)

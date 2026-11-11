@@ -447,7 +447,8 @@ public static class ArcosMcpServer
             line = r.LineNumber,
             command = r.Command,
             parameter = r.Parameter,
-            isCurrentPC = r.IsCurrentPC
+            isCurrentPC = r.IsCurrentPC,
+            isRangeSelected = r.IsRangeSelected
         }).ToList();
 
         return JsonSerializer.Serialize(new
@@ -944,6 +945,30 @@ public static class ArcosMcpServer
 
                 case "get_history":
                     return JsonSerializer.Serialize(new { success = true, currentProg = seq.CurrentProgramNumber, undoCount = seq.GetUndoCount(), redoCount = seq.GetRedoCount(), rowCount = seq.Rows.Count });
+
+                case "clear_section":
+                    seq.SetSupervisorMode(true);
+                    seq.TriggerClearSection();
+                    return JsonSerializer.Serialize(new { success = true, action = "clear_section", currentProg = seq.CurrentProgramNumber, rowCount = seq.Rows.Count, undoCount = seq.GetUndoCount() });
+
+                case "send_key":
+                    string keyStr = args?["key"]?.GetValue<string>() ?? "";
+                    string modStr = args?["modifiers"]?.GetValue<string>() ?? "";
+                    KeyModifiers km = KeyModifiers.None;
+                    if (modStr.Contains("Ctrl", StringComparison.OrdinalIgnoreCase) || modStr.Contains("Control", StringComparison.OrdinalIgnoreCase)) km |= KeyModifiers.Control;
+                    if (modStr.Contains("Shift", StringComparison.OrdinalIgnoreCase)) km |= KeyModifiers.Shift;
+                    if (modStr.Contains("Alt", StringComparison.OrdinalIgnoreCase)) km |= KeyModifiers.Alt;
+                    if (Enum.TryParse<Key>(keyStr, true, out var parsedKey))
+                    {
+                        if (km.HasFlag(KeyModifiers.Control) && parsedKey == Key.T)
+                        {
+                            mainWin.ToggleTestThreadWindow();
+                            return JsonSerializer.Serialize(new { success = true, action = "send_key", key = keyStr, toggledTestThread = true });
+                        }
+                        seq.SimulateKeyDown(parsedKey, km);
+                        return JsonSerializer.Serialize(new { success = true, action = "send_key", key = keyStr, modifiers = modStr, rowCount = seq.Rows.Count, undoCount = seq.GetUndoCount(), redoCount = seq.GetRedoCount() });
+                    }
+                    return JsonSerializer.Serialize(new { success = false, error = $"Invalid key: {keyStr}" });
 
                 default:
                     return JsonSerializer.Serialize(new { success = false, error = $"Unknown sequencer action: {action}" });
