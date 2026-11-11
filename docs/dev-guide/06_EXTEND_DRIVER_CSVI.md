@@ -179,15 +179,37 @@ sequenceDiagram
 ## 5. 四大硬體類別標準設計規範與 Ticket 協議
 
 ### 5.1 IO 驅動程式規範 (Category: `"IO"`)
-- **啟動指令**：`IO@AddIODriver::$deviceName, $driverType, $param`
-- **參數慣例**：`Device=COM1, OutStart=P0.0, OutPorts=16, InStart=P1.0, InPorts=16, Interval=25`
-- **核心職責**：
-  1. 背景每 `IntervalMs` (通常 25ms) 透過 `IoEngine.GetBatch(OutStart, OutPorts)` 讀回輸出狀態並送至實體輸出點。
-  2. 讀取實體硬體輸入暫存器，透過 `IoEngine.SetBatch(InStart, inBits)` 寫入系統。
-  3. 監聽 `_engines.Io.IoChanged`，若手動於 UI 點選修改 InStart 範圍內的點位，即時更新驅動快取。
-- **標準 Ticket 命令**：
-  - `FORCE_UPDATE` / `UPDATE`：立即強制執行一次雙向批次更新。
-  - `SET_INPUT`：手動模擬輸入點狀態（`Index=0, Value=true`）。
+
+#### (A) 主動式 Driver CSVI vs. 被動式 Command CSVI
+- **Driver CSVI（主動式常駐服務，如 `MockIO.csvi`）**：在 `IO@AddIODriver` 掛載後，內部啟動獨立背景執行緒 (`WorkerLoop`)，每隔 `IntervalMs`（預設 `25ms`）**自動**將輸出點 (`IoEngine.GetBatch`) 刷寫至硬體，並將硬體輸入點 (`IoEngine.SetBatch`) 讀回系統。
+- **Command CSVI（被動式單步指令，如 `SetPort.csvi`, `InitIOPort.csvi`, `ForceUpdate.csvi`）**：平時不佔用任何背景資源，僅在排程器執行到該行時被動執行一次。
+
+#### (B) MVCON 標準 IO 生命週期三部曲與硬體立即同步
+1. **階段一：掛載硬體與設定實體區間 (`IO@AddIODriver`)**
+   - 語法：`IO@AddIODriver::$deviceName, $driverType, OutStart=P0.0, OutPorts=16, InStart=P4.0, InPorts=16, Interval=25`
+   - 此時尚未定義別名，一律以實體位址 `PX.X` 開闢硬體讀寫區間並啟動背景輪詢。
+2. **階段二：賦予點位語意別名 (`IO@SetPortName`)**
+   - 語法：`IO@SetPortName::P0.0, 汽缸下`、`IO@SetPortName::P4.0, 啟動鈕?`
+   - 在 `IoEngine` 中建立實體點位與語意別名的雙向映射（內部統一正規化實體點位為大寫 `P{port}.{bit}`）。
+3. **階段三：收網同步別名與設定掃描週期 (`IO@InitIOPort`)**
+   - 語法：`IO@InitIOPort::$deviceName, [$intervalMs]`
+   - `InitIOPort.csvi` 會發送 `DriverTicket("INITIOPORT", $intervalMs)` 給指定的 IO Driver（若未指定裝置名則廣播給所有已掛載之 IO Driver）。
+   - Driver 收到 `INITIOPORT` 票券後：
+     - **更新掃描間隔**：若傳入第 2 參數 `$intervalMs`（`> 0`），立即覆寫 `IntervalMs`；若未傳入則維持 Driver 預設值（如 `25ms`）。
+     - **刷新前面板點位別名**：呼叫 `_engines.Io.GetPortAlias(physPort)` 取得該驅動負責區間內所有點位的最新別名，並觸發 `PortNamesRefreshed` 事件，讓 Driver 前面板 HMI 上的點位標籤即時從 `P0.0` 換名顯示為亮黃色語意名稱（如 `汽缸下`）！
+4. **階段四：指令中強制立即插隊同步 (`IO@ForceUpdate` 與尾綴 `ForceUpdate`)**
+   - 當高速製程不希望等待下一次背景輪詢（例如 25ms）時，可呼叫 `IO@ForceUpdate::$deviceName`（或在 `IO@SetPort::P0.0, ForceUpdate`、`IO@ClrPort::P0.0, ForceUpdate` 加上尾綴）。
+   - 指令會向 Driver 發送 `DriverTicket("FORCEUPDATE", "")` 並等待票券完成（微秒級非阻塞微步或瞬時同步），強制 Driver **立即插隊執行一次完整的硬體輸出寫入與輸入讀取**。
+
+#### (C) 標準 IO Driver 必備實作方法與 Ticket 命令表
+一個合規的 IO Driver CSVI（實作 `IDriver`，參考 [`MockIoDriver.cs`](file:///d:/AntiGravity/ARCOSharp/src/MODULES/IO/DRIVER/MockIO/MockIoDriver.cs)）必須支援：
+- `Init(string deviceName, string param, BasicEngines engines)`：解析 `OutStart`、`OutPorts`、`InStart`、`InPorts`、`Interval`，向 `_engines.Io.RegisterDriver` 註冊並啟動 `WorkerLoop`。
+- `PostTicket(DriverTicket ticket)`：接收並處理以下標準 Ticket 命令（不分大小寫）：
+  - **`INITIOPORT` / `INIT_IO_PORT`**：若 `ticket.Parameter` 為有效正整數則更新 `IntervalMs`，接著執行一次硬體同步並觸發 `PortNamesRefreshed` 刷新 UI 點位別名標籤。
+  - **`FORCEUPDATE` / `FORCE_UPDATE` / `UPDATE`**：立即強制執行一次雙向硬體批次讀寫 (`SyncOutputFromEngine` + `SyncInputToEngine`) 後完成票券。
+  - **`SET_INPUT`**：（供測試/模擬器使用）設定指定輸入點狀態（`Index=0, Value=true`）。
+- `CreateDriverView()`：回傳 Avalonia 前面板 `UserControl`（訂閱 `StateChanged` 與 `PortNamesRefreshed` 事件即時更新燈號與別名）。
+- `Shutdown()` / `Dispose()`：停止 `WorkerLoop` 並釋放通訊埠。
 
 ### 5.2 Motion 運動控制驅動規範 (Category: `"Motion"`)
 - **啟動指令**：`Motion@AddMotion::$deviceName, $driverType, $param`

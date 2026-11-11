@@ -78,10 +78,13 @@ public BasicEngines(IoEngine io, VariableEngine variable, PointEngine point, Ima
 - **執行緒安全**：內部使用 `ConcurrentDictionary` 與讀寫鎖，保證多執行緒安全。
 
 #### `SetPortName(string portId, string alias) -> void`
-- **說明**：動態將硬體點位（如 `P0.4`）綁定自訂別名（如 `Safety_Door`）。綁定後立即廣播更新。
+- **說明**：動態將硬體點位（如 `p0.4` 或 `P0.4`，內部自動正規化為大寫 `P{port}.{bit}`）雙向綁定自訂別名（如 `Safety_Door`）。
 
-#### `GetConfiguredPortNames() -> IReadOnlyDictionary<string, string>`
-- **說明**：取得當前所有已註冊點位別名之完整對應表（鍵為別名，值為點位 ID）。
+#### `GetPortAlias(string physicalPort) -> string?`
+- **說明**：依據實體點位名稱（如 `"P0.0"`，不分大小寫）反查已綁定的自訂語意別名；若尚未設定別名則回傳 `null`。供 IO Driver 在收到 `INITIOPORT` 票券時同步更新前面板 UI 上的點位標籤。
+
+#### `GetConfiguredPortNames(IoPortDirection direction = IoPortDirection.All) -> IReadOnlyList<string>`
+- **說明**：取得當前所有已註冊點位名稱清單（排序：自訂別名 ➔ 虛擬 IO ➔ 實體點位 ID）。
 
 #### `AddVirtualIO(string name, bool initialValue = false) -> void`
 - **說明**：註冊記憶體內部虛擬 IO 旗標，供跨執行緒或跨模組軟體邏輯交握。

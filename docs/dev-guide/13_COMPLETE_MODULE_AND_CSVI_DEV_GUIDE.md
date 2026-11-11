@@ -29,7 +29,7 @@
    - [3.2 強制單一指令 `.csvi` 派發紀律（無靜默保底）](#32-強制單一指令-csvi-派發紀律無靜默保底)
    - [3.3 特殊字元指令與 Windows 檔名映射規則](#33-特殊字元指令與-windows-檔名映射規則)
    - [3.4 微步非阻塞狀態機 (`ctx.State`) 開發鐵律](#34-微步非阻塞狀態機-ctxstate-開發鐵律)
-   - [3.5 模組基底專案 (`<Module>.Module.dll`) 建立步驟](#35-模組基底專案-modulemoduledll-建立步驟)
+   - [3.5 模組主控 `<Module>.csvi` 跳板架構（免 `<Module>.Module.dll`）](#35-模組主控-modulecsvi-跳板架構免-modulemoduledll)
 4. [CSVI 3.0 封包底層結構與內嵌資源規範](#4-csvi-30-封包底層結構與內嵌資源規範)
    - [4.1 什麼是 `.csvi`？](#41-什麼是-csvi)
    - [4.2 `CSVI.Manifest.json` 欄位規格詳解](#42-csvimanifestjson-欄位規格詳解)
@@ -154,7 +154,8 @@ public class BasicEngines
 |---|---|
 | `bool GetPort(string nameOrPort)` | 讀取單點狀態。支援常數（`"True"`, `"1"` 回傳 `true`；`"False"`, `"0"` 回傳 `false`）、虛擬 IO（如 `"System#Pause?"`, `"Tray1#Last?"`）、別名（如 `"StartBtn"`）與實體點位（如 `"P0.0"`）。若點位未定義預設回傳 `false`。 |
 | `void SetPort(string nameOrPort, bool value)` | 寫入單點狀態。若名稱包含 `'#'` 或已註冊為虛擬 IO，寫入虛擬 IO 字典；若為別名則自動轉寫對應實體點；若為 `"True"`/`"False"` 常數則自動忽略。值改變時觸發 `IoChanged` 事件。 |
-| `void SetPortName(string physicalPort, string aliasName)` | 雙向綁定實體點位與別名（例如將 `"P0.0"` 綁定為 `"Cylinder_Up"`），對應 `IO@SetPortName`。 |
+| `void SetPortName(string physicalPort, string aliasName)` | 雙向綁定實體點位與別名（例如將 `"P0.0"` 綁定為 `"Cylinder_Up"`，內部統一正規化實體點位為大寫 `P{port}.{bit}`），對應 `IO@SetPortName`。 |
+| `string? GetPortAlias(string physicalPort)` | **【供 IO Driver `INITIOPORT` 刷新 UI 使用】** 依實體點位（如 `"P0.0"`，不分大小寫）反查已綁定的自訂別名；若未設定別名則回傳 `null`。 |
 | `void AddVirtualIO(string name, bool initialValue)` | 建立或覆寫虛擬 IO 並設定初始值，對應 `IO@VirtualIO`。 |
 | `void Shift(IReadOnlyList<string> ioNames, int shiftCount)` | 將一組 IO 點位的狀態整批移位（正數向後移、負數向前移，超出邊界補 `false`），對應 `IO@Shift`。 |
 | `bool[] GetBatch(string startPort, int bitCount)` | **【供 IO Driver Output 搬運使用】** 從指定實體起始點（如 `"P0.0"`）連續讀取 `bitCount` 個布林值（自動跨 Port 進位，如 `P0.7` 下一點為 `P1.0`）。 |
@@ -437,21 +438,21 @@ string? pose = loaded.GetHValue("Pose");   // "Right"
 
 ```text
 MODULES/<MODULE_NAME>/
-├── <MODULE_NAME>.csvi           # 【必備】Modules Info 專用的模組主前面板 CSVI (與模組同名，實作 IParameterGuidance, IModuleHandler)
+├── <MODULE_NAME>.csvi           # 【必備】模組同名主控跳板與 Modules Info 主前面板 CSVI (同時實作 IParameterGuidance 與 IModuleHandler)
 ├── <Action1>.csvi               # 【必備】單一指令 CSVI #1 (包含該指令的 Logic + Wizard + Panel)
 ├── <Action2>.csvi               # 【必備】單一指令 CSVI #2
 ├── Init.csvi                    # (選配) 當執行 System@IncludeModule::<MODULE_NAME> 時自動觸發的模組初始化 CSVI
-├── <MODULE_NAME>.Module.dll     # (選配) 傳統 C# 模組基底組件；在 CSVI 3.0 純 CSVI 模組中可完全省略，系統會直接載入 <MODULE_NAME>.csvi 與 <Action>.csvi
 └── DRIVER/                      # (若該模組有硬體驅動) 驅動隔離子目錄
-    ├── Mock<Module>.csvi        # 驅動 CSVI 組件 (ComponentType = Driver)
+    ├── Mock<Module>/            # 驅動獨立目錄
+    │   └── Mock<Module>.csvi    # 主動式硬體驅動 CSVI 組件 (ComponentType = Driver, 實作 IDriver)
     └── <VendorDriver>/          # 實體廠商驅動目錄 (含第三方 Unmanaged DLL)
 ```
 
 > [!CAUTION]
 > 1. **嚴禁再建立舊式 `USERPARAMETEREDITOR` 子目錄！** 在 CSVI 3.0 架構中，每個指令的參數導引視窗 (`Wizard.axaml`)、前面板 (`Panel.axaml`) 與執行邏輯 (`Logic.cs`) 都已經直接封裝在 `MODULES/<Module>/<Action>.csvi` 中。
-> 2. **純 CSVI 模組免 `.Module.dll` 與 `.csproj` 衝突防範**：
->    - `ModuleRegistry` 與 `CommandExecutor` 原生支援直接載入 `MODULES/<Module>/<Module>.csvi` 並自動將 `<Module>@<Action>` 派發給 `MODULES/<Module>/<Action>.csvi`，因此建立新模組時**不需要**再額外建立 `.csproj` 編譯 `<Module>.Module.dll`。
->    - 若您仍在 `src/MODULES/<Module>/` 目錄下放置 `.csproj` 並同時保留 `*_Source/Logic.cs` 原始碼子目錄，**必須在 `.csproj` 中加入 `<ItemGroup><Compile Remove="*_Source\**" /></ItemGroup>`**，否則 MSBuild 預設會遞迴編譯子目錄中的 CSVI `Logic.cs` 而引發 `Avalonia` 命名空間缺失錯誤！
+> 2. **純 CSVI 模組免 `.Module.dll` 與免 `*ModuleHandler.cs`**：
+>    - 在標準 ARCOSharp 架構中，每個模組目錄下的同名 `<Module>.csvi`（例如 `MODULES/IO/IO.csvi`、`MODULES/POINT&PATH/Point&Path.csvi`、`MODULES/HELLO/Hello.csvi`）直接擔任該模組的 `IModuleHandler` 主控跳板，自動掃描並快取派發同目錄下的 `<Action>.csvi`。
+>    - 因此建立或修改模組時，**完全不需要修改 ARCOSharp 主程式，也不需要建立 `.csproj` 編譯 `<Module>.Module.dll` 或撰寫獨立的 `*ModuleHandler.cs`**。
 > 3. **`ExecutionContext` 命名空間撞車防範**：
 >    - .NET BCL 的 `System.Threading` 內建有同名 `ExecutionContext`。在撰寫任何 CSVI `Logic.cs` 或測試檔時，請務必在檔案頂部加上別名宣告：
 >      `using ExecutionContext = ARCOS.Core.Execution.ExecutionContext;`
@@ -497,42 +498,12 @@ public class CommandState
   - `CommandResult.Jump(int targetLine)` / `CommandResult.JumpToLabel(string label)`：跳轉至指定行號或標籤。
   - `CommandResult.Call(string targetProgram)` / `CommandResult.Return()`：呼叫副程式或從副程式返回。
 
-### 3.5 模組基底專案 (`<Module>.Module.dll`) 建立步驟
+### 3.5 模組主控 `<Module>.csvi` 跳板架構（免 `<Module>.Module.dll`）
 
-當要建立一個新模組（例如 `LASER`）時，其基底處理器 `LaserModuleHandler` 只需作為輕量轉發器（Trampoline），將執行請求委派給 `MODULES/LASER/<Action>.csvi`：
-
-```csharp
-using ARCOS.Core.Execution;
-using ExecutionContext = ARCOS.Core.Execution.ExecutionContext;
-
-namespace ARCOS.Module.Laser;
-
-public class LaserModuleHandler : IModuleHandler
-{
-    public string ModuleName => "LASER";
-
-    public IReadOnlyList<string> GetSupportedCommands() =>
-        ModuleRegistry.GetCsviCommandsForModule("LASER") ?? Array.Empty<string>();
-
-    public CommandResult Execute(string action, string filteredParam, ExecutionContext ctx)
-    {
-        // 直接解析並執行 MODULES/LASER/<action>.csvi，若缺檔立即報錯
-        string? csviPath = ModuleRegistry.ResolveCommandCsviPath("LASER", action);
-        if (csviPath == null)
-        {
-            return CommandResult.Fail($"Command CSVI file not found: MODULES/LASER/{action}.csvi");
-        }
-
-        var handler = (ctx.Registry ?? new ModuleRegistry()).LoadCommandCsviHandler(csviPath);
-        if (handler == null)
-        {
-            return CommandResult.Fail($"Failed to load command CSVI handler from: {csviPath}");
-        }
-
-        return handler.Execute(action, filteredParam, ctx);
-    }
-}
-```
+在標準 ARCOSharp 架構中，不需要為模組撰寫獨立的 `*ModuleHandler.cs` 或編譯 `<Module>.Module.dll`。每個模組目錄下與模組同名的 **`MODULES/<Module>/<Module>.csvi`** 同時實作 `IModuleHandler` 與 `IParameterGuidance`：
+1. **在 `ModuleRegistry` 註冊時**：`ModuleRegistry.CreateDefault` 與 `LoadModuleByName` 直接載入 `MODULES/<Module>/<Module>.csvi` 作為該模組的 `IModuleHandler`。
+2. **在查詢支援指令時**：`<Module>.csvi` 的 `GetSupportedCommands()` 自動掃描同目錄下的所有 `*.csvi`（排除與模組同名的 `<Module>.csvi` 與 `UserPanel.csvi`，但**保留 `"Init"`** 以便 `System@IncludeModule::<Module>` 自動觸發 `Init.csvi`）。
+3. **在執行指令時**：`<Module>.csvi` 的 `Execute(action, filteredParam, ctx)` 自帶檔案時間戳快取 (`ConcurrentDictionary`)，直接載入並委派給同目錄下的 `<Action>.csvi` 執行。完整程式碼範本請見第 5.2 節。
 
 ---
 
@@ -637,15 +608,18 @@ graph LR
 }
 ```
 
-#### (2) `Logic.cs`（實作 `IParameterGuidance` 與 `IModuleHandler`，並提供 `RefreshFromEngines`）
+#### (2) `Logic.cs`（實作 `IParameterGuidance` 與 `IModuleHandler` 動態跳板，並提供 `RefreshFromEngines`）
 
 ```csharp
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
 using Avalonia.Controls;
 using Avalonia.Markup.Xaml;
+using ARCOS.Core.Csvi;
 using ARCOS.Core.Drivers;
 using ARCOS.Core.Execution;
 using ARCOS.Core.Guidance;
@@ -655,15 +629,70 @@ namespace ARCOS.Module.Laser;
 
 public class LaserMasterGuidance : IParameterGuidance, IModuleHandler
 {
-    // 注意：模組主面板的 CommandKey 與 ModuleName 均為模組名稱本身（不含 @）
+    // 注意：模組主控 CSVI 的 CommandKey 與 ModuleName 均為模組名稱本身（不含 @）
     public string CommandKey => "LASER";
     public string ModuleName => "LASER";
 
-    public IReadOnlyList<string> GetSupportedCommands() =>
-        ModuleRegistry.GetCsviCommandsForModule("LASER") ?? Array.Empty<string>();
+    private static readonly ConcurrentDictionary<string, (DateTime LastWriteUtc, IModuleHandler Handler)> _commandCache
+        = new(StringComparer.OrdinalIgnoreCase);
 
+    private static string? ResolveModuleDirectory()
+    {
+        string asmLoc = typeof(LaserMasterGuidance).Assembly.Location;
+        if (!string.IsNullOrEmpty(asmLoc))
+        {
+            string? dir = Path.GetDirectoryName(asmLoc);
+            if (!string.IsNullOrEmpty(dir) && Directory.Exists(dir)) return dir;
+        }
+        return ModuleRegistry.ResolveModuleDirectoryPath("LASER");
+    }
+
+    public IReadOnlyList<string> GetSupportedCommands()
+    {
+        string? dir = ResolveModuleDirectory();
+        if (string.IsNullOrEmpty(dir) || !Directory.Exists(dir))
+            return Array.Empty<string>();
+
+        // 掃描同目錄下所有 <Action>.csvi（排除同名 LASER.csvi，保留 Init.csvi 供 IncludeModule 自動觸發）
+        return Directory.EnumerateFiles(dir, "*.csvi", SearchOption.TopDirectoryOnly)
+            .Select(Path.GetFileNameWithoutExtension)
+            .Where(name => !string.IsNullOrEmpty(name)
+                        && !name.Equals(ModuleName, StringComparison.OrdinalIgnoreCase)
+                        && !name.Equals("UserPanel", StringComparison.OrdinalIgnoreCase))
+            .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
+            .ToArray()!;
+    }
+
+    // 【核心主控跳板】動態載入並快取派發給同目錄下的 <Action>.csvi
     public CommandResult Execute(string action, string filteredParam, ExecutionContext ctx)
-        => CommandResult.Done();
+    {
+        if (string.IsNullOrWhiteSpace(action))
+            return CommandResult.Fail("LASER action cannot be empty.");
+
+        string? dir = ResolveModuleDirectory();
+        if (string.IsNullOrEmpty(dir))
+            return CommandResult.Fail("LASER module directory not found.");
+
+        string? csviPath = Directory.EnumerateFiles(dir, "*.csvi", SearchOption.TopDirectoryOnly)
+            .FirstOrDefault(f => string.Equals(Path.GetFileNameWithoutExtension(f), action.Trim(), StringComparison.OrdinalIgnoreCase));
+
+        if (string.IsNullOrEmpty(csviPath) || !File.Exists(csviPath))
+            return CommandResult.Fail($"LASER command CSVI not found: MODULES/LASER/{action}.csvi");
+
+        DateTime lastWrite = File.GetLastWriteTimeUtc(csviPath);
+        if (!_commandCache.TryGetValue(csviPath, out var cached) || cached.LastWriteUtc != lastWrite)
+        {
+            var pkg = CsviPackage.LoadFromFile(csviPath, password: null, unpackSources: false);
+            var handlerType = pkg.LoadedAssembly?.GetExportedTypes()
+                .FirstOrDefault(t => !t.IsAbstract && !t.IsInterface && typeof(IModuleHandler).IsAssignableFrom(t));
+            if (handlerType == null || Activator.CreateInstance(handlerType) is not IModuleHandler h)
+                return CommandResult.Fail($"Failed to instantiate IModuleHandler from '{csviPath}'.");
+            cached = (lastWrite, h);
+            _commandCache[csviPath] = cached;
+        }
+
+        return cached.Handler.Execute(action, filteredParam, ctx);
+    }
 
     public bool Execute(BasicEngines engines, string parameter) => true;
 

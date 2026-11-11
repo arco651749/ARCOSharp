@@ -6,23 +6,30 @@
 
 ## 1. 模組組成與目錄結構規範 (Module Anatomy)
 
-一個標準的 ARCOS 模組必須符合**約定優於配置 (Convention over Configuration)** 拓撲結構，置於 `MODULES/<ModuleName>/` 目錄下：
+在 **ARCOSharp CSVI 3.0 純 CSVI 架構**中，擴充任何新模組**完全不需要修改 ARCOSharp 主程式或 `ARCOS.Core`，也不需要建立 `.csproj` 編譯 `<Module>.Module.dll` 或撰寫獨立的 `<Module>ModuleHandler.cs`**。
+
+一個標準的 ARCOS 純 CSVI 模組遵循**約定優於配置 (Convention over Configuration)**，直接置於 `MODULES/<ModuleName>/` 目錄下：
 
 ```
 MODULES/DEMO/
-├── DEMO.Module.dll             # 核心指令直譯組件 (實作 IModuleHandler)
-├── DEMO.csvi                   # 模組專屬前面板視圖 (選取 Modules Info 清單時掛載於一級 SubPanel)
-├── Init.csvi                   # 模組初始化自解壓虛擬儀表 (System@IncludeModule 探測目標)
-├── DRIVER/                     # 專屬硬體驅動隔離目錄
-│   └── MockDemoDriver/
-│       ├── MockDemoDriver.csvi
-│       └── MockDemoDriver.Driver.dll
-└── USERPARAMETEREDITOR/        # 參數導引對話框插件
-    └── DoAction.Guidance.dll   # 實作 IParameterGuidance
+├── DEMO.csvi                   # 【核心主控跳板】與模組同名的主 CSVI (實作 IModuleHandler + IParameterGuidance)
+│                               #  對內：動態掃描並快取派發同目錄下的 <Action>.csvi
+│                               #  對外：提供 Modules Info 一級模組前面板視圖 (Panel.axaml)
+├── Init.csvi                   # (選配) 模組初始化指令 CSVI (當執行 System@IncludeModule::DEMO 時自動觸發)
+├── SetPower.csvi               # 【單一指令 CSVI】DEMO@SetPower (內含 Logic.cs + Wizard.axaml + Panel.axaml)
+├── WaitReady.csvi              # 【單一指令 CSVI】DEMO@WaitReady
+└── DRIVER/                     # (選配) 專屬硬體驅動隔離目錄
+    └── MockDemoDriver/
+        └── MockDemoDriver.csvi # 主動式硬體驅動封裝 (實作 IDriver)
 ```
 
-> [!NOTE]
-> 關於模組前面板 `DEMO.csvi` 如何於「統一模組中心 (Modules Info)」中呈現，以及如何實現下轄多裝置驅動的「兩層式 SubPanel 路由」，請參閱：[12. 統一模組中心與兩層式 SubPanel 規格書](./12_UNIFIED_MODULES_INFO_SPEC.md)。
+> [!IMPORTANT]
+> 1. **「主程式不動、全靠 CSVI」原則**：
+>    - 每個模組目錄下與模組同名的 `<Module>.csvi`（例如 `MODULES/IO/IO.csvi`、`MODULES/POINT&PATH/Point&Path.csvi`、`MODULES/HELLO/Hello.csvi`、`MODULES/DEMO/DEMO.csvi`）直接擔任該模組的 `IModuleHandler` 主控跳板。
+>    - `ModuleRegistry` 在啟動或執行 `System@IncludeModule` 時，會直接載入 `MODULES/<Module>/<Module>.csvi` 註冊為該模組的 Handler。
+> 2. **廢除舊版 `USERPARAMETEREDITOR` 與 `*.Module.dll`**：
+>    - 每個指令的執行邏輯 (`Logic.cs`)、參數導引視窗 (`Wizard.axaml`) 與單步測試面板 (`Panel.axaml`) 皆已 4-in-1 封裝於 `MODULES/<Module>/<Action>.csvi` 中，嚴禁再建立舊式 `USERPARAMETEREDITOR/` 子目錄或冗餘的 `*ModuleHandler.cs`。
+> 3. 關於模組前面板 `DEMO.csvi` 如何於「統一模組中心 (Modules Info)」中呈現，以及如何實現下轄多裝置驅動的「兩層式 SubPanel 路由」，請參閱：[12. 統一模組中心與兩層式 SubPanel 規格書](./12_UNIFIED_MODULES_INFO_SPEC.md) 與 [13. 完整開發聖經](./13_COMPLETE_MODULE_AND_CSVI_DEV_GUIDE.md)。
 
 
 ---
@@ -102,104 +109,167 @@ public CommandResult Execute(string action, string filteredParam, ExecutionConte
 
 ## 4. `Init.csvi` 的載入與執行機制
 
-當腳本執行到 `System@IncludeModule DEMO` 時，主程式核心經歷以下流程：
+當腳本執行到 `System@IncludeModule::DEMO` 時，主程式核心經歷以下流程：
 1. **釋放舊模組**：若模組已存在，若其實作 `IDisposable` 則調用 `Dispose()`，或調用其 `Execute("Reset", "", ctx)`。
-2. **動態載入組件**：呼叫 `ctx.Registry.LoadModuleByName("DEMO")` 搜尋並加載 `DEMO.Module.dll`。
-3. **探測 Init.csvi**：系統自動搜尋 `MODULES/DEMO/Init.csvi` 或 `init.csvi`。
-4. **觸發初始化**：若存在 `Init.csvi` 且模組支援 `Init` 動作，自動調用：
+2. **動態載入主控 `<Module>.csvi`**：呼叫 `ctx.Registry.LoadModuleByName("DEMO")` 搜尋並加載 `MODULES/DEMO/DEMO.csvi`（實作 `IModuleHandler`）。
+3. **探測 `Init.csvi`**：系統自動檢查 `MODULES/DEMO/Init.csvi` 是否存在，且 `DEMO.csvi` 的 `GetSupportedCommands()` 包含 `"Init"`。
+4. **觸發初始化**：自動調用：
    ```csharp
-   handler.Execute("Init", "", ctx);
+   handler.Execute("Init", "", ctx); // 由 DEMO.csvi 自動轉發給 MODULES/DEMO/Init.csvi 執行
    ```
 
 ---
 
-## 5. 從 0 到 1 完整範例 (Step-by-Step)
+## 5. 從 0 到 1 建立純 CSVI 模組完整範例 (Step-by-Step)
 
-### 步驟 1：建立專案檔 `ARCOS.Module.Demo.csproj`
-```xml
-<Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
-    <AssemblyName>DEMO.Module</AssemblyName>
-  </PropertyGroup>
+### 步驟 1：撰寫模組同名主控 `DEMO.csvi` 的 `Logic.cs`
+`DEMO.csvi` 同時實作 `IParameterGuidance` 與 `IModuleHandler`，內部自帶檔案時間戳快取，自動掃描並將 `<Action>` 轉發給同目錄下的 `<Action>.csvi`：
 
-  <ItemGroup>
-    <ProjectReference Include="..\..\ARCOS.Core\ARCOS.Core.csproj" />
-  </ItemGroup>
-</Project>
-```
-
-### 步驟 2：實作 `DemoModuleHandler.cs`
 ```csharp
+using System;
+using System.Collections.Concurrent;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Reflection;
+using System.Threading.Tasks;
+using Avalonia.Controls;
+using Avalonia.Markup.Xaml;
+using ARCOS.Core.Csvi;
+using ARCOS.Core.Drivers;
 using ARCOS.Core.Execution;
+using ARCOS.Core.Guidance;
+using ExecutionContext = ARCOS.Core.Execution.ExecutionContext;
 
 namespace ARCOS.Module.Demo;
 
-public class DemoModuleHandler : IModuleHandler
+public class DemoMasterGuidance : IParameterGuidance, IModuleHandler
 {
+    public string CommandKey => "DEMO";
     public string ModuleName => "DEMO";
 
-    public IReadOnlyList<string> GetSupportedCommands() => new[]
+    private static readonly ConcurrentDictionary<string, (DateTime LastWriteUtc, IModuleHandler Handler)> _commandCache
+        = new(StringComparer.OrdinalIgnoreCase);
+
+    private static string? ResolveModuleDirectory()
     {
-        "Init",
-        "SetPower",
-        "WaitReady",
-        "Reset"
-    };
+        string asmLoc = typeof(DemoMasterGuidance).Assembly.Location;
+        if (!string.IsNullOrEmpty(asmLoc))
+        {
+            string? dir = Path.GetDirectoryName(asmLoc);
+            if (!string.IsNullOrEmpty(dir) && Directory.Exists(dir)) return dir;
+        }
+        return ModuleRegistry.ResolveModuleDirectoryPath("DEMO");
+    }
+
+    public IReadOnlyList<string> GetSupportedCommands()
+    {
+        string? dir = ResolveModuleDirectory();
+        if (string.IsNullOrEmpty(dir) || !Directory.Exists(dir))
+            return Array.Empty<string>();
+
+        // 掃描同目錄下所有 <Action>.csvi（排除與模組同名的 DEMO.csvi，但保留 Init.csvi 供 IncludeModule 使用）
+        return Directory.EnumerateFiles(dir, "*.csvi", SearchOption.TopDirectoryOnly)
+            .Select(Path.GetFileNameWithoutExtension)
+            .Where(name => !string.IsNullOrEmpty(name)
+                        && !name.Equals(ModuleName, StringComparison.OrdinalIgnoreCase)
+                        && !name.Equals("UserPanel", StringComparison.OrdinalIgnoreCase))
+            .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
+            .ToArray()!;
+    }
 
     public CommandResult Execute(string action, string filteredParam, ExecutionContext ctx)
     {
-        switch (action.ToUpperInvariant())
+        if (string.IsNullOrWhiteSpace(action))
+            return CommandResult.Fail("DEMO action cannot be empty.");
+
+        string? dir = ResolveModuleDirectory();
+        if (string.IsNullOrEmpty(dir))
+            return CommandResult.Fail("DEMO module directory not found.");
+
+        string? csviPath = Directory.EnumerateFiles(dir, "*.csvi", SearchOption.TopDirectoryOnly)
+            .FirstOrDefault(f => string.Equals(Path.GetFileNameWithoutExtension(f), action.Trim(), StringComparison.OrdinalIgnoreCase));
+
+        if (string.IsNullOrEmpty(csviPath) || !File.Exists(csviPath))
+            return CommandResult.Fail($"DEMO command CSVI not found: MODULES/DEMO/{action}.csvi");
+
+        DateTime lastWrite = File.GetLastWriteTimeUtc(csviPath);
+        if (!_commandCache.TryGetValue(csviPath, out var cached) || cached.LastWriteUtc != lastWrite)
         {
-            case "INIT":
-                ctx.Log("[DEMO] Initializing hardware driver...");
-                ctx.Engines.Variable.Set("Demo_Status", "INITIALIZED", "DEMO");
-                return CommandResult.Done();
-
-            case "SETPOWER":
-                // 參數格式：<State:0|1>
-                bool on = filteredParam.Trim() == "1";
-                ctx.Engines.Io.SetPort("DO_DemoPower", on);
-                ctx.Log($"[DEMO] Power set to {on}");
-                return CommandResult.Done();
-
-            case "WAITREADY":
-                if (ctx.State.Step == 0)
-                {
-                    ctx.State.TimerMs = DateTime.UtcNow.Ticks / TimeSpan.TicksPerMillisecond;
-                    ctx.State.Step = 1;
-                    return CommandResult.Wait();
-                }
-                if (ctx.Engines.Io.GetPort("DI_DemoReady"))
-                {
-                    return CommandResult.Done();
-                }
-                long elapsed = (DateTime.UtcNow.Ticks / TimeSpan.TicksPerMillisecond) - ctx.State.TimerMs;
-                if (elapsed > 3000) return CommandResult.Fail("DEMO hardware failed to ready within 3s!");
-                return CommandResult.Wait();
-
-            case "RESET":
-                ctx.Engines.Io.SetPort("DO_DemoPower", false);
-                return CommandResult.Done();
-
-            default:
-                return CommandResult.Fail($"Unknown DEMO action '{action}'");
+            var pkg = CsviPackage.LoadFromFile(csviPath, password: null, unpackSources: false);
+            var handlerType = pkg.LoadedAssembly?.GetExportedTypes()
+                .FirstOrDefault(t => !t.IsAbstract && !t.IsInterface && typeof(IModuleHandler).IsAssignableFrom(t));
+            if (handlerType == null || Activator.CreateInstance(handlerType) is not IModuleHandler h)
+                return CommandResult.Fail($"Failed to instantiate IModuleHandler from '{csviPath}'.");
+            cached = (lastWrite, h);
+            _commandCache[csviPath] = cached;
         }
+
+        return cached.Handler.Execute(action, filteredParam, ctx);
+    }
+
+    public bool Execute(BasicEngines engines, string parameter) => true;
+
+    public Task<string?> ShowGuidanceDialogAsync(string currentParam, BasicEngines engines, object? owner = null)
+        => Task.FromResult<string?>(currentParam);
+
+    public object? GetFrontPanelControl()
+    {
+        using var stream = typeof(DemoMasterGuidance).Assembly.GetManifestResourceStream("CSVI.RuntimeXaml.Panel.axaml");
+        if (stream == null) return null;
+        using var reader = new StreamReader(stream);
+        return AvaloniaRuntimeXamlLoader.Parse<Control>(reader.ReadToEnd());
     }
 }
 ```
 
-### 步驟 3：編譯與部署
-1. 編譯專案輸出：`dotnet build -c Release`
-2. 將產生之 `DEMO.Module.dll` 複製到發布目錄：
-   `dist/ARCOS_Runtime/MODULES/DEMO/DEMO.Module.dll`
-3. 建立空的或含有初始化邏輯的 `Init.csvi` 置於該目錄。
-4. 啟動 ARCOSharp，在主程式或 Test Thread Editor 輸入：
-   ```
-   System@IncludeModule    DEMO
-   DEMO@SetPower           1
-   DEMO@WaitReady          
-   ```
-5. 執行驗證，控制台將顯示正確的日誌輸出！
+### 步驟 2：撰寫單一指令 `SetPower.csvi` 的 `Logic.cs`
+每個指令各自獨立為一個 `<Action>.csvi`（如 `SetPower.csvi`、`WaitReady.csvi`、`Init.csvi`）：
+
+```csharp
+using System;
+using System.Collections.Generic;
+using System.Threading.Tasks;
+using ARCOS.Core.Drivers;
+using ARCOS.Core.Execution;
+using ARCOS.Core.Guidance;
+using ExecutionContext = ARCOS.Core.Execution.ExecutionContext;
+
+namespace ARCOS.Module.Demo;
+
+public class DemoSetPowerGuidance : IParameterGuidance, IModuleHandler
+{
+    public string CommandKey => "DEMO@SetPower";
+    public string ModuleName => "DEMO";
+    public IReadOnlyList<string> GetSupportedCommands() => new[] { "SetPower" };
+
+    public CommandResult Execute(string action, string filteredParam, ExecutionContext ctx)
+    {
+        bool on = filteredParam.Trim() == "1" || filteredParam.Trim().Equals("On", StringComparison.OrdinalIgnoreCase);
+        ctx.Engines.Io.SetPort("DO_DemoPower", on);
+        ctx.Log($"[DEMO@SetPower] Power set to {on}");
+        return CommandResult.Done();
+    }
+
+    public bool Execute(BasicEngines engines, string parameter) => true;
+    public Task<string?> ShowGuidanceDialogAsync(string currentParam, BasicEngines engines, object? owner = null)
+        => Task.FromResult<string?>(string.IsNullOrWhiteSpace(currentParam) ? "1" : currentParam);
+    public object? GetFrontPanelControl() => null;
+}
+```
+
+### 步驟 3：使用內嵌 Roslyn CLI 編譯並部署
+使用 `CSVI_Studio.dll --compile` 直接將來源資料夾編譯為 `.csvi`（詳見 [13. 完整開發聖經 第 7 節](./13_COMPLETE_MODULE_AND_CSVI_DEV_GUIDE.md#7-如何-build-csvi四大編譯與打包管道詳解)）：
+```powershell
+& "D:\Users\arco0\.dotnet\dotnet.exe" "d:\AntiGravity\ARCOSharp\src\ARCOS.CsviStudio\bin\Release\net8.0\CSVI_Studio.dll" `
+    --compile "d:\temp\Demo_Master_Src" "d:\AntiGravity\ARCOSharp\src\MODULES\DEMO\DEMO.csvi"
+
+& "D:\Users\arco0\.dotnet\dotnet.exe" "d:\AntiGravity\ARCOSharp\src\ARCOS.CsviStudio\bin\Release\net8.0\CSVI_Studio.dll" `
+    --compile "d:\temp\Demo_SetPower_Src" "d:\AntiGravity\ARCOSharp\src\MODULES\DEMO\SetPower.csvi"
+```
+接著啟動 ARCOSharp，在排程器或 Test Thread Editor 輸入：
+```
+System@IncludeModule    DEMO
+DEMO@SetPower           1
+```
+無需重編任何主程式 DLL，即可直接載入並執行！

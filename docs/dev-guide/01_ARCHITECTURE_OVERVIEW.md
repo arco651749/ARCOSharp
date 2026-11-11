@@ -240,10 +240,11 @@ flowchart TD
 
 | CSVI 應用類型 | 1. C# 代碼 (CS Logic) | 2. UI 前面板 (FrontPanel) | 3. 參數導引 UI (Guidance) |
 |---|---|---|---|
-| **指令型 CSVI**<br>(Command / Module)<br>例: `IO.csvi`, `System.csvi` | **【調用時機】指令直譯執行**<br>實作 `IModuleHandler.Execute()`，於排程器執行至該指令時運算業務邏輯。 | **【調用時機】SubPanel 切換**<br>實作監控儀表板，於點擊主視窗右側 SubPanel 分頁時嵌入展示全域點位/狀態。 | **【調用時機】編輯器指令雙擊**<br>實作 `IParameterGuidance`，在 Sequencer 雙擊指令或點選小燈泡時彈窗引導設定。 |
-| **驅動型 CSVI**<br>(Driver)<br>例: `MockIO.csvi`, `MockMotion.csvi` | **【調用時機】AddDriver 指令下達**<br>實作 `IDriver`，於腳本執行 `IO@AddIODriver` 時實例化，背景週期搬運硬體點位。 | **【調用時機】Driver 面板切換**<br>實作 `CreateDriverView()`，由 SubPanel 嵌入或由 Standalone EXE 獨立開啟進行硬體點檢。 | **【調用時機】AddDriver 參數設定**<br>實作於 View 的第二分頁或 Guidance，在配置設備時引導挑選 COM/IP/點位區間。 |
+| **模組主控 CSVI**<br>(Master Module)<br>例: `IO/IO.csvi`, `HELLO/Hello.csvi` | **【調用時機】模組級指令跳板**<br>實作 `IModuleHandler` 擔任該模組的唯一主控入口，自動掃描並快取派發同目錄下的 `<Action>.csvi`（主程式無需內建 `<Module>ModuleHandler.cs`）。 | **【調用時機】Modules Info 切換**<br>實作模組級監控儀表板，於點擊 `Modules Info` 左側模組清單時嵌入展示全域點位/狀態。 | **【調用時機】模組級參數設定**<br>實作 `IParameterGuidance`，供 CSVI Studio 預覽或模組級設定使用。 |
+| **單一指令 CSVI**<br>(Action Command)<br>例: `IO/SetPort.csvi`, `IO/InitIOPort.csvi` | **【調用時機】被動式單步呼叫**<br>實作 `IModuleHandler.Execute()`，於排程器執行至 `<Module>@<Action>` 時被動受呼叫並執行單步邏輯。 | **【調用時機】單步除錯面板**<br>實作單一指令測試面板，供 CSVI Studio 預覽與單步觸發。 | **【調用時機】編輯器指令雙擊**<br>實作 `IParameterGuidance`，在 Sequencer 雙擊指令參數欄時彈出 `Wizard.axaml` 引導設定。 |
+| **驅動型 CSVI**<br>(Driver)<br>例: `MockIO.csvi`, `MockMotion.csvi` | **【調用時機】主動式背景常駐服務**<br>實作 `IDriver`，於執行 `IO@AddIODriver` 時啟動獨立 `WorkerLoop` 執行緒，每隔 `IntervalMs` 主動搬運硬體點位並處理 `INITIOPORT` / `FORCEUPDATE` 票券。 | **【調用時機】Driver 面板切換**<br>實作 `CreateDriverView()`，由 `Modules Info` 二級面板嵌入顯示即時燈號與點位別名（`InitIOPort` 後自動換名）。 | **【調用時機】AddDriver 參數設定**<br>實作於 View 的第二分頁或 Guidance，在配置設備時引導挑選 COM/IP/點位區間。 |
 | **使用者面板 CSVI**<br>(User Panel)<br>例: `UserPanel.csvi` | **【調用時機】HMI 後端邏輯運作**<br>負責計數統計、工單追蹤、調用 SubThread 腳本與配方管理。 | **【調用時機】UserPanelOpen 指令**<br>實作機台操作員專屬的主畫面，下達 `System@UserPanelOpen` 時嵌入主畫面中央畫布。 | **【調用時機】UserPanelCMD 設定**<br>在設定按鈕綁定（`UIBinding`）、Tip strip 或切換屬性時彈窗引導設定。 |
-| **單檔擴充 CSVI**<br>(External CSVI)<br>例: `ExternalModules/*.csvi` | **【調用時機】Call@ 指令下達**<br>實作 `ICallCommand.Execute()`，於主腳本執行 `Call@mycsvi` 時隨選執行自訂演算法。 | **【調用時機】演算法自訂監控**<br>提供演算法輸入/輸出結果之專屬調試圖表視圖。 | **【調用時機】Call 指令精靈**<br>在排程器設定 `Call` 參數時提供自訂輸入介面。 |
+| **單檔擴充 CSVI**<br>(External CSVI)<br>例: `ExternalModules/*.csvi` | **【調用時機】Call@ 指令下達**<br>實作 `ICallCommand.Execute()`，於主腳本執行 `Call@mycsvi.csvi&` 時隨選執行自訂演算法並回寫變數。 | **【調用時機】演算法自訂監控**<br>提供演算法輸入/輸出結果之專屬調試圖表視圖。 | **【調用時機】Call 兩階段導引**<br>在排程器設定 `Call@` 參數時提供自訂輸入介面。 |
 
 ---
 
@@ -251,20 +252,25 @@ flowchart TD
 
 ```
 dist/ARCOS_Runtime/
-├── ARCOS.App.exe                  # 主程式主控台
+├── ARCOS_App.exe                  # 主程式主控台
 ├── ARCOS.Core.dll                 # 核心執行引擎
+├── CSVI_Studio.dll                # 內嵌 Roslyn CSVI 編譯器與 IDE 工作台
 ├── UserPanel.csvi                 # 預設自訂操作面板 (4-in-1 組件)
 ├── Master.prog                    # 預設全機自動化專案腳本 (舊版相容 .pro)
-├── MODULES/                       # 8 大核心功能模組目錄
+├── MODULES/                       # 核心功能與擴充模組目錄 (純 CSVI 架構，免 .Module.dll)
 │   ├── IO/
-│   │   ├── IO.Module.dll          # IO 指令直譯處理器 (IModuleHandler)
-│   │   ├── DRIVER/                # 硬體驅動隔離目錄
-│   │   │   └── MockIO/
-│   │   │       ├── MockIO.csvi    # 驅動封裝 (IDriver)
-│   │   │       └── MockIO.Driver.dll
-│   │   └── USERPARAMETEREDITOR/   # 參數導引對話框
-│   │       ├── IO.Guidance.dll
-│   │       └── *.csvi
+│   │   ├── IO.csvi                # IO 模組同名主控跳板與模組前面板 (IModuleHandler + IParameterGuidance)
+│   │   ├── AddIODriver.csvi       # 單一指令 CSVI (包含 Logic.cs + Wizard.axaml + Panel.axaml)
+│   │   ├── SetPortName.csvi       # 單一指令 CSVI (綁定實體點位與語意別名)
+│   │   ├── InitIOPort.csvi        # 單一指令 CSVI (收網同步別名至 Driver UI 並可覆寫掃描間隔)
+│   │   ├── ForceUpdate.csvi       # 單一指令 CSVI (強制 Driver 立即插隊執行一次硬體讀寫)
+│   │   ├── SetPort.csvi           # 單一指令 CSVI (支援尾綴 ForceUpdate)
+│   │   ├── *.csvi                 # 其餘 IO 指令 CSVI (ClrPort, WaitPort, CheckLogicOn...)
+│   │   └── DRIVER/                # 硬體驅動隔離目錄
+│   │       └── MockIO/
+│   │           └── MockIO.csvi    # 主動式硬體驅動封裝 (IDriver + 前面板 + 參數精靈)
+│   ├── POINT&PATH/                # 點位與幾何路徑模組 (Point&Path.csvi + Calculate.csvi...)
+│   ├── HELLO/                     # 範例純 CSVI 模組 (Hello.csvi + Init.csvi + SayHello.csvi...)
 │   ├── MOTION/                    # 運動控制模組 (軸卡驅動、點位移動)
 │   ├── CAPTURE/                   # 視覺取像模組 (相機驅動、幾何匹配)
 │   ├── DAQ/                       # 類比量測模組 (資料擷取卡、濾波)
@@ -272,12 +278,11 @@ dist/ARCOS_Runtime/
 │   ├── THREAD/                    # 流程控制模組 (Jump, Call, If, Loop)
 │   ├── VARIABLE/                  # 變數計算模組 (Set, Calc, Stack)
 │   └── PYTHON/                    # 外部腳本模組 (Init.csvi, Script)
-├── EXTRACMD/                      # 第三方自訂模組擴充目錄
 ├── ExternalModules/               # 輕量級單檔 .csvi 擴充外掛 (ICallCommand)
 │   └── mycsvi.csvi
-├── POINT&PATH/                    # 教導點位與路徑軌跡檔案 (*.pt)
+├── POINT&PATH/                    # 教導點位與路徑軌跡檔案 (*.pt / Points.ini)
 ├── WAVEFORM/                      # 採樣波形數據目錄 (*.csv)
 ├── PICTURE/                       # 視覺圖像存檔目錄
 ├── SCRIPT/                        # 備用與自訂腳本目錄
-└── LOGS/                          # 當日營運日誌 (YYYYMMDD.log)
+└── LOGS/                          # 當日營運日誌 (yyyyMMdd-HHmmss.log)
 ```
