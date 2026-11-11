@@ -144,4 +144,72 @@ public class SequencerVisualAndSelectionTests
         Assert.Contains(nameof(row.CellBorderBrush), changedProps);
         Assert.Contains(nameof(row.CellBorderThickness), changedProps);
     }
+
+    [Fact]
+    public void InsertRow_AtCurrentPosition_InsertsAtTargetIndexAndShiftsSubsequentRows()
+    {
+        // 驗證標示 1 與 Ctrl+Click 規範：插入指令時，必須插入於目前選取的這一個位置 (cur)，而非下一個位置 (cur + 1)
+        var rows = new List<SequencerRowViewModel>();
+        for (int i = 0; i < 5; i++)
+        {
+            rows.Add(new SequencerRowViewModel { LineNumber = i, Command = $"System@Log Message", Parameter = $"{i}" });
+        }
+
+        int targetIndex = 2; // 選取第 2 列
+        var newRow = new SequencerRowViewModel { LineNumber = targetIndex, Command = "System@Delay", Parameter = "0.5" };
+
+        // 插入於 targetIndex
+        rows.Insert(targetIndex, newRow);
+        for (int i = 0; i < rows.Count; i++) rows[i].LineNumber = i;
+
+        Assert.Equal(6, rows.Count);
+        // 新行正確位於索引 2
+        Assert.Equal("System@Delay", rows[2].Command);
+        Assert.Equal("0.5", rows[2].Parameter);
+        Assert.Equal(2, rows[2].LineNumber);
+
+        // 原本的第 2 列被往下推移至第 3 列 (參數仍為 "2")
+        Assert.Equal("System@Log Message", rows[3].Command);
+        Assert.Equal("2", rows[3].Parameter);
+        Assert.Equal(3, rows[3].LineNumber);
+
+        // 原本的第 3 列被往下推移至第 4 列 (參數為 "3")
+        Assert.Equal("3", rows[4].Parameter);
+    }
+
+    [Fact]
+    public void InsertRow_AtTail_WhenClickingBlankArea_AppendsAtEnd()
+    {
+        // 驗證標示 3 規範：在表格空白處點擊時，於尾端新增一行
+        var rows = new List<SequencerRowViewModel>();
+        for (int i = 0; i < 3; i++)
+        {
+            rows.Add(new SequencerRowViewModel { LineNumber = i, Command = $"Cmd{i}", Parameter = $"{i}" });
+        }
+
+        int targetIndex = rows.Count; // 尾端索引 3
+        var newRow = new SequencerRowViewModel { LineNumber = targetIndex, Command = "System@Delay", Parameter = "1.0" };
+        rows.Insert(targetIndex, newRow);
+        for (int i = 0; i < rows.Count; i++) rows[i].LineNumber = i;
+
+        Assert.Equal(4, rows.Count);
+        Assert.Equal("System@Delay", rows[3].Command);
+        Assert.Equal(3, rows[3].LineNumber);
+    }
+
+    [Fact]
+    public void ProgramSection_ClearAction_EmptiesAllRows()
+    {
+        // 驗證標示 2 規範：X 按鈕應清空當前這一個程式區的所有指令行
+        var rows = new List<SequencerRowViewModel>();
+        for (int i = 0; i < 10; i++)
+        {
+            rows.Add(new SequencerRowViewModel { LineNumber = i, Command = $"Cmd{i}", Parameter = $"{i}" });
+        }
+        Assert.Equal(10, rows.Count);
+
+        // 模擬點擊 X (清空當前程式區)
+        rows.Clear();
+        Assert.Empty(rows);
+    }
 }

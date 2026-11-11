@@ -431,47 +431,52 @@ public partial class TestThreadWindow : Window
             };
         }
 
-        // Add Row (插入新行並自動開啟指令編輯)
+        // Add Row (在所選位置插入新行並提示選擇指令)
         var btnAdd = this.FindControl<Button>("BtnAdd");
         if (btnAdd != null)
         {
             btnAdd.Click += async (_, _) =>
             {
                 ClearRangeSelection();
-                PushUndoSnapshot();
                 var grid = this.FindControl<DataGrid>("GridCommands");
-                int cur = grid?.SelectedIndex ?? (_rows.Count - 1);
-                int ins = cur >= 0 ? cur + 1 : _rows.Count;
-                var newRow = new SequencerRowViewModel { LineNumber = ins, Command = "System@Delay", Parameter = "0.1" };
-                _rows.Insert(ins, newRow);
-                for (int i = 0; i < _rows.Count; i++) _rows[i].LineNumber = i;
-                UpdateUndoRedoButtonState();
-                if (grid != null && ins < _rows.Count)
-                {
-                    grid.SelectedIndex = ins;
-                    grid.ScrollIntoView(_rows[ins], null);
-                }
-                await EditCommandForRowAsync(newRow);
+                int cur = (grid?.SelectedIndex >= 0 && grid.SelectedIndex < _rows.Count) ? grid.SelectedIndex : _rows.Count;
+                await PromptInsertRowAsync(cur);
             };
         }
 
-        // Delete Row
-        var btnDel = this.FindControl<Button>("BtnDelete");
+        // Delete Row (刪除所選行 -)
         var btnMinus = this.FindControl<Button>("BtnMinusLine");
-        Action delRow = () =>
+        if (btnMinus != null)
         {
-            ClearRangeSelection();
-            var grid = this.FindControl<DataGrid>("GridCommands");
-            if (grid?.SelectedItem is SequencerRowViewModel row)
+            btnMinus.Click += (_, _) =>
             {
+                ClearRangeSelection();
+                var grid = this.FindControl<DataGrid>("GridCommands");
+                if (grid?.SelectedItem is SequencerRowViewModel row)
+                {
+                    PushUndoSnapshot();
+                    _rows.Remove(row);
+                    for (int i = 0; i < _rows.Count; i++) _rows[i].LineNumber = i;
+                    SyncUIToProgram();
+                    UpdateUndoRedoButtonState();
+                }
+            };
+        }
+
+        // Clear Current Program Section (清空當前程式區 X)
+        var btnDel = this.FindControl<Button>("BtnDelete");
+        if (btnDel != null)
+        {
+            btnDel.Click += (_, _) =>
+            {
+                if (_rows.Count == 0) return;
                 PushUndoSnapshot();
-                _rows.Remove(row);
-                for (int i = 0; i < _rows.Count; i++) _rows[i].LineNumber = i;
+                ClearRangeSelection();
+                _rows.Clear();
+                SyncUIToProgram();
                 UpdateUndoRedoButtonState();
-            }
-        };
-        if (btnDel != null) btnDel.Click += (_, _) => delRow();
-        if (btnMinus != null) btnMinus.Click += (_, _) => delRow();
+            };
+        }
 
         // Undo & Redo
         var btnUndo = this.FindControl<Button>("BtnUndo");
@@ -822,7 +827,7 @@ public partial class TestThreadWindow : Window
         HandleShortcutPointerAction(row, e);
     }
 
-    private void OnGridPointerPressed(object? sender, PointerPressedEventArgs e)
+    private async void OnGridPointerPressed(object? sender, PointerPressedEventArgs e)
     {
         var props = e.GetCurrentPoint(this).Properties;
         if (!props.IsLeftButtonPressed) return;
@@ -850,22 +855,11 @@ public partial class TestThreadWindow : Window
             return;
         }
 
-        // 4. 無修飾鍵：在空白處點擊滑鼠左鍵 -> 預設動作為「在尾端新增指令行 (同 + 按鈕)」
+        // 4. 無修飾鍵：在空白處點擊滑鼠左鍵 -> 在尾端新增指令行並跳出指令選擇視窗 (圖標示 3)
         if (e.KeyModifiers == KeyModifiers.None)
         {
             e.Handled = true;
-            PushUndoSnapshot();
-            var grid = this.FindControl<DataGrid>("GridCommands");
-            int ins = _rows.Count;
-            var newRow = new SequencerRowViewModel { LineNumber = ins, Command = "System@Delay", Parameter = "0.1" };
-            _rows.Add(newRow);
-            for (int i = 0; i < _rows.Count; i++) _rows[i].LineNumber = i;
-            UpdateUndoRedoButtonState();
-            if (grid != null)
-            {
-                grid.SelectedIndex = ins;
-                grid.ScrollIntoView(newRow, null);
-            }
+            await PromptInsertRowAsync(_rows.Count);
             return;
         }
     }
@@ -1165,30 +1159,61 @@ public partial class TestThreadWindow : Window
         }
     }
 
+    public async Task<SequencerRowViewModel?> PromptInsertRowAsync(int insertIndex)
+    {
+        if (insertIndex < 0 || insertIndex > _rows.Count) insertIndex = _rows.Count;
+        SyncIoDefinitionsFromRows();
+        bool wasTopmost = this.Topmost;
+        string? selectedCmd = null;
+        string? confirmedParam = null;
+        try
+        {
+            this.Topmost = false;
+            selectedCmd = await ComSelectWindow.SelectCommandAsync(this, _vm?.Executor.Registry);
+            if (string.IsNullOrWhiteSpace(selectedCmd)) return null;
+
+            confirmedParam = await ParameterGuidanceManager.Instance.RequestGuidanceAsync(selectedCmd, "", _vm?.Engines, this);
+            if (confirmedParam == null) return null;
+        }
+        finally
+        {
+            this.Topmost = wasTopmost;
+        }
+
+        PushUndoSnapshot();
+        var newRow = new SequencerRowViewModel
+        {
+            LineNumber = insertIndex,
+            Command = selectedCmd,
+            Parameter = confirmedParam
+        };
+        _rows.Insert(insertIndex, newRow);
+        for (int i = 0; i < _rows.Count; i++) _rows[i].LineNumber = i;
+        SyncUIToProgram();
+        SyncIoDefinitionsFromRows();
+        UpdateUndoRedoButtonState();
+        var grid = this.FindControl<DataGrid>("GridCommands");
+        if (grid != null && insertIndex < _rows.Count)
+        {
+            grid.SelectedIndex = insertIndex;
+            grid.ScrollIntoView(_rows[insertIndex], null);
+        }
+        return newRow;
+    }
+
     private async void OnCommandCellPointerPressed(object? sender, PointerPressedEventArgs e)
     {
         var row = (sender as Control)?.DataContext as SequencerRowViewModel;
 
-        // Ctrl + Click 在指令欄：執行插入指令動作並自動開啟指令編輯 (同點選欄位後按「+」按鈕)
+        // Ctrl + Click 在指令欄：在該行位置插入指令並自動開啟指令編輯 (同點選欄位後按「+」按鈕)
         var props = e.GetCurrentPoint(this).Properties;
         if (props.IsLeftButtonPressed && e.KeyModifiers == KeyModifiers.Control)
         {
             e.Handled = true;
             ClearRangeSelection();
-            PushUndoSnapshot();
-            int cur = row?.LineNumber ?? (this.FindControl<DataGrid>("GridCommands")?.SelectedIndex ?? (_rows.Count - 1));
-            int ins = (cur >= 0 && cur < _rows.Count) ? cur + 1 : _rows.Count;
-            var newRow = new SequencerRowViewModel { LineNumber = ins, Command = "System@Delay", Parameter = "0.1" };
-            _rows.Insert(ins, newRow);
-            for (int i = 0; i < _rows.Count; i++) _rows[i].LineNumber = i;
-            UpdateUndoRedoButtonState();
-            var grid = this.FindControl<DataGrid>("GridCommands");
-            if (grid != null && ins < _rows.Count)
-            {
-                grid.SelectedIndex = ins;
-                grid.ScrollIntoView(_rows[ins], null);
-            }
-            await EditCommandForRowAsync(newRow);
+            int cur = row?.LineNumber ?? (this.FindControl<DataGrid>("GridCommands")?.SelectedIndex ?? _rows.Count);
+            int ins = (cur >= 0 && cur < _rows.Count) ? cur : _rows.Count;
+            await PromptInsertRowAsync(ins);
             return;
         }
 

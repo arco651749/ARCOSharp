@@ -228,13 +228,22 @@ ARCOSharp 支援在腳本執行時或載入時動態變更程式區段的語意�
      `0: Main`、`1: Station_Feeder`、`94: Pause Off`、`96: Execute On`、`99: EMG Stop`。
    - 若區段未自訂名稱，則依慣例顯示預設編號（如 `12: Prog 12`）。
 
-### ⚡ 四、排程器高速編輯互動規範 (Ctrl+Click Insertion Acceleration)
+### ⚡ 四、排程器高速編輯互動規範 (Ctrl+Click Insertion Acceleration & Section Operations)
 
-為大幅加速工程師編輯與測試腳本，排程器實作快捷交互守衛：
+為大幅加速工程師編輯與測試腳本，排程器實作快捷交互與行/區操作守衛：
 - **`Ctrl + 滑鼠單擊 Command 欄位`**：
-  - 功能完全等同於工具列之 `+` 插入按鈕。
-  - 自動在目前游標所在列**上方插入一行全新空白指令**。
-  - 插入後**自動彈出指令選擇視窗（`ComSelectWindow`）**；若選定指令，則無縫接續開啟**參數導引視窗（`ParameterGuidance`）**，實現一氣呵成的零鍵盤指令建構體驗。
+  - 功能完全等同於工具列之 `+`（`BtnAdd`）插入按鈕。
+  - **精確插入於當前游標所在列位置（`cur`）**，原列及後續指令順延下移一格（非插入至下一列）。
+  - 自動彈出指令選擇視窗（`ComSelectWindow`）；若選定指令，則無縫接續開啟**參數導引視窗（`ParameterGuidance`）**，取消時不殘留空行，實現零鍵盤指令建構體驗。
+- **工具列 `+` 按鈕 (`BtnAdd`)**：
+  - 若有選取行，於該選取行位置插入（原行下移）；若無選取，則新增至末端。
+  - 同樣自動開啟 `ComSelectWindow` 與 `ParameterGuidance` 進行配置。
+- **表格空白處單擊 (Empty Area Click)**：
+  - 於指令表末端新增一行，並自動跳出 `ComSelectWindow` 挑選指令與引導參數（避免殘留預設值行）。
+- **工具列 `-` 按鈕 (`BtnMinusLine`)**：
+  - 刪除目前選取之單一指令行（Delete Row），具備完整 Undo/Redo 歷程防護。
+- **工具列 `X` 按鈕 (`BtnDelete`)**：
+  - **清空當前這一個程式區 (Clear Current Program Section)**，將當前 Program Slot 所有指令行清空並同步回 VM，支援 `Ctrl+Z` 完整復原。
 
 ---
 

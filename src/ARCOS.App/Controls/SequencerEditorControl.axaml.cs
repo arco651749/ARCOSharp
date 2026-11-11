@@ -227,6 +227,42 @@ public partial class SequencerEditorControl : UserControl
         }
     }
 
+    public async Task<SequencerRowViewModel?> PromptInsertRowAsync(int insertIndex, Window topLevel)
+    {
+        if (_isLocked || _isOpeningCommandSelect) return null;
+        if (insertIndex < 0 || insertIndex > _rows.Count) insertIndex = _rows.Count;
+
+        try
+        {
+            _isOpeningCommandSelect = true;
+            string? selectedCmd = await ComSelectWindow.SelectCommandAsync(topLevel, _vm?.Executor.Registry);
+            if (string.IsNullOrWhiteSpace(selectedCmd)) return null;
+
+            SyncIoDefinitionsFromRows();
+            string? confirmedParam = await ParameterGuidanceManager.Instance.RequestGuidanceAsync(selectedCmd, "", _vm?.Engines, topLevel, newCmd => { selectedCmd = newCmd; });
+            if (confirmedParam == null) return null;
+
+            PushUndoSnapshot();
+            var newRow = new SequencerRowViewModel
+            {
+                LineNumber = insertIndex,
+                Command = selectedCmd,
+                Parameter = confirmedParam
+            };
+            _rows.Insert(insertIndex, newRow);
+            RenumberRows();
+            SyncUIToProgram();
+            SyncIoDefinitionsFromRows();
+            UpdateUndoRedoButtonState();
+            NavigateToRow(insertIndex);
+            return newRow;
+        }
+        finally
+        {
+            _isOpeningCommandSelect = false;
+        }
+    }
+
     private async void OnCommandCellPointerPressed(object? sender, PointerPressedEventArgs e)
     {
         if (_isLocked || _isOpeningCommandSelect) return;
@@ -235,19 +271,15 @@ public partial class SequencerEditorControl : UserControl
 
         var row = (sender as Control)?.DataContext as SequencerRowViewModel;
 
-        // Ctrl + Click 在指令欄：執行插入指令動作並自動帶出指令編輯 (同點選欄位後按「+」按鈕)
+        // Ctrl + Click 在指令欄：在該行位置插入指令並自動帶出指令編輯 (同點選欄位後按「+」按鈕)
         var props = e.GetCurrentPoint(this).Properties;
         if (props.IsLeftButtonPressed && e.KeyModifiers == KeyModifiers.Control)
         {
             e.Handled = true;
             ClearRangeSelection();
-            int cur = row?.LineNumber ?? (this.FindControl<DataGrid>("GridCommands")?.SelectedIndex ?? (_rows.Count - 1));
-            int ins = (cur >= 0 && cur < _rows.Count) ? cur + 1 : _rows.Count;
-            var newRow = TriggerAddRow(ins);
-            if (newRow != null)
-            {
-                await EditCommandForRowAsync(newRow, topLevel);
-            }
+            int cur = row?.LineNumber ?? (this.FindControl<DataGrid>("GridCommands")?.SelectedIndex ?? _rows.Count);
+            int ins = (cur >= 0 && cur < _rows.Count) ? cur : _rows.Count;
+            await PromptInsertRowAsync(ins, topLevel);
             return;
         }
 
@@ -409,7 +441,7 @@ public partial class SequencerEditorControl : UserControl
         HandleShortcutPointerAction(row, e);
     }
 
-    private void OnGridPointerPressed(object? sender, PointerPressedEventArgs e)
+    private async void OnGridPointerPressed(object? sender, PointerPressedEventArgs e)
     {
         var props = e.GetCurrentPoint(this).Properties;
         if (!props.IsLeftButtonPressed) return;
@@ -437,12 +469,16 @@ public partial class SequencerEditorControl : UserControl
             return;
         }
 
-        // 4. 無修飾鍵：在空白處點擊滑鼠左鍵 -> 預設動作為「在尾端新增指令行 (同 + 按鈕)」
+        // 4. 無修飾鍵：在空白處點擊滑鼠左鍵 -> 在尾端新增指令行並跳出指令選擇視窗 (圖標示 3)
         if (e.KeyModifiers == KeyModifiers.None)
         {
             if (_isLocked) return;
             e.Handled = true;
-            TriggerAddRow(_rows.Count);
+            var topLevel = TopLevel.GetTopLevel(this) as Window;
+            if (topLevel != null)
+            {
+                await PromptInsertRowAsync(_rows.Count, topLevel);
+            }
             return;
         }
     }
@@ -755,7 +791,7 @@ public partial class SequencerEditorControl : UserControl
     {
         PushUndoSnapshot();
         var grid = this.FindControl<DataGrid>("GridCommands");
-        int insertIndex = atIndex ?? ((grid?.SelectedIndex ?? -1) + 1);
+        int insertIndex = atIndex ?? (grid?.SelectedIndex >= 0 && grid.SelectedIndex < _rows.Count ? grid.SelectedIndex : _rows.Count);
         if (insertIndex < 0 || insertIndex > _rows.Count) insertIndex = _rows.Count;
 
         var newRow = new SequencerRowViewModel
@@ -814,7 +850,7 @@ public partial class SequencerEditorControl : UserControl
         if (btnAdd != null) btnAdd.Click += BtnAdd_Click;
 
         var btnDelete = this.FindControl<Button>("BtnDelete");
-        if (btnDelete != null) btnDelete.Click += BtnDelete_Click;
+        if (btnDelete != null) btnDelete.Click += BtnClearSection_Click;
 
         var btnMinus = this.FindControl<Button>("BtnMinusLine");
         if (btnMinus != null) btnMinus.Click += BtnDelete_Click;
@@ -1251,12 +1287,33 @@ public partial class SequencerEditorControl : UserControl
 
     private async void BtnAdd_Click(object? sender, RoutedEventArgs e)
     {
-        ClearRangeSelection();
-        var newRow = TriggerAddRow();
+        if (_isLocked) return;
         var topLevel = TopLevel.GetTopLevel(this) as Window;
-        if (newRow != null && topLevel != null)
+        if (topLevel == null) return;
+
+        ClearRangeSelection();
+        var grid = this.FindControl<DataGrid>("GridCommands");
+        int ins = (grid?.SelectedIndex >= 0 && grid.SelectedIndex < _rows.Count) ? grid.SelectedIndex : _rows.Count;
+        await PromptInsertRowAsync(ins, topLevel);
+    }
+
+    private void BtnClearSection_Click(object? sender, RoutedEventArgs e)
+    {
+        if (_isLocked) return;
+        if (_rows.Count == 0) return;
+
+        PushUndoSnapshot();
+        ClearRangeSelection();
+        _rows.Clear();
+        SyncUIToProgram();
+        UpdateUndoRedoButtonState();
+        UpdatePCPointer(1);
+        DrainPCPointer();
+
+        if (_vm != null)
         {
-            await EditCommandForRowAsync(newRow, topLevel);
+            var ctx = GetActiveContext();
+            ctx.Log($"[PROG] Program Section {_currentProgNo} cleared");
         }
     }
 
