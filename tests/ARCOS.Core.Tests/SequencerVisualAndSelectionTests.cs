@@ -405,4 +405,130 @@ public class SequencerVisualAndSelectionTests
         Assert.False(ARCOS.App.Services.SequencerClipboardManager.Instance.HasSelection);
         Assert.False(ARCOS.App.Services.SequencerClipboardManager.Instance.HasItems);
     }
+
+    private sealed class MockEditorHost : ARCOS.App.Services.ISequencerEditorHost
+    {
+        public IList<SequencerRowViewModel> EditorRows { get; } = new List<SequencerRowViewModel>();
+        public int LastJumpedLine { get; private set; } = -1;
+        public int UndoCount { get; private set; }
+        public int SyncCount { get; private set; }
+
+        public MockEditorHost(params (string cmd, string param)[] initial)
+        {
+            for (int i = 0; i < initial.Length; i++)
+            {
+                EditorRows.Add(new SequencerRowViewModel
+                {
+                    LineNumber = i,
+                    Command = initial[i].cmd,
+                    Parameter = initial[i].param
+                });
+            }
+            ARCOS.App.Services.SequencerClipboardManager.Instance.SelectionChanged += OnSelectionChanged;
+        }
+
+        private void OnSelectionChanged(object? _) => RefreshSelectionVisuals();
+
+        public void RefreshSelectionVisuals()
+        {
+            var mgr = ARCOS.App.Services.SequencerClipboardManager.Instance;
+            foreach (var r in EditorRows)
+            {
+                r.IsRangeSelected = mgr.IsRowSelected(this, r.LineNumber);
+            }
+        }
+
+        public void PushUndoSnapshot() => UndoCount++;
+        public void SyncUIToProgram() => SyncCount++;
+        public void UpdateUndoRedoButtonState() { }
+        public void JumpToRow(int lineNumber) => LastJumpedLine = lineNumber;
+
+        public void Detach()
+        {
+            ARCOS.App.Services.SequencerClipboardManager.Instance.SelectionChanged -= OnSelectionChanged;
+        }
+    }
+
+    [Fact]
+    public void CentralizedSelectionManager_MultipleEditorsCoexist_SingleAndRangeAndCrossEditorOperationsWorkWithoutMutualDestruction()
+    {
+        var mgr = ARCOS.App.Services.SequencerClipboardManager.Instance;
+        mgr.ClearAll();
+
+        // 建立兩個獨立的指令編輯器 (模擬主畫面 User Tab 與浮動 Test Thread Editor 同時存在並訂閱 SelectionChanged)
+        var editorA = new MockEditorHost(("CmdA0", "0"), ("CmdA1", "1"), ("CmdA2", "2"));
+        var editorB = new MockEditorHost(("CmdB0", "10"), ("CmdB1", "20"), ("CmdB2", "30"));
+
+        try
+        {
+            // 1. 在 Editor A 按第一次 Shift+Click (單行選取 Line 1)
+            // 驗證 Editor B 收到通知時只刷新自身顯示，絕不會把全域選取區清掉！
+            mgr.HandleShiftClick(editorA, 1);
+
+            Assert.True(mgr.HasSelection);
+            Assert.True(mgr.HasItems);
+            Assert.Single(mgr.Buffer);
+            Assert.Equal("CmdA1", mgr.Buffer[0].Command);
+            Assert.Equal(1, editorA.LastJumpedLine);
+            Assert.False(editorA.EditorRows[0].IsRangeSelected);
+            Assert.True(editorA.EditorRows[1].IsRangeSelected); // Editor A 自己顯示第 1 行反白
+            Assert.False(editorA.EditorRows[2].IsRangeSelected);
+            Assert.All(editorB.EditorRows, r => Assert.False(r.IsRangeSelected)); // Editor B 均無反白
+
+            // 2. 單行選取下執行同 Editor A 的 Ctrl+Click (複製插入到空白處尾端 targetLine = null)
+            bool copied = mgr.ExecuteCopyInsert(editorA, null);
+            Assert.True(copied);
+            Assert.Equal(4, editorA.EditorRows.Count);
+            Assert.Equal("CmdA1", editorA.EditorRows[3].Command);
+            // 操作完立即自動清空選取與反白
+            Assert.False(mgr.HasSelection);
+            Assert.False(mgr.HasItems);
+            Assert.All(editorA.EditorRows, r => Assert.False(r.IsRangeSelected));
+
+            // 3. 單行選取下執行同 Editor A 的 Ctrl+Alt+Click (剪下並搬移 Line 0 到空白處尾端)
+            mgr.HandleShiftClick(editorA, 0);
+            Assert.True(editorA.EditorRows[0].IsRangeSelected);
+            bool moved = mgr.ExecuteMove(editorA, null);
+            Assert.True(moved);
+            Assert.Equal(4, editorA.EditorRows.Count);
+            Assert.Equal("CmdA0", editorA.EditorRows[3].Command); // CmdA0 搬到最後一行
+            Assert.False(mgr.HasSelection);
+            Assert.All(editorA.EditorRows, r => Assert.False(r.IsRangeSelected));
+
+            // 4. 跨 Editor 共用選取區測試：在 Editor A 單行選取 Line 0 ("CmdA1")，去 Editor B 的 Line 1 按 Ctrl+Click 複製插入
+            mgr.HandleShiftClick(editorA, 0);
+            Assert.True(editorA.EditorRows[0].IsRangeSelected);
+            bool crossCopied = mgr.ExecuteCopyInsert(editorB, 1);
+            Assert.True(crossCopied);
+            Assert.Equal(4, editorB.EditorRows.Count);
+            Assert.Equal("CmdA1", editorB.EditorRows[1].Command); // 成功跨視窗貼入 Editor B 第 1 行
+            Assert.False(mgr.HasSelection);
+            Assert.All(editorA.EditorRows, r => Assert.False(r.IsRangeSelected));
+            Assert.All(editorB.EditorRows, r => Assert.False(r.IsRangeSelected));
+
+            // 5. 跨 Editor 範圍選取與搬移測試：在 Editor B 按兩次 Shift+Click 選取 [1..2]，按 Ctrl+Alt+Click 搬移到 Editor A 尾端
+            mgr.HandleShiftClick(editorB, 1); // 第一次 Shift+Click (單行)
+            Assert.True(editorB.EditorRows[1].IsRangeSelected);
+            Assert.False(editorB.EditorRows[2].IsRangeSelected);
+
+            mgr.HandleShiftClick(editorB, 2); // 第二次 Shift+Click (擴展為範圍 [1..2])
+            Assert.True(editorB.EditorRows[1].IsRangeSelected);
+            Assert.True(editorB.EditorRows[2].IsRangeSelected);
+            Assert.Equal(2, mgr.Buffer.Count);
+
+            bool crossMoved = mgr.ExecuteMove(editorA, null);
+            Assert.True(crossMoved);
+            Assert.Equal(2, editorB.EditorRows.Count); // Editor B 原本 4 行剪掉 2 行剩 2 行
+            Assert.Equal(6, editorA.EditorRows.Count); // Editor A 原本 4 行尾端搬入 2 行變 6 行
+            Assert.False(mgr.HasSelection);
+            Assert.All(editorA.EditorRows, r => Assert.False(r.IsRangeSelected));
+            Assert.All(editorB.EditorRows, r => Assert.False(r.IsRangeSelected));
+        }
+        finally
+        {
+            editorA.Detach();
+            editorB.Detach();
+            mgr.ClearAll();
+        }
+    }
 }
