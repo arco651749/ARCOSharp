@@ -17,6 +17,7 @@ public class BasicEngines
     public DaqEngine Daq { get; }
     public TimerEngine Timer { get; }
     public RecordEngine Record { get; }
+    public UserPanelEngine UserPanel { get; }
 
     public BasicEngines() : this(
         new IoEngine(),
@@ -25,7 +26,8 @@ public class BasicEngines
         new ImageEngine(),
         new DaqEngine(),
         new TimerEngine(),
-        new RecordEngine())
+        new RecordEngine(),
+        new UserPanelEngine())
     {
     }
 
@@ -36,7 +38,7 @@ public class BasicEngines
         ImageEngine image,
         DaqEngine daq,
         TimerEngine timer)
-        : this(io, variable, point, image, daq, timer, new RecordEngine())
+        : this(io, variable, point, image, daq, timer, new RecordEngine(), new UserPanelEngine())
     {
     }
 
@@ -48,6 +50,19 @@ public class BasicEngines
         DaqEngine daq,
         TimerEngine timer,
         RecordEngine record)
+        : this(io, variable, point, image, daq, timer, record, new UserPanelEngine())
+    {
+    }
+
+    public BasicEngines(
+        IoEngine io,
+        VariableEngine variable,
+        PointEngine point,
+        ImageEngine image,
+        DaqEngine daq,
+        TimerEngine timer,
+        RecordEngine record,
+        UserPanelEngine userPanel)
     {
         Io = io ?? throw new ArgumentNullException(nameof(io));
         Variable = variable ?? throw new ArgumentNullException(nameof(variable));
@@ -56,5 +71,6 @@ public class BasicEngines
         Daq = daq ?? throw new ArgumentNullException(nameof(daq));
         Timer = timer ?? throw new ArgumentNullException(nameof(timer));
         Record = record ?? throw new ArgumentNullException(nameof(record));
+        UserPanel = userPanel ?? throw new ArgumentNullException(nameof(userPanel));
     }
 }

@@ -229,15 +229,16 @@ public sealed class ModuleRegistry
                 // 2. 開發期除錯：bin/Debug/net8.0/
                 bool isPureCsviMaster =
                     dirName.Equals("IO", StringComparison.OrdinalIgnoreCase) ||
+                    dirName.Equals("MOTION", StringComparison.OrdinalIgnoreCase) ||
+                    dirName.Equals("CAPTURE", StringComparison.OrdinalIgnoreCase) ||
+                    dirName.Equals("DAQ", StringComparison.OrdinalIgnoreCase) ||
                     dirName.Equals("POINT&PATH", StringComparison.OrdinalIgnoreCase) ||
+                    dirName.Equals("CALL", StringComparison.OrdinalIgnoreCase) ||
+                    dirName.Equals("PYTHON", StringComparison.OrdinalIgnoreCase) ||
                     dirName.Equals("HELLO", StringComparison.OrdinalIgnoreCase) ||
                     !HasModule(dirName);
 
-                bool isLegacyUnmigrated =
-                    dirName.Equals("CAPTURE", StringComparison.OrdinalIgnoreCase) ||
-                    dirName.Equals("MOTION", StringComparison.OrdinalIgnoreCase) ||
-                    dirName.Equals("DAQ", StringComparison.OrdinalIgnoreCase) ||
-                    dirName.Equals("PYTHON", StringComparison.OrdinalIgnoreCase);
+                bool isLegacyUnmigrated = false;
 
                 string masterCsviPath = Path.Combine(moduleDir, $"{dirName}.csvi");
                 if (isPureCsviMaster && !isLegacyUnmigrated && File.Exists(masterCsviPath))
@@ -317,28 +318,28 @@ public sealed class ModuleRegistry
     }
 
     /// <summary>
-    /// 建立包含所有標準核心模組處理器的預設註冊表
+    /// 建立包含所有標準啟動模組處理器的預設註冊表
     /// </summary>
     public static ModuleRegistry CreateDefault(string? modulesRootPath = null)
     {
         var registry = new ModuleRegistry();
 
-        // 僅註冊核心保留系統與內建流程處理器 (Basic Modules)
-        registry.RegisterHandler(new Handlers.SystemModuleHandler());
-        registry.RegisterHandler(new Handlers.ThreadModuleHandler());
-        registry.RegisterHandler(new Handlers.VariableModuleHandler());
-        registry.RegisterHandler(new Handlers.UserModuleHandler());
-        registry.RegisterHandler(new Handlers.CallModuleHandler());
-        registry.RegisterHandler(new Handlers.MultiStationModuleHandler());
-        registry.RegisterHandler(new Handlers.RedisModuleHandler());
-        registry.RegisterHandler(new Handlers.AiAgentModuleHandler());
-        if (!registry.LoadModuleByName("Point&Path", modulesRootPath))
+        // 啟動預載入核心與標準設備模組，統一遵循 MODULES/<Module>/<Module>.csvi + <Action>.csvi 純 CSVI 架構載入
+        var startupModules = new[]
         {
-            registry.RegisterHandler(new CsviDynamicModuleHandler("Point&Path"));
+            "System", "Thread", "Variable", "Call", "User",
+            "IO", "Point&Path", "Capture", "Motion", "DAQ"
+        };
+        foreach (var modName in startupModules)
+        {
+            if (!registry.LoadModuleByName(modName, modulesRootPath))
+            {
+                registry.RegisterHandler(new CsviDynamicModuleHandler(modName));
+            }
         }
 
-        // 嚴格規範：其餘擴充模組 (IO, Motion, Capture, DAQ, Python 等)
-        // 絕對不在啟動時預載入，必須待下達指令 (例如 System@IncludeModule 或首次調用該模組指令) 時才動態加載！
+        // 其餘擴充模組 (MultiStation, Redis, AIAgent, Python 等) 不在啟動時預載入，
+        // 交由 System@IncludeModule 或首次調用該模組指令時隨選動態加載
         return registry;
     }
 
@@ -351,11 +352,7 @@ public sealed class ModuleRegistry
         string mod = moduleName.Trim();
         if (HasModule(mod)) return true;
 
-        bool isLegacyUnmigrated =
-            mod.Equals("CAPTURE", StringComparison.OrdinalIgnoreCase) ||
-            mod.Equals("MOTION", StringComparison.OrdinalIgnoreCase) ||
-            mod.Equals("DAQ", StringComparison.OrdinalIgnoreCase) ||
-            mod.Equals("PYTHON", StringComparison.OrdinalIgnoreCase);
+        bool isLegacyUnmigrated = false;
 
         var candidateRoots = GetCandidateModulesRoots(modulesRootPath).ToList();
         candidateRoots.Add(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "EXTRACMD"));
@@ -396,26 +393,6 @@ public sealed class ModuleRegistry
                     TryLoadHandlersFromAssembly(foundDll);
                     if (HasModule(mod)) return true;
                 }
-            }
-        }
-
-        // 若未找到外部獨立 CSVI / DLL，僅對尚未完成單一指令 CSVI 化的舊模組提供內建保底
-        if (!HasModule(mod))
-        {
-            switch (mod.ToUpperInvariant())
-            {
-                case "MOTION":
-                    RegisterHandler(new Handlers.MotionModuleHandler());
-                    return true;
-                case "CAPTURE":
-                    RegisterHandler(new Handlers.CaptureModuleHandler());
-                    return true;
-                case "DAQ":
-                    RegisterHandler(new Handlers.DaqModuleHandler());
-                    return true;
-                case "PYTHON":
-                    RegisterHandler(new Handlers.PythonModuleHandler());
-                    return true;
             }
         }
 
@@ -471,8 +448,8 @@ public sealed class ModuleRegistry
 
         if (string.IsNullOrWhiteSpace(moduleFilter) || moduleFilter == "*")
         {
-            // 若以 *@getCMD 查詢全指令，隨選載入可用模組
-            foreach (var mod in new[] { "IO", "Motion", "Capture", "DAQ", "Python" })
+            // 若以 *@getCMD 查詢全指令，隨選載入可用擴充模組
+            foreach (var mod in new[] { "MultiStation", "Redis", "AIAgent", "Python" })
             {
                 GetHandler(mod);
             }

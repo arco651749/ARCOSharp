@@ -80,7 +80,7 @@ public class SandboxExecutor
                 subSw.Stop();
 
                 sw.Stop();
-                result.Success = cmdRes.Status == CommandStatus.Completed || cmdRes.Status == CommandStatus.Jump || cmdRes.Status == CommandStatus.Waiting;
+                result.Success = cmdRes.Status == CommandStatus.Completed || cmdRes.Status == CommandStatus.Waiting;
                 result.ElapsedMilliseconds = subSw.Elapsed.TotalMilliseconds;
                 result.Output = $"[IModuleHandler] Action: {action}, Param: '{parameter}', Status: {cmdRes.Status}";
                 if (cmdRes.Status == CommandStatus.Error) result.Error = cmdRes.ErrorMessage;
@@ -113,7 +113,7 @@ public class SandboxExecutor
                     subSw.Stop();
 
                     sw.Stop();
-                    result.Success = cmdRes.Status == CommandStatus.Completed || cmdRes.Status == CommandStatus.Jump || cmdRes.Status == CommandStatus.Waiting;
+                    result.Success = cmdRes.Status == CommandStatus.Completed || cmdRes.Status == CommandStatus.Waiting;
                     result.ElapsedMilliseconds = subSw.Elapsed.TotalMilliseconds;
                     result.Output = $"[IParameterGuidance] Key: {targetGuidance.CommandKey}, Action: {action}, Param: '{parameter}', Status: {cmdRes.Status}";
                     if (cmdRes.Status == CommandStatus.Error) result.Error = cmdRes.ErrorMessage;

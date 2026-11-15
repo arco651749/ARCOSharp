@@ -125,18 +125,31 @@
 
                     <Grid Grid.Column="0" RowDefinitions="*,90" Margin="0,0,4,0">
 
-                        <!-- 上半部：User Front Panel 動態自訂畫布 -->
+                        <!-- 上半部：User Front Panel 動態自訂畫布 (支援多面板駐留與切換) -->
 
                         <Border Grid.Row="0" Background="#FFFFFF" BorderBrush="#CBD5E1" BorderThickness="1" Margin="0,0,0,4" CornerRadius="6" Padding="6">
-                            <ContentControl x:Name="UserFrontPanelContainer" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch">
-                                <Border Background="#F8FAFC" BorderBrush="#CBD5E1" BorderThickness="1" CornerRadius="8" Padding="32,24" HorizontalAlignment="Center" VerticalAlignment="Center">
-                                    <StackPanel Spacing="12" HorizontalAlignment="Center" VerticalAlignment="Center">
-                                        <TextBlock Text="🖥️ [ USER FRONT PANEL SUBPANEL ]" FontWeight="Black" FontSize="16" Foreground="#0284C7" HorizontalAlignment="Center"/>
-                                        <TextBlock Text="尚未載入自訂使用者介面 (No User Panel Loaded)" Foreground="#64748B" FontSize="13" HorizontalAlignment="Center"/>
-                                        <TextBlock Text="請於腳本下達指令：System@UserPanelOpen, UserPanel.csvi" FontFamily="Consolas" Foreground="#0284C7" HorizontalAlignment="Center" FontSize="12"/>
-                                    </StackPanel>
+                            <Grid RowDefinitions="Auto,*">
+                                <Border x:Name="UserPanelSwitcherBar" Grid.Row="0" IsVisible="False" Background="#F1F5F9" BorderBrush="#E2E8F0" BorderThickness="0,0,0,1" Padding="8,5" Margin="-6,-6,-6,6" CornerRadius="6,6,0,0">
+                                    <Grid ColumnDefinitions="Auto,*,Auto">
+                                        <Border Grid.Column="0" Background="#0F172A" CornerRadius="4" Padding="7,2" Margin="0,0,8,0" VerticalAlignment="Center">
+                                            <TextBlock Text="USER PANELS" FontSize="10" FontWeight="Bold" Foreground="#F8FAFC"/>
+                                        </Border>
+                                        <ScrollViewer Grid.Column="1" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+                                            <StackPanel x:Name="UserPanelSwitcherButtons" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center"/>
+                                        </ScrollViewer>
+                                        <TextBlock x:Name="TxtLoadedPanelsCount" Grid.Column="2" Text="0 Loaded" FontSize="11" Foreground="#64748B" FontWeight="SemiBold" VerticalAlignment="Center" Margin="8,0,0,0"/>
+                                    </Grid>
                                 </Border>
-                            </ContentControl>
+                                <ContentControl x:Name="UserFrontPanelContainer" Grid.Row="1" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch">
+                                    <Border Background="#F8FAFC" BorderBrush="#CBD5E1" BorderThickness="1" CornerRadius="8" Padding="32,24" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                        <StackPanel Spacing="12" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                            <TextBlock Text="🖥️ [ USER FRONT PANEL SUBPANEL ]" FontWeight="Black" FontSize="16" Foreground="#0284C7" HorizontalAlignment="Center"/>
+                                            <TextBlock Text="尚未載入自訂使用者介面 (No User Panel Loaded)" Foreground="#64748B" FontSize="13" HorizontalAlignment="Center"/>
+                                            <TextBlock Text="請於腳本下達指令：System@UserPanelOpen::UserPanel.csvi,Main;" FontFamily="Consolas" Foreground="#0284C7" HorizontalAlignment="Center" FontSize="12"/>
+                                        </StackPanel>
+                                    </Border>
+                                </ContentControl>
+                            </Grid>
                         </Border>
 
                         <!-- 下半部：方案 B 現代精緻工控底欄 (PAUSE、急停 STOP、OK 狀態膠囊與終端日誌) -->
@@ -181,7 +194,7 @@
 
                                     <!-- 方案 B 現代精緻 OK 狀態燈號膠囊 (微邊框 + 綠色呼吸 LED) -->
 
-                                    <Border Background="#F0FDF4" BorderBrush="#86EFAC" BorderThickness="1" CornerRadius="4" Height="46" Padding="10,0">
+                                    <Border x:Name="BorderUserStatus" Background="#F0FDF4" BorderBrush="#86EFAC" BorderThickness="1" CornerRadius="4" Height="46" Padding="10,0">
 
                                         <StackPanel Orientation="Horizontal" Spacing="7" VerticalAlignment="Center" HorizontalAlignment="Center">
 
@@ -191,7 +204,7 @@
 
                                                 <TextBlock Text="SYSTEM" FontSize="8.5" FontWeight="SemiBold" Foreground="#047857"/>
 
-                                                <TextBlock Text="READY" FontWeight="Black" FontSize="11" Foreground="#065F46"/>
+                                                <TextBlock x:Name="TxtUserStatusLabel" Text="READY" FontWeight="Black" FontSize="11" Foreground="#065F46"/>
 
                                             </StackPanel>
 

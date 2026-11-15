@@ -43,7 +43,8 @@
 | :--- | :--- | :--- |
 | **ProgramSection** | `$section, $name` | 設定當前程式區段的識別編號 `$section` 與其名稱 `$name` |
 | **ProgramLoad** | `$file.pro` | 載入並切換至指定的 ARCOS 工程檔 (.prog / .pro / .init) |
-| **UserPanelOpen** | `$vi` | 載入並彈出指定的使用者自訂面板 (User Panel) CSVI 檔案 |
+| **UserPanelOpen** | `$vi(, $alias, Background)` | 載入並開啟指定的使用者自訂面板 (User Panel) CSVI 檔案；支援同時開啟多個面板並設定別名（第 3 欄填 `Background` 可在背景載入不搶焦點），詳見 [UserPanelTemplates.md](file:///d:/AntiGravity/ARCOSharp/ARCOS/references/UserPanelTemplates.md) |
+| **UserPanelClose**| `$panelName` | 關閉並釋放指定的已載入 `UserPanel.csvi` 面板資源 |
 
 ### 4. 擴充模組動態載入 (Dynamic Modules)
 | 指令 | 參數範例 | 說明 |

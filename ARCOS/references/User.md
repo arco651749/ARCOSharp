@@ -13,15 +13,23 @@
 
 ## 📜 常用指令對照表
 
-### 1. 外部 VI 呼叫與面板管理
+### 1. 外部 VI 呼叫與面板／控件通用狀態管理
 | 指令 | 參數範例 | 說明 |
 | :--- | :--- | :--- |
-| **CallVI** | `$vi(, $parameter.....)` | 呼叫外部自訂 VI (通常為客製化介面或副程式) |
-| **CallVI(Test)**| `$vi(, $parameter.....)` | 呼叫外部 VI，測試用 |
-| **CallVI(Reentrant)**| `$vi(, $parameter.....)` | 以可重複呼叫 (Reentrant) 的模式呼叫外部 VI |
-| **CallVIWait** | `$vi` | 等待多個非同步 (Call & Forget) 執行的 VI 完成 |
-| **VIClose** | `$vi` | 關閉目前的 VI 畫面，以利釋放資源或修改 VI 程式 |
+| **CallVI** | `$vi(, $parameter.....)` | 呼叫外部自訂 VI (ARCOSharp 已轉由 `Call@` 處理) |
+| **CallVI(Test)**| `$vi(, $parameter.....)` | 呼叫外部 VI，測試用 (ARCOSharp 已轉由 `Call@` 處理) |
+| **CallVI(Reentrant)**| `$vi(, $parameter.....)` | 以 Reentrant 模式呼叫外部 VI (ARCOSharp 已轉由 `Call@` 處理) |
+| **CallVIWait** | `$vi` | 等待非同步 VI 完成 |
+| **VIClose** | `$vi` | 關閉目前的 VI 畫面 |
 | **Param2UserPanel**| (無) | 強制將目前的系統參數更新並顯示到使用者面板上 |
+| **EnableControl** | `$ctrl` | 啟用指定面板控件 (`IsEnabled = true`) |
+| **DisableControl** | `$ctrl` | 停用/鎖定指定面板控件 (`IsEnabled = false`) |
+| **ShowControl** | `$ctrl` | 顯示指定面板控件或指標 (`IsVisible = true`) |
+| **HideControl** | `$ctrl` | 隱藏指定面板控件或指標 (`IsVisible = false`) |
+| **SwitchUserPanel**| `$panelName` | 切換目前前景作用中的 `UserPanel.csvi` 面板（支援別名或檔名；所有 `User@*` / `Capture@Display2User` / `DAQ@Display2User` 亦支援 `Panel:Control` 跨面板指定） |
+| **QueryControls** | `$var(, Panel=Active\|*\|Name, Role=..., Kind=...)` | 查詢 UserPanel 已註冊的 Control / Indicator 清單 |
+| **GetControlValue** | `$ctrl(, $var)` | 讀取指定 Control 或 Indicator 的目前數值存入變數（支援 `Panel:Control`） |
+| **SetControlValue** | `$ctrl, $value` | 依元件名稱通用寫入 Control 或 Indicator 數值（支援 `Panel:Control`） |
 
 ### 2. 按鈕操作 (Button Control)
 | 指令 | 參數範例 | 說明 |

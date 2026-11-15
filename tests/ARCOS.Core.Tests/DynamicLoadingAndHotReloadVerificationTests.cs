@@ -13,8 +13,8 @@ namespace ARCOS.Core.Tests;
 
 /// <summary>
 /// 嚴格驗證：
-/// 1. 啟動時僅載入 Basic Modules (System, Thread, Variable, User, Call, MultiStation, Redis, AiAgent, PointPath)
-/// 2. 非 Basic Module (IO, Motion, Capture, DAQ, Python...) 僅於下達指令時才隨選動態載入
+/// 1. 啟動時載入標準核心與設備模組 (System, Thread, Variable, Call, User, IO, Point&Path, Capture, Motion, DAQ)
+/// 2. 擴充模組 (MultiStation, Redis, AiAgent, Python...) 不於啟動預載，僅於 System@IncludeModule 或下達指令時隨選動態載入
 /// 3. Driver 僅於下達指令 (如 IO@AddIODriver) 時才動態載入
 /// 4. UserPanel 僅於下達指令 (如 System@UserPanelOpen) 時才動態載入
 /// 5. Windows 實體檔案零鎖死、支援動態覆寫與熱更新 (Hot-Reload)
@@ -26,23 +26,23 @@ public class DynamicLoadingAndHotReloadVerificationTests
     {
         var registry = ModuleRegistry.CreateDefault();
 
-        // 1. 驗證 Basic Modules 已一開始載入
-        Assert.True(registry.HasModule("System"), "Basic module 'System' must be loaded at startup.");
-        Assert.True(registry.HasModule("Thread"), "Basic module 'Thread' must be loaded at startup.");
-        Assert.True(registry.HasModule("Variable"), "Basic module 'Variable' must be loaded at startup.");
-        Assert.True(registry.HasModule("User"), "Basic module 'User' must be loaded at startup.");
-        Assert.True(registry.HasModule("Call"), "Basic module 'Call' must be loaded at startup.");
-        Assert.True(registry.HasModule("MultiStation"), "Basic module 'MultiStation' must be loaded at startup.");
-        Assert.True(registry.HasModule("Redis"), "Basic module 'Redis' must be loaded at startup.");
-        Assert.True(registry.HasModule("AiAgent"), "Basic module 'AiAgent' must be loaded at startup.");
-        Assert.True(registry.HasModule("Point&Path"), "Basic module 'Point&Path' must be loaded at startup.");
+        // 1. 驗證啟動預設模組已一開始載入
+        Assert.True(registry.HasModule("System"), "Startup module 'System' must be loaded at startup.");
+        Assert.True(registry.HasModule("Thread"), "Startup module 'Thread' must be loaded at startup.");
+        Assert.True(registry.HasModule("Variable"), "Startup module 'Variable' must be loaded at startup.");
+        Assert.True(registry.HasModule("Call"), "Startup module 'Call' must be loaded at startup.");
+        Assert.True(registry.HasModule("User"), "Startup module 'User' must be loaded at startup.");
+        Assert.True(registry.HasModule("IO"), "Startup module 'IO' must be loaded at startup.");
+        Assert.True(registry.HasModule("Point&Path"), "Startup module 'Point&Path' must be loaded at startup.");
+        Assert.True(registry.HasModule("Capture"), "Startup module 'Capture' must be loaded at startup.");
+        Assert.True(registry.HasModule("Motion"), "Startup module 'Motion' must be loaded at startup.");
+        Assert.True(registry.HasModule("DAQ"), "Startup module 'DAQ' must be loaded at startup.");
 
-        // 2. 驗證擴充模組 (IO, Motion, Capture, DAQ, Python 等) 一開始絕對沒有載入！
-        Assert.False(registry.HasModule("IO"), "Module 'IO' must NOT be loaded at startup.");
-        Assert.False(registry.HasModule("Motion"), "Module 'Motion' must NOT be loaded at startup.");
-        Assert.False(registry.HasModule("Capture"), "Module 'Capture' must NOT be loaded at startup.");
-        Assert.False(registry.HasModule("DAQ"), "Module 'DAQ' must NOT be loaded at startup.");
-        Assert.False(registry.HasModule("Python"), "Module 'Python' must NOT be loaded at startup.");
+        // 2. 驗證其餘擴充模組 (MultiStation, Redis, AiAgent, Python 等) 一開始不會預載入！
+        Assert.False(registry.HasModule("MultiStation"), "Extension module 'MultiStation' must NOT be loaded at startup.");
+        Assert.False(registry.HasModule("Redis"), "Extension module 'Redis' must NOT be loaded at startup.");
+        Assert.False(registry.HasModule("AiAgent"), "Extension module 'AiAgent' must NOT be loaded at startup.");
+        Assert.False(registry.HasModule("Python"), "Extension module 'Python' must NOT be loaded at startup.");
     }
 
     [Fact]
@@ -63,11 +63,11 @@ public class DynamicLoadingAndHotReloadVerificationTests
         var engines = new BasicEngines();
         var driverMgr = new DriverManager(engines);
 
-        // 1. 確認一開始 IO 模組尚未載入
-        Assert.False(registry.HasModule("IO"));
+        // 1. 確認一開始擴充模組 Redis 尚未載入
+        Assert.False(registry.HasModule("Redis"));
 
-        // 2. 建立腳本並下達 IO 指令 (標準 ARCOS 語法: <Module>@<Action>::<Param>)
-        var program = ProgramTable.FromText("IO@SetPort::1, 1", 0, "TestProgram");
+        // 2. 建立腳本並下達 Redis 指令 (標準 ARCOS 語法: <Module>@<Action>::<Param>)
+        var program = ProgramTable.FromText("Redis@Set::Line1, Part_001", 0, "TestProgram");
         var ctx = new ExecutionContext(0, "TestThread", program, engines, driverMgr)
         {
             Registry = registry
@@ -76,9 +76,9 @@ public class DynamicLoadingAndHotReloadVerificationTests
         // 3. 執行指令
         var res = executor.ExecuteStep(ctx);
 
-        // 4. 驗證下指令後，IO 模組已被隨選動態加載進入 Registry！
-        Assert.True(registry.HasModule("IO"), "Module 'IO' should be dynamically loaded on-demand when IO command is issued.");
-        Assert.NotNull(registry.GetHandler("IO"));
+        // 4. 驗證下指令後，Redis 模組已被隨選動態加載進入 Registry！
+        Assert.True(registry.HasModule("Redis"), "Module 'Redis' should be dynamically loaded on-demand when Redis command is issued.");
+        Assert.NotNull(registry.GetHandler("Redis"));
     }
 
     [Fact]
@@ -89,11 +89,11 @@ public class DynamicLoadingAndHotReloadVerificationTests
         var engines = new BasicEngines();
         var driverMgr = new DriverManager(engines);
 
-        // 1. 確認一開始 Motion 模組尚未載入
-        Assert.False(registry.HasModule("Motion"));
+        // 1. 確認一開始擴充模組 MultiStation 尚未載入
+        Assert.False(registry.HasModule("MultiStation"));
 
-        // 2. 下達 System@IncludeModule::Motion 指令
-        var program = ProgramTable.FromText("System@IncludeModule::Motion", 0, "TestProgram");
+        // 2. 下達 System@IncludeModule::MultiStation 指令
+        var program = ProgramTable.FromText("System@IncludeModule::MultiStation", 0, "TestProgram");
         var ctx = new ExecutionContext(0, "TestThread", program, engines, driverMgr)
         {
             Registry = registry
@@ -101,8 +101,8 @@ public class DynamicLoadingAndHotReloadVerificationTests
 
         var res = executor.ExecuteStep(ctx);
 
-        // 3. 驗證 Motion 模組已被動態掛載
-        Assert.True(registry.HasModule("Motion"), "Module 'Motion' should be loaded after System@IncludeModule Motion.");
+        // 3. 驗證 MultiStation 模組已被動態掛載
+        Assert.True(registry.HasModule("MultiStation"), "Module 'MultiStation' should be loaded after System@IncludeModule MultiStation.");
     }
 
     [Fact]

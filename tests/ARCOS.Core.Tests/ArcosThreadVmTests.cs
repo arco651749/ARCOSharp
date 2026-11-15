@@ -281,8 +281,8 @@ public class ArcosThreadVmTests
         var (vm, engines) = CreateVM();
 
         var ctx = vm.MainThreads[0];
-        vm.Executor.ExecuteCommandLine(ctx, "Motion@AddMotor::AxisX,MockMotion");
-        vm.Executor.ExecuteCommandLine(ctx, "Motion@AddMotor::AxisY,MockMotion");
+        vm.Executor.ExecuteCommandLine(ctx, "Motion@AddMotion::AxisX,MockMotion");
+        vm.Executor.ExecuteCommandLine(ctx, "Motion@AddMotion::AxisY,MockMotion");
 
         engines.Io.SetPort("AxisX#Busy?", true);
         engines.Io.SetPort("AxisX#Done?", false);
@@ -328,18 +328,28 @@ public class ArcosThreadVmTests
         string fileContent = System.IO.File.ReadAllText(sessionLogPath);
         Assert.Contains(uniqueMarker, fileContent);
 
-        // 3. 驗證 Log Error.csvi 觸發 99: EMG Stop 並設 System#Error? = True，以及 Clear Error.csvi 復歸
+        // 3. 驗證 Log Error.csvi 觸發 99: EMG Stop 鎖定 (不設 System#Error?)，以及 Clear Error.csvi 復歸解除鎖定
         vm.LoadProgram(0, ProgramTable.FromText("System@Log Error::CriticalServoAlarm;", 0, "Main"));
         vm.StartThread(0, 0);
-        vm.Tick(); // 執行 Log Error -> 觸發 HandleError -> 啟動 EMGStop& (Prog 99)
+        vm.Tick(); // 執行 Log Error -> 觸發 HandleError -> 進入 IsEmgStopped 並啟動 EMGStop& (Prog 99)
 
-        Assert.True(engines.Io.GetPort("System#Error?"));
+        Assert.True(vm.IsEmgStopped);
+        Assert.False(engines.Io.GetPort("System#Error?"));
         Assert.True(vm.SubThreads.ContainsKey("EMGStop&"));
 
-        // 執行 Clear Error.csvi -> 復歸 System#Error? = False 並清除 [ERROR] 紀錄
+        // EMG STOP 期間阻擋啟動其他執行緒
+        vm.LoadProgram(1, ProgramTable.FromText("IO@SetPort::WorkerShouldNotRun,True;", 1, "W1"));
+        vm.StartThread(1, 1);
+        Assert.False(vm.MainThreads[1].IsRunning);
+
+        // 執行 Clear Error.csvi -> 解除 IsEmgStopped 鎖定並清除 [ERROR] 紀錄
         vm.Executor.ExecuteCommandLine(ctx, "System@Clear Error::");
-        Assert.False(engines.Io.GetPort("System#Error?"));
+        Assert.False(vm.IsEmgStopped);
         Assert.DoesNotContain(sysChannel.Entries, e => e.Message.Contains("[ERROR]"));
+
+        // 解除 EMG STOP 後即可正常啟動 Worker
+        vm.StartThread(1, 1);
+        Assert.True(vm.MainThreads[1].IsRunning);
     }
 
     [Fact]
@@ -493,7 +503,7 @@ public class ArcosThreadVmTests
         // 8. 驗證 ErrorRetry 支援 $offset (FailedPC + offset)
         vm.MainThreads[0].FailedPC = 5;
         var retryRes = vm.Executor.ExecuteCommandLine(vm.MainThreads[0], "Thread@ErrorRetry::1==1,-2;");
-        Assert.Equal(CommandStatus.Retry, retryRes.Status);
-        Assert.Equal(-2, retryRes.TargetLine);
+        Assert.Equal(CommandStatus.Completed, retryRes.Status);
+        Assert.Equal(3, vm.MainThreads[0].ProgIndex);
     }
 }

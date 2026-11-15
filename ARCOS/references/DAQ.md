@@ -41,14 +41,10 @@
 | **CompareMaxMinInRange**| `$waveform, $max, $min(, $start, $end)` | 檢查指定區間內波形的波峰與波谷極值，是否皆落在合格的上下限內，結果寫回IO |
 | **CompareCoverBy** | `$waveform, $coverbywave` | 比對當前波形軌跡是否完全被 `$coverbywave` 這組標準規格波形所覆蓋 (包絡線檢測)，結果寫回IO |
 
-### 4. 報表產生與顯示 (Reporting & Interface)
+### 4. 使用者介面顯示 (User Interface Display)
 | 指令 | 參數範例 | 說明 |
 | :--- | :--- | :--- |
-| **Display2User** | `$waveform, $control` | 將擷取到或計算後的波形畫在使用者介面 (User Panel) 的圖表控制項 `$control` 上 |
-| **Report(AddWaveForm)**| `$waveform1(, $waveform2...)` | 將指定的波形圖預先儲存到系統待產的量測報告中 |
-| **Report(AddRecord)**| `$record1(, $record2...)` | 將文數字型的記錄資料追加至報告內 |
-| **Report(Output)** | `$file` | 將先前的波形與紀錄一併整合成正式報告檔案 `$file` 輸出 |
-| **ReportViewer** | `$file` | 開啟報表瀏覽器查看生成的結果檔 |
+| **Display2User** | `$waveform, $control` | 將擷取到或計算後的波形畫在使用者介面 (User Panel) 的控制項 `$control` 上 |
 
 ---
 

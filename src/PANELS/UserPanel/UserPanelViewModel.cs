@@ -1,10 +1,13 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Linq;
 using System.Runtime.CompilerServices;
 using Avalonia.Media;
 using Avalonia.Threading;
 using ARCOS.Core.Drivers;
+using ARCOS.Core.Engines;
 
 namespace ARCOS.Panels.UserPanel;
 
@@ -38,27 +41,39 @@ public class StationIoItem : INotifyPropertyChanged
         => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(prop));
 }
 
+public class PanelElementRow
+{
+    public string Name { get; set; } = "";
+    public string Role { get; set; } = "";
+    public string Kind { get; set; } = "";
+    public string Value { get; set; } = "";
+    public string BindingTarget { get; set; } = "";
+    public IBrush RoleBrush => Role == "Control"
+        ? new SolidColorBrush(Color.Parse("#0284C7"))
+        : new SolidColorBrush(Color.Parse("#7C3AED"));
+}
+
 public class UserPanelViewModel : INotifyPropertyChanged
 {
     private BasicEngines? _engines;
     private readonly DispatcherTimer _pollTimer;
+    private string _roleFilter = "ALL";
 
-    // KPI Counters
-    private int _totalParts = 1248;
+    private int _totalParts = 0;
     public int TotalParts
     {
         get => _totalParts;
         set { _totalParts = value; OnPropertyChanged(); OnPropertyChanged(nameof(YieldRate)); }
     }
 
-    private int _okParts = 1236;
+    private int _okParts = 0;
     public int OkParts
     {
         get => _okParts;
         set { _okParts = value; OnPropertyChanged(); OnPropertyChanged(nameof(YieldRate)); }
     }
 
-    private int _ngParts = 12;
+    private int _ngParts = 0;
     public int NgParts
     {
         get => _ngParts;
@@ -67,7 +82,7 @@ public class UserPanelViewModel : INotifyPropertyChanged
 
     public string YieldRate => TotalParts > 0 ? $"{(OkParts * 100.0 / TotalParts):F1}%" : "100.0%";
 
-    private string _cycleTime = "1.82 s";
+    private string _cycleTime = "0.00 s";
     public string CycleTime
     {
         get => _cycleTime;
@@ -88,21 +103,68 @@ public class UserPanelViewModel : INotifyPropertyChanged
         set { _stationStateBrush = value; OnPropertyChanged(); }
     }
 
-    private string _currentStep = "Step 0: Standby / Waiting Part Feed";
+    private string _currentStep = "Step 0: Standby / Ready for Sequencer";
     public string CurrentStep
     {
         get => _currentStep;
         set { _currentStep = value; OnPropertyChanged(); }
     }
 
-    private string _lastActionLog = "UserPanel initialized. Engine connected.";
+    private string _lastActionLog = "UserPanel initialized. IO / Variable / Capture / DAQ / User connected.";
     public string LastActionLog
     {
         get => _lastActionLog;
         set { _lastActionLog = value; OnPropertyChanged(); }
     }
 
+    private string _recipe = "Master_V1";
+    public string Recipe
+    {
+        get => _recipe;
+        set { _recipe = value; OnPropertyChanged(); }
+    }
+
+    private string _lotNo = "LOT-2026-001";
+    public string LotNo
+    {
+        get => _lotNo;
+        set { _lotNo = value; OnPropertyChanged(); }
+    }
+
+    private string _runMode = "AUTO";
+    public string RunMode
+    {
+        get => _runMode;
+        set { _runMode = value; OnPropertyChanged(); }
+    }
+
+    private string _inspectionResult = "STANDBY";
+    public string InspectionResult
+    {
+        get => _inspectionResult;
+        set { _inspectionResult = value; OnPropertyChanged(); }
+    }
+
+    private bool _vacuumOn;
+    public bool VacuumOn
+    {
+        get => _vacuumOn;
+        set
+        {
+            if (_vacuumOn != value)
+            {
+                _vacuumOn = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(VacuumStatusText));
+            }
+        }
+    }
+
+    public string VacuumStatusText => VacuumOn ? "Vacuum P0.5 : ON" : "Vacuum P0.5 : OFF";
+
+    public ObservableCollection<string> RunModes { get; } = new() { "AUTO", "DRY_RUN", "STEP", "CALIBRATION" };
     public ObservableCollection<StationIoItem> StationIos { get; } = new();
+    public ObservableCollection<PanelElementRow> PanelElements { get; } = new();
 
     public UserPanelViewModel()
     {
@@ -112,12 +174,22 @@ public class UserPanelViewModel : INotifyPropertyChanged
         {
             Interval = TimeSpan.FromMilliseconds(150)
         };
-        _pollTimer.Tick += (s, e) => RefreshIoStates();
+        _pollTimer.Tick += (_, _) => RefreshIoStates();
     }
 
     public void Init(BasicEngines engines)
     {
+        if (_engines != null)
+        {
+            _engines.UserPanel.ControlsChanged -= OnUserPanelControlsChanged;
+        }
+
         _engines = engines;
+        if (_engines != null)
+        {
+            _engines.UserPanel.ControlsChanged += OnUserPanelControlsChanged;
+        }
+
         RefreshFromEngines(engines);
         if (!_pollTimer.IsEnabled)
         {
@@ -125,14 +197,18 @@ public class UserPanelViewModel : INotifyPropertyChanged
         }
     }
 
+    private void OnUserPanelControlsChanged()
+    {
+        Dispatcher.UIThread.Post(RefreshPanelElements);
+    }
+
     public void RefreshFromEngines(BasicEngines engines)
     {
         _engines = engines;
         if (_engines == null) return;
 
-        // 從 VariableEngine 讀取產線計數變數 (使用安全讀取防呆)
         string totalStr = GetVariableSafe("$TotalCount");
-        if (int.TryParse(totalStr, out int t) && t > 0) TotalParts = t;
+        if (int.TryParse(totalStr, out int t) && t >= 0) TotalParts = t;
 
         string okStr = GetVariableSafe("$OkCount");
         if (int.TryParse(okStr, out int ok) && ok >= 0) OkParts = ok;
@@ -143,7 +219,20 @@ public class UserPanelViewModel : INotifyPropertyChanged
         string ctStr = GetVariableSafe("$CycleTime");
         if (!string.IsNullOrWhiteSpace(ctStr)) CycleTime = ctStr;
 
+        string recipeStr = GetVariableSafe("$Recipe");
+        if (!string.IsNullOrWhiteSpace(recipeStr)) Recipe = recipeStr;
+
+        string lotStr = GetVariableSafe("$LotNo");
+        if (!string.IsNullOrWhiteSpace(lotStr)) LotNo = lotStr;
+
+        string modeStr = GetVariableSafe("$RunMode");
+        if (!string.IsNullOrWhiteSpace(modeStr)) RunMode = modeStr;
+
+        string resStr = GetVariableSafe("$InspectionResult");
+        if (!string.IsNullOrWhiteSpace(resStr)) InspectionResult = resStr;
+
         RefreshIoStates();
+        RefreshPanelElements();
     }
 
     private string GetVariableSafe(string key)
@@ -153,9 +242,49 @@ public class UserPanelViewModel : INotifyPropertyChanged
         {
             return _engines.Variable.Get(key);
         }
-        catch (System.Collections.Generic.KeyNotFoundException)
+        catch (KeyNotFoundException)
         {
             return string.Empty;
+        }
+    }
+
+    public void ApplyVariablesToEngine()
+    {
+        if (_engines == null) return;
+        _engines.Variable.Set("$Recipe", Recipe ?? "");
+        _engines.Variable.Set("$LotNo", LotNo ?? "");
+        _engines.Variable.Set("$RunMode", RunMode ?? "AUTO");
+        LastActionLog = $"[{DateTime.Now:HH:mm:ss}] Variables synced -> $Recipe={Recipe}, $LotNo={LotNo}, $RunMode={RunMode}";
+    }
+
+    public void SetRoleFilter(string filter)
+    {
+        _roleFilter = string.IsNullOrWhiteSpace(filter) ? "ALL" : filter.Trim().ToUpperInvariant();
+        RefreshPanelElements();
+    }
+
+    public void RefreshPanelElements()
+    {
+        if (_engines == null) return;
+        UserPanelElementRole? role = _roleFilter switch
+        {
+            "CONTROL" => UserPanelElementRole.Control,
+            "INDICATOR" => UserPanelElementRole.Indicator,
+            _ => null
+        };
+
+        var items = _engines.UserPanel.QueryControls(role, null);
+        PanelElements.Clear();
+        foreach (var c in items)
+        {
+            PanelElements.Add(new PanelElementRow
+            {
+                Name = c.Name,
+                Role = c.Role.ToString(),
+                Kind = c.Kind.ToString(),
+                Value = string.IsNullOrEmpty(c.Value) ? c.Text : c.Value,
+                BindingTarget = c.BindingTarget
+            });
         }
     }
 
@@ -167,6 +296,8 @@ public class UserPanelViewModel : INotifyPropertyChanged
         {
             item.State = _engines.Io.GetPort(item.Port);
         }
+
+        VacuumOn = _engines.Io.GetPort("P0.5");
     }
 
     public void SimulatePartFeed()
@@ -188,6 +319,7 @@ public class UserPanelViewModel : INotifyPropertyChanged
     public void TriggerInspection()
     {
         OkParts++;
+        InspectionResult = "PASS";
         CurrentStep = "Step 2: Vision Inspection Completed (PASS, P0.7 Triggered)";
         LastActionLog = $"[{DateTime.Now:HH:mm:ss}] Inspection Pass. OK: {OkParts}";
 
@@ -204,6 +336,7 @@ public class UserPanelViewModel : INotifyPropertyChanged
     public void RejectPart()
     {
         NgParts++;
+        InspectionResult = "FAIL";
         CurrentStep = "Step 3: Defect Rejected via Cylinder (P1.2 Active)";
         LastActionLog = $"[{DateTime.Now:HH:mm:ss}] Defect Rejected. NG: {NgParts}";
 
@@ -217,16 +350,31 @@ public class UserPanelViewModel : INotifyPropertyChanged
         RefreshIoStates();
     }
 
-    public void ToggleVacuum()
+    public void SetVacuum(bool state)
     {
-        bool currentState = false;
+        VacuumOn = state;
         if (_engines != null)
         {
-            currentState = _engines.Io.GetPort("P0.5");
-            _engines.Io.SetPort("P0.5", !currentState);
+            _engines.Io.SetPort("P0.5", state);
         }
-        LastActionLog = $"[{DateTime.Now:HH:mm:ss}] Vacuum Fixture (P0.5) toggled to {!currentState}";
+        LastActionLog = $"[{DateTime.Now:HH:mm:ss}] Vacuum Fixture (P0.5) set to {(state ? "ON" : "OFF")}";
         RefreshIoStates();
+    }
+
+    public void ToggleVacuum()
+    {
+        bool currentState = _engines?.Io.GetPort("P0.5") ?? VacuumOn;
+        SetVacuum(!currentState);
+    }
+
+    public void ConfirmOperatorPrompt()
+    {
+        CurrentStep = "Operator Confirmed Prompt (UserPanel#Confirm? = ON)";
+        LastActionLog = $"[{DateTime.Now:HH:mm:ss}] BtnConfirm clicked by operator / User@ButtonTrigger";
+        if (_engines != null)
+        {
+            _engines.Io.SetPort("UserPanel#Confirm?", true);
+        }
     }
 
     public void ResetStats()
@@ -234,18 +382,22 @@ public class UserPanelViewModel : INotifyPropertyChanged
         TotalParts = 0;
         OkParts = 0;
         NgParts = 0;
+        InspectionResult = "STANDBY";
         CurrentStep = "Step 0: Stats Reset. Ready for operation.";
-        LastActionLog = $"[{DateTime.Now:HH:mm:ss}] Production statistics reset to 0.";
+        LastActionLog = $"[{DateTime.Now:HH:mm:ss}] Production statistics & IO reset to 0.";
 
         if (_engines != null)
         {
             _engines.Variable.Set("$TotalCount", "0");
             _engines.Variable.Set("$OkCount", "0");
             _engines.Variable.Set("$NgCount", "0");
+            _engines.Variable.Set("$InspectionResult", "STANDBY");
             _engines.Io.SetPort("P0.0", false);
+            _engines.Io.SetPort("P0.5", false);
             _engines.Io.SetPort("P0.7", false);
             _engines.Io.SetPort("P1.2", false);
             _engines.Io.SetPort("Start?", false);
+            _engines.Io.SetPort("UserPanel#Confirm?", false);
         }
         RefreshIoStates();
     }
@@ -284,6 +436,7 @@ public class UserPanelViewModel : INotifyPropertyChanged
         StationIos.Add(new StationIoItem { Port = "P1.6", Name = "Buzzer Alarm / Tower Lamp", IsOutput = true });
         StationIos.Add(new StationIoItem { Port = "Start?", Name = "Virtual Start Flag", IsOutput = false });
         StationIos.Add(new StationIoItem { Port = "RESULT", Name = "Virtual Inspection Result", IsOutput = false });
+        StationIos.Add(new StationIoItem { Port = "UserPanel#Confirm?", Name = "Operator Confirm Flag", IsOutput = false });
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;

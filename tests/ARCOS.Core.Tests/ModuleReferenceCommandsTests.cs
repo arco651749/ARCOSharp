@@ -160,6 +160,122 @@ Capture@PatternMatchOne::Cam1,target.png,ScoreVar,MatchPt;
     }
 
     [Fact]
+    public void CaptureModule_AllStandardCsviCommands_And_Display2User()
+    {
+        string script = @"
+Capture@AddCam::CamTest,MockCamera;
+Capture@Config::CamTest,Exposure,1000;
+Capture@Snap::CamTest;
+Capture@Trigger::CamTest;
+Capture@UpdateImage::CamTest;
+Capture@ROISet::CamTest,10,10,200,200;
+Capture@PatternMatchOne::CamTest,target.png,Score1,Pt1;
+Capture@PatternMatchOne(Fast)::CamTest,target.png,Score2,Pt2;
+Capture@GeoMatchOne::CamTest,target.png,Score3,Pt3;
+Capture@FindCircle(OutIn)::CamTest,CircleOutPt;
+Capture@FindCircle(InOut)::CamTest,CircleInPt;
+Capture@FindEdge::CamTest,EdgePt;
+Capture@FindGap::CamTest,GapPt;
+Capture@FindPoint::CamTest,PointPt;
+Capture@Display2User::CamTest,ImgCam1;
+";
+        var (ctx, executor, engines) = CreateHarness(script);
+        engines.Image.SetUserDisplayControls(new[] { "ImgCam1", "ImgCam2" });
+
+        string? notifiedCam = null;
+        string? notifiedCtrl = null;
+        engines.Image.UserDisplayRequested += (cam, ctrl) =>
+        {
+            notifiedCam = cam;
+            notifiedCtrl = ctrl;
+        };
+
+        RunToEnd(ctx, executor);
+
+        Assert.True(engines.Io.GetPort("CamTest#OK?"));
+        Assert.True(engines.Io.GetPort("Pt1#Find?"));
+        Assert.True(engines.Io.GetPort("CircleOutPt#Find?"));
+        Assert.True(engines.Io.GetPort("EdgePt#Find?"));
+        Assert.Equal("CamTest", notifiedCam);
+        Assert.Equal("ImgCam1", notifiedCtrl);
+        Assert.Equal("CamTest", engines.Image.GetBoundCameraForControl("ImgCam1"));
+
+        byte[]? pngBytes = engines.Image.RenderFrameWithOverlaysToPngBytes("CamTest");
+        Assert.NotNull(pngBytes);
+        Assert.True(pngBytes!.Length > 100);
+
+        // 驗證 28 個標準 Capture 指令 .csvi 與主控跳板 Capture.csvi 皆存在於 MODULES/CAPTURE
+        string capDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "..", "..", "src", "MODULES", "CAPTURE");
+        if (Directory.Exists(capDir))
+        {
+            Assert.True(File.Exists(Path.Combine(capDir, "Capture.csvi")));
+            Assert.True(File.Exists(Path.Combine(capDir, "AddCam.csvi")));
+            Assert.True(File.Exists(Path.Combine(capDir, "Display2User.csvi")));
+            Assert.True(File.Exists(Path.Combine(capDir, "PatternMatchOne.csvi")));
+            Assert.True(File.Exists(Path.Combine(capDir, "FindCircle(OutIn).csvi")));
+        }
+    }
+
+    [Fact]
+    public void DaqModule_AllStandardCsviCommands_And_Display2User_SvgAndControl()
+    {
+        string script = @"
+DAQ@AddDAQ::MyDAQ,MockDAQ;
+DAQ@Start::MyDAQ;
+DAQ@AnalogInWaveForm::MyDAQ,1,SensorWave;
+DAQ@Stop::MyDAQ;
+DAQ@Wait::MyDAQ,TimeOut=1;
+DAQ@WaveFormGenerate::SpecUpper,Constant,Rate=1000,Count=500,Amp=1050;
+DAQ@WaveFormGenerate::SpecLower,Constant,Rate=1000,Count=500,Amp=-10;
+DAQ@Calculate::ScaledWave = SensorWave * 0.5;
+DAQ@MergeWaveForm::MergedWave,SensorWave,ScaledWave;
+DAQ@Filter::SensorWave,MovingAverage,3;
+DAQ@CompareAvgInRange::SensorWave,1050,-10;
+DAQ@CompareMaxMinInRange::SensorWave,1050,-10;
+DAQ@CompareCoverBy::SensorWave,SpecUpper,SpecLower;
+DAQ@Display2User::SensorWave,ImgCam1;
+";
+        var (ctx, executor, engines) = CreateHarness(script);
+        engines.Image.SetUserDisplayControls(new[] { "ImgCam1", "WavePlot1" });
+
+        string? notifiedWf = null;
+        string? notifiedCtrl = null;
+        engines.Daq.UserDisplayRequested += (wf, ctrl) =>
+        {
+            notifiedWf = wf;
+            notifiedCtrl = ctrl;
+        };
+
+        RunToEnd(ctx, executor);
+
+        Assert.True(engines.Io.GetPort("SensorWave#OK?"));
+        Assert.True(engines.Io.GetPort("ScaledWave#OK?"));
+        Assert.True(engines.Io.GetPort("MergedWave#OK?"));
+        Assert.Equal("SensorWave", notifiedWf);
+        Assert.Equal("ImgCam1", notifiedCtrl);
+        Assert.Equal("SensorWave", engines.Daq.GetBoundWaveformForControl("ImgCam1"));
+
+        // 驗證方案 C：無損向量 SVG 與自包含 HTML 產生
+        string svg = engines.Daq.RenderWaveformToSvg("SensorWave");
+        Assert.Contains("<svg", svg);
+        Assert.Contains("<polyline", svg);
+        string html = engines.Daq.RenderWaveformToHtml("SensorWave");
+        Assert.Contains("<!DOCTYPE html>", html);
+        Assert.Contains("<svg", html);
+
+        // 驗證 18 個標準 DAQ 指令 .csvi 與主控跳板 DAQ.csvi 皆存在於 MODULES/DAQ
+        string daqDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "..", "..", "src", "MODULES", "DAQ");
+        if (Directory.Exists(daqDir))
+        {
+            Assert.True(File.Exists(Path.Combine(daqDir, "DAQ.csvi")));
+            Assert.True(File.Exists(Path.Combine(daqDir, "AddDAQ.csvi")));
+            Assert.True(File.Exists(Path.Combine(daqDir, "WaveFormGenerate.csvi")));
+            Assert.True(File.Exists(Path.Combine(daqDir, "CompareAvgInRange.csvi")));
+            Assert.True(File.Exists(Path.Combine(daqDir, "Display2User.csvi")));
+        }
+    }
+
+    [Fact]
     public void MotionModule_GoPallet_AdvancesIndexAndSetsLast()
     {
         string script = @"
@@ -182,7 +298,7 @@ Motion@AddMotion::MotorTest,MockMotion;
 Motion@Home::MotorTest;
 Point&Path@Calculate::TargetP=(123.4,567.8,90.0);
 Motion@GoPoint::MotorTest,100,TargetP;
-Motion@WaitMotor::MotorTest;
+Motion@WaitMotion::MotorTest;
 Motion@GetPos::MotorTest;
 ";
         var (ctx, executor, engines) = CreateHarness(script);
@@ -190,19 +306,70 @@ Motion@GetPos::MotorTest;
 
         Assert.True(engines.Io.GetPort("MotorTest#Homed?"));
         Assert.True(engines.Io.GetPort("MotorTest#Done?"));
+
+        // 1. GetPos 同時產生笛卡爾點位 $motor 與關節點位 $motor#Joint
+        var cartPt = engines.Point.GetPoint("MotorTest");
+        var jointPt = engines.Point.GetPoint("MotorTest#Joint");
+        Assert.Equal(123.4, cartPt.X, 2);
+        Assert.Equal(567.8, cartPt.Y, 2);
+        Assert.Equal(90.0, cartPt.Z, 2);
+        Assert.Equal("Joint", jointPt.GetHString("Coord"));
+        Assert.Equal(123.4, jointPt.X, 2);
     }
 
     [Fact]
-    public void MotionModule_AddMotor_BackwardCompatibility()
+    public void MotionModule_Robot_JointMove_MixedPath_SetTool_ExtraCMD_And_GetState()
     {
         string script = @"
-Motion@AddMotor::MotorLegacy,MockMotion;
-Motion@Home::MotorLegacy;
+Motion@AddMotion::Robot1,MockMotion;
+Motion@Home::Robot1;
+Point&Path@Calculate::ToolGripper=(0,0,120,0,0,0);
+Motion@SetTool::Robot1,ToolGripper;
+Point&Path@Calculate::PCart=(100,200,300,0,0,0);
+Point&Path@Calculate::PJoint#Joint=(15,30,45,60,75,90);
+Motion@GoPoint::Robot1,100,PJoint#Joint;
+Motion@WaitMotion::Robot1;
+Motion@ClearPath::Robot1;
+Motion@AddPath::Robot1,100,PCart;
+Motion@AddPath::Robot1,100,PJoint#Joint;
+Motion@RunPath::Robot1;
+Motion@WaitMotion::Robot1;
+Motion@ExtraCMD::Robot1,SPEED 85;
+Motion@ExtraCMD::Robot1,DOUT 2,1;
+Motion@GetState::Robot1;
 ";
         var (ctx, executor, engines) = CreateHarness(script);
         RunToEnd(ctx, executor);
 
-        Assert.True(engines.Io.GetPort("MotorLegacy#Homed?"));
+        // SetTool 驗證
+        Assert.Equal("ToolGripper", engines.Variable.Get("Robot1#Tool", "Global"));
+        var toolPt = engines.Point.GetPoint("Robot1#Tool");
+        Assert.Equal(120.0, toolPt.Z, 2);
+
+        // Path 最後一點為 PJoint#Joint，Driver 自主判定為 Joint 模式並抵達 (15,30,45,60,75,90)
+        Assert.Equal("Joint", engines.Variable.Get("Robot1#LastMoveMode", "Global"));
+        VerifyMotionGetPosAndErrorState(ctx, executor, engines);
+    }
+
+    private static void VerifyMotionGetPosAndErrorState(ARCOS.Core.Execution.ExecutionContext ctx, CommandExecutor executor, BasicEngines engines)
+    {
+        executor.ExecuteCommandLine(ctx, "Motion@GetPos::Robot1");
+        var robotCart = engines.Point.GetPoint("Robot1");
+        var robotJoint = engines.Point.GetPoint("Robot1#Joint");
+        Assert.Equal(15.0, robotCart.X, 2);
+        Assert.Equal(90.0, robotJoint.W, 2);
+        Assert.Equal("Joint", robotJoint.GetHString("Coord"));
+
+        // ExtraCMD 與 DO API 驗證
+        Assert.Equal("DOUT 2,1", engines.Variable.Get("Robot1#LastExtraCMD", "Global"));
+        Assert.True(engines.Io.GetPort("Robot1#DO2"));
+        Assert.Equal("0", engines.Variable.Get("Motion#ErrorCode", ctx.CurrentSection));
+
+        // 模擬控制器原生 ErrorCode = 405，驗證 GetState 寫入 Alarm IO 與原生 ErrorCode
+        executor.ExecuteCommandLine(ctx, "Motion@ExtraCMD::Robot1,ERR 405");
+        var stateRes = executor.ExecuteCommandLine(ctx, "Motion@GetState::Robot1,[[ErrTag]]Controller Fault");
+        Assert.True(engines.Io.GetPort("Robot1#Alarm?"));
+        Assert.Equal("405", engines.Variable.Get("Motion#ErrorCode", ctx.CurrentSection));
     }
 
     [Fact]

@@ -206,16 +206,25 @@ public static class ArcosPaths
             ? csviFileName
             : $"{csviFileName}.csvi";
 
+        string baseDir = AppDomain.CurrentDomain.BaseDirectory;
         var candidates = new[]
         {
             Path.Combine(RootDirectory, csviFileName),
             Path.Combine(RootDirectory, withExt),
+            Path.Combine(RootDirectory, "PANELS", csviFileName),
+            Path.Combine(RootDirectory, "PANELS", withExt),
+            Path.Combine(baseDir, csviFileName),
+            Path.Combine(baseDir, withExt),
+            Path.Combine(baseDir, "PANELS", csviFileName),
+            Path.Combine(baseDir, "PANELS", withExt),
             Path.Combine(RootDirectory, "MODULES", csviFileName),
             Path.Combine(RootDirectory, "MODULES", withExt),
             Path.Combine(RootDirectory, "MODULES", "SYSTEM", csviFileName),
             Path.Combine(RootDirectory, "MODULES", "SYSTEM", withExt),
             Path.Combine(RootDirectory, "dist", "ARCOS_Runtime", csviFileName),
             Path.Combine(RootDirectory, "dist", "ARCOS_Runtime", withExt),
+            Path.Combine(RootDirectory, "dist", "ARCOS_Runtime", "PANELS", csviFileName),
+            Path.Combine(RootDirectory, "dist", "ARCOS_Runtime", "PANELS", withExt),
             Path.Combine(RootDirectory, "dist", "ARCOS_Runtime", "MODULES", "SYSTEM", csviFileName),
             Path.Combine(RootDirectory, "dist", "ARCOS_Runtime", "MODULES", "SYSTEM", withExt),
             Path.Combine(RootDirectory, "src", "MODULES", csviFileName),

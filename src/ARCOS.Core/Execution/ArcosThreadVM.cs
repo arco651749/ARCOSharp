@@ -23,6 +23,7 @@ public sealed class ArcosThreadVM
     private readonly BasicEngines _engines;
     private readonly DriverManager _drivers;
     private readonly object _lock = new();
+    private volatile bool _isEmgStopped;
 
     /// <summary>
     /// 是否在 StartThread / StartSubThread 時自動啟動該 Thread 專屬的平行背景高速迴圈
@@ -30,6 +31,7 @@ public sealed class ArcosThreadVM
     /// </summary>
     public bool AutoSpawnBackgroundLoop { get; set; } = false;
 
+    public bool IsEmgStopped => _isEmgStopped;
     public CommandExecutor Executor => _executor;
     public BasicEngines Engines => _engines;
     public DriverManager Drivers => _drivers;
@@ -39,6 +41,8 @@ public sealed class ArcosThreadVM
     public event Action<string, bool>? OnProgramLoaded;
     public event Action<int>? OnProgramChanged;
     public event Action<string>? OnUserPanelOpenRequested;
+    public event Action<string>? OnUserPanelCloseRequested;
+    public event Action<bool>? OnEmgStateChanged;
 
     /// <summary>
     /// 系統彈窗通知委派 (System@MessageBox::$message)
@@ -59,7 +63,18 @@ public sealed class ArcosThreadVM
 
     public void NotifyUserPanelOpen(string csviPath)
     {
+        var (resolvedPath, panelName, activate) = ARCOS.Core.Engines.UserPanelEngine.ParseOpenSpec(csviPath);
+        if (!string.IsNullOrWhiteSpace(panelName))
+        {
+            _engines.UserPanel.EnsurePanelSlot(panelName, resolvedPath, activate);
+        }
         OnUserPanelOpenRequested?.Invoke(csviPath);
+    }
+
+    public void NotifyUserPanelClose(string panelName)
+    {
+        _engines.UserPanel.ClosePanel(panelName);
+        OnUserPanelCloseRequested?.Invoke(panelName);
     }
 
     public ArcosThreadVM(BasicEngines engines, DriverManager drivers, CommandExecutor? executor = null)
@@ -88,6 +103,7 @@ public sealed class ArcosThreadVM
             };
             _engines.Io.AddVirtualIO($"{tName}#Run?", false);
             _engines.Io.AddVirtualIO($"{tName}#Pause?", false);
+            _engines.Io.AddVirtualIO($"{tName}#Error?", false);
         }
     }
 
@@ -302,14 +318,29 @@ public sealed class ArcosThreadVM
     }
 
     /// <summary>
-    /// 指派並啟動主執行緒 (Thread 0~12)
+    /// 指派並啟動主執行緒 (Thread 0~12) — 保留既有三參數簽章以維持 CSVI 二進位相容性
     /// </summary>
     public void StartThread(int threadNo, int progNo, int startIndex = 1)
+        => StartThreadCore(threadNo, progNo, startIndex, spawnBackgroundLoop: AutoSpawnBackgroundLoop);
+
+    /// <summary>
+    /// 以可控背景迴圈旗標指派並啟動主執行緒（例如單步執行時停用背景自動迴圈）
+    /// </summary>
+    public void StartThread(int threadNo, int progNo, int startIndex, bool spawnBackgroundLoop)
+        => StartThreadCore(threadNo, progNo, startIndex, spawnBackgroundLoop);
+
+    private void StartThreadCore(int threadNo, int progNo, int startIndex, bool spawnBackgroundLoop)
     {
         if (threadNo < 0 || threadNo >= 13)
             throw new ArgumentOutOfRangeException(nameof(threadNo), "Thread number must be 0..12");
 
         var ctx = _mainThreads[threadNo];
+        if (_isEmgStopped)
+        {
+            ctx.Log($"[EMG] Blocked starting thread {ctx.ThreadName}: system is in EMG STOP. Execute System@Clear Error first.", isError: true);
+            return;
+        }
+
         lock (_lock)
         {
             ctx.StopBackgroundLoop(resetRunningFlag: false);
@@ -319,12 +350,13 @@ public sealed class ArcosThreadVM
             ctx.State.Reset();
             ctx.IsLocalPaused = false;
             ctx.IsRunning = true;
+            _engines.Io.SetPort($"{ctx.ThreadName}#Error?", false);
             _engines.Io.SetPort($"{ctx.ThreadName}#Run?", true);
         }
 
         OnProgramChanged?.Invoke(progNo);
 
-        if (AutoSpawnBackgroundLoop)
+        if (spawnBackgroundLoop)
         {
             ctx.StartBackgroundLoop(_executor);
         }
@@ -348,7 +380,7 @@ public sealed class ArcosThreadVM
     /// </summary>
     public void ResumeThread(int threadNo)
     {
-        if (threadNo < 0 || threadNo >= 13) return;
+        if (threadNo < 0 || threadNo >= 13 || _isEmgStopped) return;
         var ctx = _mainThreads[threadNo];
         lock (_lock)
         {
@@ -371,6 +403,17 @@ public sealed class ArcosThreadVM
         ArgumentNullException.ThrowIfNull(program);
 
         string cleanName = subName.Trim();
+        if (_isEmgStopped && !string.Equals(cleanName, "EMGStop&", StringComparison.OrdinalIgnoreCase))
+        {
+            _mainThreads[0].Log($"[EMG] Blocked starting SubThread '{cleanName}': system is in EMG STOP. Execute System@Clear Error first.", isError: true);
+            return new ExecutionContext(0, cleanName, program, _engines, _drivers)
+            {
+                ProgIndex = startIndex,
+                IsRunning = false,
+                VM = this
+            };
+        }
+
         bool isConcurrentMulti = cleanName.EndsWith("&&", StringComparison.Ordinal);
 
         string instanceKey = cleanName;
@@ -402,9 +445,12 @@ public sealed class ArcosThreadVM
         _subThreads[instanceKey] = ctx;
         _engines.Io.AddVirtualIO($"{instanceKey}#Run?", true);
         _engines.Io.AddVirtualIO($"{instanceKey}#Pause?", false);
+        _engines.Io.AddVirtualIO($"{instanceKey}#Error?", false);
+        _engines.Io.SetPort($"{instanceKey}#Error?", false);
         if (isConcurrentMulti)
         {
             _engines.Io.AddVirtualIO($"{cleanName}#Run?", true);
+            _engines.Io.AddVirtualIO($"{cleanName}#Error?", false);
         }
 
         if (AutoSpawnBackgroundLoop)
@@ -497,6 +543,7 @@ public sealed class ArcosThreadVM
     public ExecutionContext? TriggerSystemHook(int hookProgNo)
     {
         if (hookProgNo < 90 || hookProgNo > 99) return null;
+        if (_isEmgStopped && hookProgNo != 99) return null;
         var prog = GetProgram(hookProgNo);
         string hookName = hookProgNo switch
         {
@@ -571,6 +618,51 @@ public sealed class ArcosThreadVM
             SuspendSubThread(key);
         }
         ActiveKeyLocks.Clear();
+    }
+
+    /// <summary>
+    /// 進入全機 EMG STOP 鎖定狀態：停止所有執行緒並啟動 99: EMG Stop 系統程序 (必須由 System@Clear Error 清除後才可恢復啟動)
+    /// </summary>
+    public void TriggerEmgStop(string? reason = null)
+    {
+        bool changed = false;
+        lock (_lock)
+        {
+            if (!_isEmgStopped)
+            {
+                _isEmgStopped = true;
+                changed = true;
+            }
+        }
+
+        StopAll();
+        TriggerSystemHook(99);
+
+        if (changed)
+        {
+            OnEmgStateChanged?.Invoke(true);
+        }
+    }
+
+    /// <summary>
+    /// 清除全機 EMG STOP 鎖定狀態 (對應 System@Clear Error)
+    /// </summary>
+    public void ClearEmgStop()
+    {
+        bool changed = false;
+        lock (_lock)
+        {
+            if (_isEmgStopped)
+            {
+                _isEmgStopped = false;
+                changed = true;
+            }
+        }
+
+        if (changed)
+        {
+            OnEmgStateChanged?.Invoke(false);
+        }
     }
 
     /// <summary>

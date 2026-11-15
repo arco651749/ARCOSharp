@@ -1,8 +1,6 @@
-using System.Collections.Generic;
 using ARCOS.Core.Drivers;
 using ARCOS.Core.Engines;
 using ARCOS.Core.Execution;
-using ARCOS.Core.Execution.Handlers;
 using Xunit;
 using ExecutionContext = ARCOS.Core.Execution.ExecutionContext;
 
@@ -10,7 +8,7 @@ namespace ARCOS.Core.Tests;
 
 public class VariableEngineTests
 {
-    private (BasicEngines Engines, ExecutionContext Context, VariableModuleHandler Handler) CreateTestEnv()
+    private (BasicEngines Engines, ExecutionContext Context, CommandExecutor Executor) CreateTestEnv()
     {
         var io = new IoEngine();
         var vars = new VariableEngine();
@@ -23,9 +21,9 @@ public class VariableEngineTests
         var prog = new ProgramTable();
         var drivers = new DriverManager();
         var ctx = new ExecutionContext(1, "Thread1", prog, engines, drivers) { CurrentSection = "1" };
-        var handler = new VariableModuleHandler();
+        var executor = new CommandExecutor(ModuleRegistry.CreateDefault());
 
-        return (engines, ctx, handler);
+        return (engines, ctx, executor);
     }
 
     [Fact]
@@ -124,38 +122,38 @@ public class VariableEngineTests
     [Fact]
     public void Handler_Calculate_ShouldComputeMathFormulaCorrectly()
     {
-        var (engines, ctx, handler) = CreateTestEnv();
+        var (engines, ctx, executor) = CreateTestEnv();
         engines.Variable.Set("A", "10", "1");
         engines.Variable.Set("B", "25", "1");
 
-        handler.Execute("Calculate", "Total=A+B*2", ctx);
+        executor.ExecuteCommandLine(ctx, "Variable@Calculate::Total=A+B*2");
         Assert.Equal("60", engines.Variable.Get("Total", "1"));
     }
 
     [Fact]
     public void Handler_Select_TernaryLogicEvaluation_ShouldChooseCorrectBranch()
     {
-        var (engines, ctx, handler) = CreateTestEnv();
+        var (engines, ctx, executor) = CreateTestEnv();
         engines.Variable.Set("Count", "15", "1");
 
         // 條件成立: Count > 10 為真，選擇 PASS
-        handler.Execute("Select", "Result=Count>10 ? PASS : FAIL", ctx);
+        executor.ExecuteCommandLine(ctx, "Variable@Select::Result=Count>10 ? PASS : FAIL");
         Assert.Equal("PASS", engines.Variable.Get("Result", "1"));
 
         // 條件不成立: Count < 5 為假，選擇 FAIL
-        handler.Execute("Select", "Result=Count<5 ? PASS : FAIL", ctx);
+        executor.ExecuteCommandLine(ctx, "Variable@Select::Result=Count<5 ? PASS : FAIL");
         Assert.Equal("FAIL", engines.Variable.Get("Result", "1"));
     }
 
     [Fact]
     public void Handler_Shift_ShouldShiftValuesAcrossVariables()
     {
-        var (engines, ctx, handler) = CreateTestEnv();
+        var (engines, ctx, executor) = CreateTestEnv();
         engines.Variable.Set("V1", "First", "1");
         engines.Variable.Set("V2", "Second", "1");
         engines.Variable.Set("V3", "Third", "1");
 
-        handler.Execute("Shift", "V1,V2,V3,Shift=1", ctx);
+        executor.ExecuteCommandLine(ctx, "Variable@Shift::V1,V2,V3,Shift=1");
 
         Assert.Equal("Third", engines.Variable.Get("V1", "1"));
         Assert.Equal("First", engines.Variable.Get("V2", "1"));
@@ -165,22 +163,22 @@ public class VariableEngineTests
     [Fact]
     public void Handler_ArrayQueue_PushAndPopOperations_ShouldOperateCorrectly()
     {
-        var (engines, ctx, handler) = CreateTestEnv();
+        var (engines, ctx, executor) = CreateTestEnv();
         engines.Variable.Set("Q", "[M1;M2]", "1");
 
-        handler.Execute("LPush", "Q,M0", ctx);
+        executor.ExecuteCommandLine(ctx, "Variable@LPush::Q,M0");
         Assert.Equal("[M0;M1;M2]", engines.Variable.GetRaw("Q", "1"));
 
-        handler.Execute("RPush", "Q,M3", ctx);
+        executor.ExecuteCommandLine(ctx, "Variable@RPush::Q,M3");
         Assert.Equal("[M0;M1;M2;M3]", engines.Variable.GetRaw("Q", "1"));
 
-        handler.Execute("LPop", "Q", ctx);
+        executor.ExecuteCommandLine(ctx, "Variable@LPop::Q");
         Assert.Equal("[M1;M2;M3]", engines.Variable.GetRaw("Q", "1"));
 
-        handler.Execute("RPop", "Q", ctx);
+        executor.ExecuteCommandLine(ctx, "Variable@RPop::Q");
         Assert.Equal("[M1;M2]", engines.Variable.GetRaw("Q", "1"));
 
-        handler.Execute("LGetIndexSize", "Q", ctx);
+        executor.ExecuteCommandLine(ctx, "Variable@LGetIndexSize::Q");
         Assert.Equal("0", engines.Variable.Get("Q#Index", "1"));
         Assert.Equal("2", engines.Variable.Get("Q#Size", "1"));
     }
@@ -188,12 +186,12 @@ public class VariableEngineTests
     [Fact]
     public void Handler_SetOperations_UnionDiffIntersection_ShouldOperateCorrectly()
     {
-        var (engines, ctx, handler) = CreateTestEnv();
+        var (engines, ctx, executor) = CreateTestEnv();
         engines.Variable.Set("Set1", "[A;B;C]", "1");
         engines.Variable.Set("Set2", "[B;C;D]", "1");
 
         // 聯集
-        handler.Execute("SUnion", "UnionSet,Set1,Set2", ctx);
+        executor.ExecuteCommandLine(ctx, "Variable@SUnion::UnionSet,Set1,Set2");
         string u = engines.Variable.GetRaw("UnionSet", "1");
         Assert.Contains("A", u);
         Assert.Contains("B", u);
@@ -201,11 +199,11 @@ public class VariableEngineTests
         Assert.Contains("D", u);
 
         // 差集 Set1 - Set2 = A
-        handler.Execute("SDiff", "DiffSet,Set1,Set2", ctx);
+        executor.ExecuteCommandLine(ctx, "Variable@SDiff::DiffSet,Set1,Set2");
         Assert.Equal("[A]", engines.Variable.GetRaw("DiffSet", "1"));
 
         // 交集 Set1 ∩ Set2 = B, C
-        handler.Execute("SIntersection", "InterSet,Set1,Set2", ctx);
+        executor.ExecuteCommandLine(ctx, "Variable@SIntersection::InterSet,Set1,Set2");
         string inter = engines.Variable.GetRaw("InterSet", "1");
         Assert.Contains("B", inter);
         Assert.Contains("C", inter);

@@ -48,7 +48,7 @@ public interface ICallCommand
 | `Call@MyCalc&& 10,20`| **Reentrant 模式**| 可重入模式，保證多執行緒同時呼叫時之執行緒隔離。 |
 
 ### 傳回值自動寫入變數
-若調用時最後一個位置參數為 `[VariableName]`，或以命名參數指定 `_OutVar=VarName`，核心 `CallModuleHandler` 會自動將 `Execute()` 的回傳值（如數字、字串）寫入 `VariableEngine`：
+若調用時最後一個位置參數為 `[VariableName]`，或以命名參數指定 `_OutVar=VarName`，模組主控跳板 `CALL.csvi` 會自動將 `Execute()` 的回傳值（如數字、字串）寫入 `VariableEngine`：
 ```
 Call@MyCalc    10,20,[SumResult]
 ```

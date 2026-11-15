@@ -89,9 +89,26 @@ public partial class MainWindow : Window
     private readonly ObservableCollection<ModuleListItem> _loadedModules = new();
 
 
+    private sealed class LoadedUserPanelSlot
+    {
+        public string PanelName { get; set; } = "";
+        public string FilePath { get; set; } = "";
+        public ARCOS.Core.Csvi.CsviPackage? Package { get; set; }
+        public Control RootControl { get; set; } = null!;
+        public List<string> ImageControlNames { get; set; } = new();
+        public HashSet<string> BlinkControls { get; } = new(StringComparer.OrdinalIgnoreCase);
+        public Dictionary<string, double> BlinkOriginalOpacity { get; } = new(StringComparer.OrdinalIgnoreCase);
+    }
+
     private object? _defaultSubPanelContent;
 
-    private ARCOS.Core.Csvi.CsviPackage? _activeUserPanelPackage;
+    private readonly Dictionary<string, LoadedUserPanelSlot> _loadedUserPanels = new(StringComparer.OrdinalIgnoreCase);
+
+    private readonly List<string> _loadedUserPanelOrder = new();
+
+    private string _activeUserPanelName = ARCOS.Core.Engines.UserPanelEngine.DefaultPanelName;
+
+    private bool _isSyncingActivePanelFromEngine;
 
     private object? _cachedIoFrontPanel;
 
@@ -102,6 +119,12 @@ public partial class MainWindow : Window
     private bool _isContinuousLive = false;
 
     private DateTime _lastSnapClickTime = DateTime.MinValue;
+
+    private readonly HashSet<Control> _suppressedUiControls = new();
+
+    private DispatcherTimer? _userBlinkTimer;
+
+    private bool _blinkPhase;
 
 
 
@@ -347,6 +370,7 @@ public partial class MainWindow : Window
 
         _vm.OnMessageBoxRequested = ShowSystemMessageBoxAsync;
         _vm.OnWarningBoxRequested = ShowSystemWarningBoxAsync;
+        _vm.OnEmgStateChanged += isEmg => Dispatcher.UIThread.Post(UpdateUserStatusBadge);
 
 
 
@@ -870,11 +894,9 @@ public partial class MainWindow : Window
 
             {
 
-                _vm.StopAll();
-
-                _vm.TriggerSystemHook(99);
-
                 _vm.MainThreads[0].Log("[EMG] Emergency Stop triggered by User Button!!", isError: true);
+
+                _vm.TriggerEmgStop("User STOP button");
 
             };
 
@@ -949,18 +971,25 @@ public partial class MainWindow : Window
 
 
         _vm.OnUserPanelOpenRequested += (csviPath) =>
-
         {
-
             Dispatcher.UIThread.Post(() =>
-
             {
-
                 LoadUserPanelFromCsvi(csviPath);
-
             });
-
         };
+
+        _vm.OnUserPanelCloseRequested += (panelName) =>
+        {
+            Dispatcher.UIThread.Post(() =>
+            {
+                UnloadUserPanelSlot(panelName);
+            });
+        };
+
+        _engines.Image.UserDisplayRequested += OnUserDisplayRequested;
+        _engines.Daq.UserDisplayRequested += OnDaqUserDisplayRequested;
+        _engines.UserPanel.CommandRequested += OnUserPanelCommandRequested;
+        _engines.UserPanel.LiveReadHandler = ReadUserPanelLiveControlValue;
 
 
 
@@ -978,15 +1007,7 @@ public partial class MainWindow : Window
 
             if (container == null) return;
 
-            if (_activeUserPanelPackage != null)
-
-            {
-
-                try { _activeUserPanelPackage.Unload(); } catch { }
-
-                _activeUserPanelPackage = null;
-
-            }
+            UnloadAllUserPanels();
 
             switch (idx)
 
@@ -1431,6 +1452,8 @@ public partial class MainWindow : Window
         _loadedModules.Add(new ModuleListItem { Name = "POINT&PATH", Description = "Point Table & Teaching", BadgeText = "MOTION", BadgeBackground = new SolidColorBrush(Color.Parse("#EA580C")) });
 
         _loadedModules.Add(new ModuleListItem { Name = "CALL", Description = "External CSVI Manager", BadgeText = "PLUGIN", BadgeBackground = new SolidColorBrush(Color.Parse("#D97706")) });
+
+        _loadedModules.Add(new ModuleListItem { Name = "USER", Description = "User Controls & Dialog Panels", BadgeText = "UI", BadgeBackground = new SolidColorBrush(Color.Parse("#0891B2")) });
 
         _loadedModules.Add(new ModuleListItem { Name = "IO", Description = "IO Devices & SubPanels", BadgeText = "HARDWARE", BadgeBackground = new SolidColorBrush(Color.Parse("#2563EB")) });
 
@@ -3676,6 +3699,75 @@ public partial class MainWindow : Window
 
 
 
+    private void UpdateUserStatusBadge()
+    {
+        var border = this.FindControl<Border>("BorderUserStatus");
+        var ledOk = this.FindControl<Ellipse>("LedUserOk");
+        var lbl = this.FindControl<TextBlock>("TxtUserStatusLabel");
+        if (ledOk == null) return;
+
+        if (_vm.IsEmgStopped)
+        {
+            ledOk.Fill = new SolidColorBrush(Color.FromRgb(239, 68, 68));
+            if (border != null)
+            {
+                border.Background = new SolidColorBrush(Color.Parse("#FEF2F2"));
+                border.BorderBrush = new SolidColorBrush(Color.Parse("#FCA5A5"));
+            }
+            if (lbl != null)
+            {
+                lbl.Text = "EMG STOP";
+                lbl.Foreground = new SolidColorBrush(Color.Parse("#B91C1C"));
+            }
+            return;
+        }
+
+        bool isPaused = _engines.Timer.IsSystemPaused;
+        bool isRunning = _vm.MainThreads[0].IsRunning;
+        if (isPaused)
+        {
+            ledOk.Fill = new SolidColorBrush(Color.FromRgb(220, 140, 0));
+            if (border != null)
+            {
+                border.Background = new SolidColorBrush(Color.Parse("#FFFBEB"));
+                border.BorderBrush = new SolidColorBrush(Color.Parse("#FCD34D"));
+            }
+            if (lbl != null)
+            {
+                lbl.Text = "PAUSE";
+                lbl.Foreground = new SolidColorBrush(Color.Parse("#92400E"));
+            }
+        }
+        else if (isRunning)
+        {
+            ledOk.Fill = new SolidColorBrush(Color.FromRgb(0, 204, 68));
+            if (border != null)
+            {
+                border.Background = new SolidColorBrush(Color.Parse("#F0FDF4"));
+                border.BorderBrush = new SolidColorBrush(Color.Parse("#86EFAC"));
+            }
+            if (lbl != null)
+            {
+                lbl.Text = "RUNNING";
+                lbl.Foreground = new SolidColorBrush(Color.Parse("#065F46"));
+            }
+        }
+        else
+        {
+            ledOk.Fill = new SolidColorBrush(Color.FromRgb(120, 120, 120));
+            if (border != null)
+            {
+                border.Background = new SolidColorBrush(Color.Parse("#F8FAFC"));
+                border.BorderBrush = new SolidColorBrush(Color.Parse("#CBD5E1"));
+            }
+            if (lbl != null)
+            {
+                lbl.Text = "READY";
+                lbl.Foreground = new SolidColorBrush(Color.Parse("#334155"));
+            }
+        }
+    }
+
     private void UiTimer_Tick(object? sender, EventArgs e)
     {
         // 核心準則：程式執行速度優先，非 Active 的 UI 絕對禁止更新 (Zero-Cost Inactive UI)
@@ -3684,27 +3776,10 @@ public partial class MainWindow : Window
         var mainTab = this.FindControl<TabControl>("MainTabControl");
         int activeTabIdx = mainTab?.SelectedIndex ?? 0;
 
-        // 1. 若處於 User Tab (Index 0)：僅刷新必要之機台運轉/暫停 LED 狀態燈
+        // 1. 若處於 User Tab (Index 0)：僅刷新必要之機台運轉/暫停/EMG LED 狀態燈
         if (activeTabIdx == 0)
         {
-            var ledOk = this.FindControl<Ellipse>("LedUserOk");
-            if (ledOk != null)
-            {
-                bool isPaused = _engines.Timer.IsSystemPaused;
-                bool isRunning = _vm.MainThreads[0].IsRunning;
-                if (isPaused)
-                {
-                    ledOk.Fill = new SolidColorBrush(Color.FromRgb(220, 140, 0)); // 橘色暫停
-                }
-                else if (isRunning)
-                {
-                    ledOk.Fill = new SolidColorBrush(Color.FromRgb(0, 204, 68));  // 綠色運行中
-                }
-                else
-                {
-                    ledOk.Fill = new SolidColorBrush(Color.FromRgb(120, 120, 120)); // 灰色待機
-                }
-            }
+            UpdateUserStatusBadge();
             return;
         }
 
@@ -3753,179 +3828,1124 @@ public partial class MainWindow : Window
     }
 
     // =========================================================
-
-    // 動態載入自訂 User Panel CSVI (SYSTEM@UserPanelOpen 或按鍵)
-
+    // 動態載入、多面板駐留與切換 (SYSTEM@UserPanelOpen / USER@SwitchUserPanel)
     // =========================================================
 
-    public bool LoadUserPanelFromCsvi(string csviNameOrPath)
-
+    private LoadedUserPanelSlot? ResolveUserPanelSlot(string? panelName)
     {
+        if (_loadedUserPanels.Count == 0) return null;
+        string key = string.IsNullOrWhiteSpace(panelName) ? _activeUserPanelName : panelName.Trim();
+        if (_loadedUserPanels.TryGetValue(key, out var exact)) return exact;
 
-        try
-
+        string noExt = System.IO.Path.GetFileNameWithoutExtension(key);
+        foreach (var slot in _loadedUserPanels.Values)
         {
+            if (string.Equals(slot.PanelName, noExt, StringComparison.OrdinalIgnoreCase))
+                return slot;
 
-            string resolved = ARCOS.Core.Common.ArcosPaths.ResolveUserPanelCsviPath(csviNameOrPath);
-
-            if (!File.Exists(resolved))
-
+            if (!string.IsNullOrWhiteSpace(slot.FilePath))
             {
-
-                _vm.MainThreads[0].Log($"[UserPanelOpen] Error: CSVI file '{csviNameOrPath}' not found (resolved: '{resolved}')", isError: true);
-
-                return false;
-
+                string fName = System.IO.Path.GetFileName(slot.FilePath);
+                string fStem = System.IO.Path.GetFileNameWithoutExtension(slot.FilePath);
+                if (string.Equals(fName, key, StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(fStem, noExt, StringComparison.OrdinalIgnoreCase))
+                {
+                    return slot;
+                }
             }
+        }
+        return null;
+    }
 
-
+    public bool LoadUserPanelFromCsvi(string csviNameOrPath)
+    {
+        try
+        {
+            var (csviSpec, panelAlias, activate) = ARCOS.Core.Engines.UserPanelEngine.ParseOpenSpec(csviNameOrPath);
+            string resolved = ARCOS.Core.Common.ArcosPaths.ResolveUserPanelCsviPath(csviSpec);
+            if (!File.Exists(resolved))
+            {
+                _vm.MainThreads[0].Log($"[UserPanelOpen] Error: CSVI file '{csviSpec}' not found (resolved: '{resolved}')", isError: true);
+                return false;
+            }
 
             var container = this.FindControl<ContentControl>("UserFrontPanelContainer");
-
             if (container == null) return false;
 
-
-
-            if (_activeUserPanelPackage != null)
-
+            // 若同名面板已載入，僅卸載該舊插槽以利熱重載，保留其他已開啟面板
+            if (_loadedUserPanels.TryGetValue(panelAlias, out var existingSlot))
             {
-
-                try
-
-                {
-
-                    if (container.Content is IDisposable d) d.Dispose();
-
-                    container.Content = null;
-
-                    _activeUserPanelPackage.Unload();
-
-                }
-
-                catch { }
-
-                _activeUserPanelPackage = null;
-
+                UnloadSlotResources(existingSlot);
+                _loadedUserPanels.Remove(panelAlias);
+                _loadedUserPanelOrder.RemoveAll(n => string.Equals(n, panelAlias, StringComparison.OrdinalIgnoreCase));
             }
-
-
 
             var pkg = ARCOS.Core.Csvi.CsviPackage.Load(resolved);
-
-            _activeUserPanelPackage = pkg;
-
             object? panel = null;
-
-
-
-            string cmdKey = !string.IsNullOrEmpty(pkg.Manifest.CommandKey) ? pkg.Manifest.CommandKey : System.IO.Path.GetFileNameWithoutExtension(resolved);
-
-
+            string cmdKey = !string.IsNullOrEmpty(pkg.Manifest.CommandKey)
+                ? pkg.Manifest.CommandKey
+                : System.IO.Path.GetFileNameWithoutExtension(resolved);
 
             if (pkg.Manifest.ComponentType == ARCOS.Core.Csvi.CsviComponentType.Driver)
-
             {
-
                 var dev = _driverManager.GetDevice(pkg.Manifest.Module ?? "Custom", cmdKey);
-
                 panel = dev?.CreateDriverView();
-
             }
-
-
 
             if (panel == null)
-
             {
-
                 panel = ARCOS.App.Guidance.ParameterGuidanceManager.Instance.GetFrontPanel(cmdKey)
-
                      ?? ARCOS.App.Guidance.ParameterGuidanceManager.Instance.GetFrontPanel($"{pkg.Manifest.Module}@{cmdKey}");
-
             }
-
-
 
             if (panel == null && pkg.LoadedAssembly != null)
-
             {
-
                 var ctrlType = pkg.LoadedAssembly.GetTypes().FirstOrDefault(t => typeof(Control).IsAssignableFrom(t) && !t.IsAbstract);
-
                 if (ctrlType != null)
-
                 {
-
                     panel = Activator.CreateInstance(ctrlType);
-
                 }
-
             }
 
-
-
-            if (panel != null)
-
+            if (panel is not Control ctrl)
             {
-
-                container.Content = panel;
-
-                if (panel is Control ctrl)
-
-                {
-
-                    var m1 = ctrl.GetType().GetMethod("Init") ?? ctrl.GetType().GetMethod("RefreshFromEngines");
-
-                    if (m1 != null)
-
-                    {
-
-                        m1.Invoke(ctrl, new object[] { _engines });
-
-                    }
-
-                    else if (ctrl.DataContext != null)
-
-                    {
-
-                        var m2 = ctrl.DataContext.GetType().GetMethod("Init") ?? ctrl.DataContext.GetType().GetMethod("RefreshFromEngines");
-
-                        m2?.Invoke(ctrl.DataContext, new object[] { _engines });
-
-                    }
-
-                }
-
-                _vm.MainThreads[0].Log($"[UserPanelOpen] Mounted User Panel: '{cmdKey}' ({System.IO.Path.GetFileName(resolved)})");
-
-                return true;
-
-            }
-
-            else
-
-            {
-
+                try { pkg.Unload(); } catch { }
                 _vm.MainThreads[0].Log($"[UserPanelOpen] Warning: CSVI '{cmdKey}' has no UI FrontPanel.", isError: true);
-
                 return false;
-
             }
 
-        }
+            var m1 = ctrl.GetType().GetMethod("Init") ?? ctrl.GetType().GetMethod("RefreshFromEngines");
+            if (m1 != null)
+            {
+                m1.Invoke(ctrl, new object[] { _engines });
+            }
+            else if (ctrl.DataContext != null)
+            {
+                var m2 = ctrl.DataContext.GetType().GetMethod("Init") ?? ctrl.DataContext.GetType().GetMethod("RefreshFromEngines");
+                m2?.Invoke(ctrl.DataContext, new object[] { _engines });
+            }
 
+            var imgNames = DiscoverAndRegisterUserPanelControls(panelAlias, ctrl, resolved, activate);
+            var newSlot = new LoadedUserPanelSlot
+            {
+                PanelName = panelAlias,
+                FilePath = resolved,
+                Package = pkg,
+                RootControl = ctrl,
+                ImageControlNames = imgNames
+            };
+            _loadedUserPanels[panelAlias] = newSlot;
+            if (!_loadedUserPanelOrder.Any(n => string.Equals(n, panelAlias, StringComparison.OrdinalIgnoreCase)))
+            {
+                _loadedUserPanelOrder.Add(panelAlias);
+            }
+
+            ApplyEngineSnapshotToSlot(newSlot);
+
+            if (activate || _loadedUserPanels.Count == 1)
+            {
+                ActivateUserPanelSlot(panelAlias);
+            }
+            else
+            {
+                RefreshUserPanelSwitcherBar();
+            }
+
+            _vm.MainThreads[0].Log($"[UserPanelOpen] Mounted User Panel '{panelAlias}' ({System.IO.Path.GetFileName(resolved)}) [Total={_loadedUserPanels.Count}, Active={_activeUserPanelName}]");
+            return true;
+        }
         catch (Exception ex)
-
         {
-
             var baseEx = ex.GetBaseException();
-
             _vm.MainThreads[0].Log($"[UserPanelOpen] Exception loading User Panel: {baseEx.Message}", isError: true);
-
             return false;
+        }
+    }
 
+    public bool ActivateUserPanelSlot(string panelName)
+    {
+        var slot = ResolveUserPanelSlot(panelName);
+        if (slot == null) return false;
+
+        var container = this.FindControl<ContentControl>("UserFrontPanelContainer");
+        if (container == null) return false;
+
+        if (!ReferenceEquals(container.Content, slot.RootControl))
+        {
+            container.Content = slot.RootControl;
         }
 
+        _activeUserPanelName = slot.PanelName;
+        _engines.Image.SetUserDisplayControls(slot.ImageControlNames);
+
+        if (!_isSyncingActivePanelFromEngine &&
+            !string.Equals(_engines.UserPanel.ActivePanelName, slot.PanelName, StringComparison.OrdinalIgnoreCase))
+        {
+            _isSyncingActivePanelFromEngine = true;
+            try { _engines.UserPanel.SwitchPanel(slot.PanelName); }
+            finally { _isSyncingActivePanelFromEngine = false; }
+        }
+
+        RefreshUserPanelSwitcherBar();
+        return true;
+    }
+
+    /// <summary>
+    /// 在主視窗樣式與排版環境下對任意已載入（含背景未顯示）的 UserPanel 進行無干擾擷圖，
+    /// 擷取結束後立即無縫恢復原本容器內容，不改動使用者的前景作用中面板與切換列。
+    /// </summary>
+    public bool TryRenderUserPanelSlot(string? panelName, Func<Control, int, int, bool> renderCallback, out string resolvedPanelName, out string? error)
+    {
+        resolvedPanelName = string.Empty;
+        error = null;
+
+        var container = this.FindControl<ContentControl>("UserFrontPanelContainer");
+        if (container == null)
+        {
+            error = "UserFrontPanelContainer not found.";
+            return false;
+        }
+
+        Control? targetCtrl = null;
+        if (!string.IsNullOrWhiteSpace(panelName))
+        {
+            var slot = ResolveUserPanelSlot(panelName);
+            if (slot == null)
+            {
+                error = $"Loaded UserPanel '{panelName}' not found. Loaded panels: {string.Join(", ", _loadedUserPanelOrder)}";
+                return false;
+            }
+            resolvedPanelName = slot.PanelName;
+            targetCtrl = slot.RootControl;
+        }
+        else
+        {
+            resolvedPanelName = _activeUserPanelName;
+            targetCtrl = (container.Content as Control) ?? ResolveUserPanelSlot(_activeUserPanelName)?.RootControl;
+        }
+
+        if (targetCtrl == null)
+        {
+            error = "No active or loaded UserPanel to capture.";
+            return false;
+        }
+
+        int w = (int)Math.Round(container.Bounds.Width > 50 ? container.Bounds.Width : 760);
+        int h = (int)Math.Round(container.Bounds.Height > 50 ? container.Bounds.Height : 520);
+
+        var prevContent = container.Content;
+        bool needTempSwap = !ReferenceEquals(prevContent, targetCtrl);
+        if (needTempSwap)
+        {
+            container.Content = targetCtrl;
+            container.UpdateLayout();
+        }
+        try
+        {
+            return renderCallback(targetCtrl, w, h);
+        }
+        finally
+        {
+            if (needTempSwap)
+            {
+                container.Content = prevContent;
+                container.UpdateLayout();
+            }
+        }
+    }
+
+    public bool UnloadUserPanelSlot(string panelName)
+    {
+        var slot = ResolveUserPanelSlot(panelName);
+        if (slot == null) return false;
+
+        bool wasActive = string.Equals(_activeUserPanelName, slot.PanelName, StringComparison.OrdinalIgnoreCase);
+        UnloadSlotResources(slot);
+        _loadedUserPanels.Remove(slot.PanelName);
+        _loadedUserPanelOrder.RemoveAll(n => string.Equals(n, slot.PanelName, StringComparison.OrdinalIgnoreCase));
+
+        if (!string.Equals(slot.PanelName, "", StringComparison.Ordinal))
+        {
+            _engines.UserPanel.ClosePanel(slot.PanelName);
+        }
+
+        var container = this.FindControl<ContentControl>("UserFrontPanelContainer");
+        if (_loadedUserPanels.Count == 0)
+        {
+            _activeUserPanelName = ARCOS.Core.Engines.UserPanelEngine.DefaultPanelName;
+            _engines.Image.SetUserDisplayControls(Array.Empty<string>());
+            if (container != null) container.Content = _defaultSubPanelContent;
+        }
+        else if (wasActive)
+        {
+            string fallback = _loadedUserPanelOrder[^1];
+            ActivateUserPanelSlot(fallback);
+            return true;
+        }
+
+        RefreshUserPanelSwitcherBar();
+        return true;
+    }
+
+    private void UnloadSlotResources(LoadedUserPanelSlot slot)
+    {
+        foreach (var ctrlName in slot.BlinkControls.ToList())
+        {
+            var ctrl = FindUserPanelNamedControl(slot.RootControl, ctrlName);
+            if (ctrl != null && slot.BlinkOriginalOpacity.TryGetValue(ctrlName, out double orig))
+            {
+                ctrl.Opacity = orig;
+            }
+        }
+        slot.BlinkControls.Clear();
+        slot.BlinkOriginalOpacity.Clear();
+
+        var container = this.FindControl<ContentControl>("UserFrontPanelContainer");
+        if (container != null && ReferenceEquals(container.Content, slot.RootControl))
+        {
+            container.Content = null;
+        }
+
+        try
+        {
+            if (slot.RootControl is IDisposable d) d.Dispose();
+            slot.Package?.Unload();
+        }
+        catch { }
+    }
+
+    private void UnloadAllUserPanels()
+    {
+        ClearUserPanelBindingsAndBlink();
+        foreach (var slot in _loadedUserPanels.Values.ToList())
+        {
+            UnloadSlotResources(slot);
+        }
+        _loadedUserPanels.Clear();
+        _loadedUserPanelOrder.Clear();
+        _activeUserPanelName = ARCOS.Core.Engines.UserPanelEngine.DefaultPanelName;
+        RefreshUserPanelSwitcherBar();
+    }
+
+    private void RefreshUserPanelSwitcherBar()
+    {
+        var bar = this.FindControl<Border>("UserPanelSwitcherBar");
+        var stack = this.FindControl<StackPanel>("UserPanelSwitcherButtons");
+        var lblCount = this.FindControl<TextBlock>("TxtLoadedPanelsCount");
+        if (bar == null || stack == null) return;
+
+        stack.Children.Clear();
+        bar.IsVisible = _loadedUserPanels.Count > 0;
+        if (lblCount != null)
+        {
+            lblCount.Text = $"{_loadedUserPanels.Count} Panel{(_loadedUserPanels.Count == 1 ? "" : "s")}";
+        }
+
+        foreach (var pName in _loadedUserPanelOrder)
+        {
+            if (!_loadedUserPanels.TryGetValue(pName, out var slot)) continue;
+            bool isActive = string.Equals(slot.PanelName, _activeUserPanelName, StringComparison.OrdinalIgnoreCase);
+
+            var pillGrid = new Grid
+            {
+                ColumnDefinitions = ColumnDefinitions.Parse("Auto,Auto"),
+                VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center
+            };
+
+            var btnSelect = new Button
+            {
+                Content = slot.PanelName,
+                Padding = new Thickness(10, 3),
+                FontSize = 11,
+                FontWeight = isActive ? FontWeight.Bold : FontWeight.SemiBold,
+                Background = new SolidColorBrush(Color.Parse(isActive ? "#0284C7" : "#FFFFFF")),
+                Foreground = new SolidColorBrush(Color.Parse(isActive ? "#FFFFFF" : "#334155")),
+                BorderBrush = new SolidColorBrush(Color.Parse(isActive ? "#0284C7" : "#CBD5E1")),
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(4, 0, 0, 4),
+                Cursor = new Avalonia.Input.Cursor(Avalonia.Input.StandardCursorType.Hand)
+            };
+            string captureName = slot.PanelName;
+            btnSelect.Click += (_, _) => ActivateUserPanelSlot(captureName);
+
+            var btnClose = new Button
+            {
+                Content = "×",
+                Padding = new Thickness(6, 3),
+                FontSize = 11,
+                FontWeight = FontWeight.Bold,
+                Background = new SolidColorBrush(Color.Parse(isActive ? "#0369A1" : "#F8FAFC")),
+                Foreground = new SolidColorBrush(Color.Parse(isActive ? "#E0F2FE" : "#64748B")),
+                BorderBrush = new SolidColorBrush(Color.Parse(isActive ? "#0284C7" : "#CBD5E1")),
+                BorderThickness = new Thickness(0, 1, 1, 1),
+                CornerRadius = new CornerRadius(0, 4, 4, 0),
+                Cursor = new Avalonia.Input.Cursor(Avalonia.Input.StandardCursorType.Hand)
+            };
+            btnClose.Click += (_, _) => UnloadUserPanelSlot(captureName);
+
+            Grid.SetColumn(btnSelect, 0);
+            Grid.SetColumn(btnClose, 1);
+            pillGrid.Children.Add(btnSelect);
+            pillGrid.Children.Add(btnClose);
+            stack.Children.Add(pillGrid);
+        }
+    }
+
+    private void ApplyEngineSnapshotToSlot(LoadedUserPanelSlot slot)
+    {
+        var items = _engines.UserPanel.QueryControlsInPanel(slot.PanelName);
+        foreach (var item in items)
+        {
+            var ctrl = FindUserPanelNamedControl(slot.RootControl, item.Name);
+            if (ctrl == null) continue;
+            ctrl.IsEnabled = item.IsEnabled;
+            ctrl.IsVisible = item.IsVisible;
+            if (item.IsBlinking)
+            {
+                if (!slot.BlinkOriginalOpacity.ContainsKey(item.Name))
+                    slot.BlinkOriginalOpacity[item.Name] = ctrl.Opacity;
+                slot.BlinkControls.Add(item.Name);
+                EnsureUserBlinkTimer();
+            }
+        }
+    }
+
+    private List<string> DiscoverAndRegisterUserPanelControls(string panelName, Control root, string filePath, bool activate)
+    {
+        var imgNames = new List<string>();
+        var discovered = new List<ARCOS.Core.Engines.UserPanelControlInfo>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        static string GetElementId(Control c)
+        {
+            return !string.IsNullOrWhiteSpace(c.Name)
+                ? c.Name.Trim()
+                : (Avalonia.Automation.AutomationProperties.GetAutomationId(c)?.Trim() ?? "");
+        }
+
+        static string ExtractButtonText(ContentControl cc)
+        {
+            if (cc.Content is string s) return s;
+            if (cc.Content is TextBlock tb) return tb.Text ?? "";
+            if (cc.Content is Panel panel)
+            {
+                var innerTb = panel.Children.OfType<TextBlock>().LastOrDefault();
+                if (innerTb != null) return innerTb.Text ?? "";
+            }
+            return cc.Content?.ToString() ?? "";
+        }
+
+        void Traverse(object? node)
+        {
+            if (node is Control ctrl)
+            {
+                string id = GetElementId(ctrl);
+                string tag = ctrl.Tag?.ToString() ?? "";
+
+                if (ctrl is Image && !string.IsNullOrWhiteSpace(id))
+                {
+                    imgNames.Add(id);
+                }
+
+                if (!string.IsNullOrWhiteSpace(id) && seen.Add(id))
+                {
+                    var kind = ARCOS.Core.Engines.UserPanelControlKind.Unknown;
+                    var role = ARCOS.Core.Engines.UserPanelElementRole.Indicator;
+                    string val = "";
+                    string text = "";
+                    string options = "";
+
+                    switch (ctrl)
+                    {
+                        case CheckBox cb:
+                            kind = ARCOS.Core.Engines.UserPanelControlKind.CheckBox;
+                            role = ARCOS.Core.Engines.UserPanelElementRole.Control;
+                            val = cb.IsChecked == true ? "ON" : "OFF";
+                            text = cb.Content?.ToString() ?? "";
+                            cb.IsCheckedChanged += (_, _) =>
+                            {
+                                if (_suppressedUiControls.Contains(cb)) return;
+                                _engines.UserPanel.NotifyUiValueChangedInPanel(panelName, id, cb.IsChecked == true ? "ON" : "OFF");
+                            };
+                            break;
+                        case ToggleButton tog:
+                            kind = ARCOS.Core.Engines.UserPanelControlKind.ToggleButton;
+                            role = ARCOS.Core.Engines.UserPanelElementRole.Control;
+                            val = tog.IsChecked == true ? "ON" : "OFF";
+                            text = ExtractButtonText(tog);
+                            tog.IsCheckedChanged += (_, _) =>
+                            {
+                                if (_suppressedUiControls.Contains(tog)) return;
+                                _engines.UserPanel.NotifyUiValueChangedInPanel(panelName, id, tog.IsChecked == true ? "ON" : "OFF", ExtractButtonText(tog));
+                            };
+                            break;
+                        case Button btn:
+                            kind = ARCOS.Core.Engines.UserPanelControlKind.Button;
+                            role = ARCOS.Core.Engines.UserPanelElementRole.Control;
+                            val = "OFF";
+                            text = ExtractButtonText(btn);
+                            break;
+                        case TextBox tb:
+                            kind = ARCOS.Core.Engines.UserPanelControlKind.TextBox;
+                            role = tb.IsReadOnly ? ARCOS.Core.Engines.UserPanelElementRole.Indicator : ARCOS.Core.Engines.UserPanelElementRole.Control;
+                            val = tb.Text ?? "";
+                            tb.TextChanged += (_, _) =>
+                            {
+                                if (_suppressedUiControls.Contains(tb)) return;
+                                _engines.UserPanel.NotifyUiValueChangedInPanel(panelName, id, tb.Text ?? "");
+                            };
+                            break;
+                        case ComboBox cmb:
+                            kind = ARCOS.Core.Engines.UserPanelControlKind.ComboBox;
+                            role = ARCOS.Core.Engines.UserPanelElementRole.Control;
+                            val = cmb.SelectedItem?.ToString() ?? "";
+                            options = string.Join("|", cmb.Items.Cast<object?>().Select(i => i?.ToString() ?? ""));
+                            cmb.SelectionChanged += (_, _) =>
+                            {
+                                if (_suppressedUiControls.Contains(cmb)) return;
+                                _engines.UserPanel.NotifyUiValueChangedInPanel(panelName, id, cmb.SelectedItem?.ToString() ?? "");
+                            };
+                            break;
+                        case TabControl tab:
+                            kind = ARCOS.Core.Engines.UserPanelControlKind.TabControl;
+                            role = ARCOS.Core.Engines.UserPanelElementRole.Control;
+                            val = tab.SelectedIndex.ToString();
+                            options = string.Join("|", tab.Items.OfType<TabItem>().Select(t => !string.IsNullOrWhiteSpace(t.Name) ? t.Name! : (t.Header?.ToString() ?? "")));
+                            tab.SelectionChanged += (_, _) =>
+                            {
+                                if (_suppressedUiControls.Contains(tab)) return;
+                                _engines.UserPanel.NotifyUiValueChangedInPanel(panelName, id, tab.SelectedIndex.ToString());
+                            };
+                            break;
+                        case Image:
+                            kind = ARCOS.Core.Engines.UserPanelControlKind.Image;
+                            role = ARCOS.Core.Engines.UserPanelElementRole.Indicator;
+                            break;
+                        case ScottPlot.Avalonia.AvaPlot:
+                            kind = ARCOS.Core.Engines.UserPanelControlKind.Plot;
+                            role = ARCOS.Core.Engines.UserPanelElementRole.Indicator;
+                            break;
+                        case Border when tag.StartsWith("DAQ:", StringComparison.OrdinalIgnoreCase) || id.StartsWith("Plot", StringComparison.OrdinalIgnoreCase):
+                            kind = ARCOS.Core.Engines.UserPanelControlKind.Plot;
+                            role = ARCOS.Core.Engines.UserPanelElementRole.Indicator;
+                            break;
+                        case Ellipse:
+                            kind = ARCOS.Core.Engines.UserPanelControlKind.Led;
+                            role = ARCOS.Core.Engines.UserPanelElementRole.Indicator;
+                            break;
+                        case TextBlock lbl:
+                            kind = ARCOS.Core.Engines.UserPanelControlKind.TextBlock;
+                            role = ARCOS.Core.Engines.UserPanelElementRole.Indicator;
+                            val = lbl.Text ?? "";
+                            break;
+                    }
+
+                    if (kind != ARCOS.Core.Engines.UserPanelControlKind.Unknown)
+                    {
+                        discovered.Add(new ARCOS.Core.Engines.UserPanelControlInfo
+                        {
+                            PanelName = panelName,
+                            Name = id,
+                            Kind = kind,
+                            Role = role,
+                            Value = val,
+                            Text = text,
+                            IsEnabled = ctrl.IsEnabled,
+                            IsVisible = ctrl.IsVisible,
+                            BindingTarget = tag,
+                            Options = options,
+                            IsMountedOnUi = true
+                        });
+                    }
+                }
+            }
+
+            if (node is Avalonia.LogicalTree.ILogical logical)
+            {
+                foreach (var child in logical.LogicalChildren)
+                {
+                    Traverse(child);
+                }
+            }
+        }
+
+        Traverse(root);
+        _engines.Image.SetUserDisplayControls(imgNames);
+        _engines.UserPanel.RegisterPanelControls(panelName, discovered, filePath, activate: activate, replacePanel: true);
+        return imgNames;
+    }
+
+    private void ClearUserPanelBindingsAndBlink()
+    {
+        _userBlinkTimer?.Stop();
+        foreach (var slot in _loadedUserPanels.Values)
+        {
+            slot.BlinkControls.Clear();
+            slot.BlinkOriginalOpacity.Clear();
+        }
+        _suppressedUiControls.Clear();
+        _engines.UserPanel.Clear();
+        _engines.Image.SetUserDisplayControls(Array.Empty<string>());
+    }
+
+    private string? ReadUserPanelLiveControlValue(string controlName)
+    {
+        if (!Dispatcher.UIThread.CheckAccess()) return null;
+
+        var (panelName, ctrlName) = ARCOS.Core.Engines.UserPanelEngine.SplitScopedTarget(controlName, _activeUserPanelName);
+        var slot = ResolveUserPanelSlot(panelName);
+        Control? searchRoot = slot?.RootControl ?? (this.FindControl<ContentControl>("UserFrontPanelContainer")?.Content as Control);
+        if (searchRoot == null) return null;
+
+        var target = FindUserPanelNamedControl(searchRoot, ctrlName);
+        if (target == null) return null;
+
+        return target switch
+        {
+            CheckBox cb => cb.IsChecked == true ? "ON" : "OFF",
+            ToggleButton tog => tog.IsChecked == true ? "ON" : "OFF",
+            TextBox tb => tb.Text ?? "",
+            TextBlock tbl => tbl.Text ?? "",
+            ComboBox cmb => cmb.SelectedItem?.ToString() ?? cmb.SelectedIndex.ToString(),
+            TabControl tab => tab.SelectedIndex.ToString(),
+            Button btn => btn.Content?.ToString() ?? "",
+            _ => null
+        };
+    }
+
+    private void OnUserPanelCommandRequested(ARCOS.Core.Engines.UserPanelCommandRequest req)
+    {
+        Dispatcher.UIThread.Post(() =>
+        {
+            try
+            {
+                if (req.CommandType == ARCOS.Core.Engines.UserPanelCommandType.SwitchPanel)
+                {
+                    if (!_isSyncingActivePanelFromEngine)
+                    {
+                        _isSyncingActivePanelFromEngine = true;
+                        try { ActivateUserPanelSlot(req.ControlName); }
+                        finally { _isSyncingActivePanelFromEngine = false; }
+                    }
+                    return;
+                }
+
+                if (req.CommandType == ARCOS.Core.Engines.UserPanelCommandType.ClosePanel)
+                {
+                    UnloadUserPanelSlot(req.ControlName);
+                    return;
+                }
+
+                if (req.CommandType == ARCOS.Core.Engines.UserPanelCommandType.ParamRefresh)
+                {
+                    var refreshSlot = ResolveUserPanelSlot(req.ControlName);
+                    Control? refreshRoot = refreshSlot?.RootControl ?? (this.FindControl<ContentControl>("UserFrontPanelContainer")?.Content as Control);
+                    if (refreshRoot == null) return;
+
+                    var m = refreshRoot.GetType().GetMethod("RefreshFromEngines") ?? refreshRoot.GetType().GetMethod("Init");
+                    if (m != null) m.Invoke(refreshRoot, new object[] { _engines });
+                    else if (refreshRoot.DataContext != null)
+                    {
+                        var m2 = refreshRoot.DataContext.GetType().GetMethod("RefreshFromEngines") ?? refreshRoot.DataContext.GetType().GetMethod("Init");
+                        m2?.Invoke(refreshRoot.DataContext, new object[] { _engines });
+                    }
+                    SyncTaggedUserPanelElements(refreshRoot);
+                    return;
+                }
+
+                var (parsedPanel, ctrlName) = ARCOS.Core.Engines.UserPanelEngine.SplitScopedTarget(
+                    req.ControlName,
+                    string.IsNullOrWhiteSpace(req.PanelName) ? _activeUserPanelName : req.PanelName);
+                var slot = ResolveUserPanelSlot(parsedPanel);
+                Control? searchRoot = slot?.RootControl ?? (this.FindControl<ContentControl>("UserFrontPanelContainer")?.Content as Control);
+                if (searchRoot == null) return;
+
+                if (req.CommandType == ARCOS.Core.Engines.UserPanelCommandType.SetBlinking)
+                {
+                    if (slot == null) return;
+                    var blinkCtrl = FindUserPanelNamedControl(searchRoot, ctrlName);
+                    if (req.BoolValue)
+                    {
+                        if (blinkCtrl != null && !slot.BlinkOriginalOpacity.ContainsKey(ctrlName))
+                        {
+                            slot.BlinkOriginalOpacity[ctrlName] = blinkCtrl.Opacity;
+                        }
+                        slot.BlinkControls.Add(ctrlName);
+                        EnsureUserBlinkTimer();
+                    }
+                    else
+                    {
+                        slot.BlinkControls.Remove(ctrlName);
+                        if (blinkCtrl != null && slot.BlinkOriginalOpacity.TryGetValue(ctrlName, out double origOp))
+                        {
+                            blinkCtrl.Opacity = origOp;
+                            slot.BlinkOriginalOpacity.Remove(ctrlName);
+                        }
+                        else if (blinkCtrl != null)
+                        {
+                            blinkCtrl.Opacity = 1.0;
+                        }
+                    }
+                    return;
+                }
+
+                var targetCtrl = FindUserPanelNamedControl(searchRoot, ctrlName);
+                if (targetCtrl == null) return;
+
+                ApplyControlCommandToTarget(targetCtrl, req);
+            }
+            catch { }
+        });
+    }
+
+    private void ApplyControlCommandToTarget(Control targetCtrl, ARCOS.Core.Engines.UserPanelCommandRequest req)
+    {
+        switch (req.CommandType)
+        {
+            case ARCOS.Core.Engines.UserPanelCommandType.ButtonValue:
+                ApplyButtonCommand(targetCtrl, req.BoolValue, req.TriggerEvent);
+                break;
+
+            case ARCOS.Core.Engines.UserPanelCommandType.SetEnabled:
+                targetCtrl.IsEnabled = req.BoolValue;
+                break;
+
+            case ARCOS.Core.Engines.UserPanelCommandType.SetVisible:
+                targetCtrl.IsVisible = req.BoolValue;
+                break;
+
+            case ARCOS.Core.Engines.UserPanelCommandType.ButtonText:
+                if (targetCtrl is ContentControl cc)
+                {
+                    if (cc.Content is Panel panel)
+                    {
+                        var innerTb = panel.Children.OfType<TextBlock>().LastOrDefault();
+                        if (innerTb != null) innerTb.Text = req.Value;
+                        else cc.Content = req.Value;
+                    }
+                    else
+                    {
+                        cc.Content = req.Value;
+                    }
+                }
+                break;
+
+            case ARCOS.Core.Engines.UserPanelCommandType.TextValue:
+                if (targetCtrl is TextBox tb)
+                {
+                    if (!req.TriggerEvent) _suppressedUiControls.Add(tb);
+                    try { tb.Text = req.Value; }
+                    finally { _suppressedUiControls.Remove(tb); }
+                }
+                else if (targetCtrl is TextBlock tbl)
+                {
+                    tbl.Text = req.Value;
+                }
+                break;
+
+            case ARCOS.Core.Engines.UserPanelCommandType.SelectTab:
+                if (targetCtrl is TabControl tab)
+                {
+                    int idx = ResolveTabIndex(tab, req.Value);
+                    if (idx >= 0)
+                    {
+                        if (!req.TriggerEvent) _suppressedUiControls.Add(tab);
+                        try { tab.SelectedIndex = idx; }
+                        finally { _suppressedUiControls.Remove(tab); }
+                    }
+                }
+                break;
+
+            case ARCOS.Core.Engines.UserPanelCommandType.SelectCombo:
+                if (targetCtrl is ComboBox cmb)
+                {
+                    int idx = ResolveComboIndex(cmb, req.Value);
+                    if (idx >= 0)
+                    {
+                        if (!req.TriggerEvent) _suppressedUiControls.Add(cmb);
+                        try { cmb.SelectedIndex = idx; }
+                        finally { _suppressedUiControls.Remove(cmb); }
+                    }
+                }
+                break;
+        }
+    }
+
+    private void ApplyButtonCommand(Control targetCtrl, bool on, bool triggerEvent)
+    {
+        switch (targetCtrl)
+        {
+            case CheckBox cb:
+                if (!triggerEvent) _suppressedUiControls.Add(cb);
+                try { cb.IsChecked = on; }
+                finally { _suppressedUiControls.Remove(cb); }
+                if (triggerEvent)
+                {
+                    cb.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                }
+                break;
+
+            case ToggleButton tog:
+                if (!triggerEvent) _suppressedUiControls.Add(tog);
+                try { tog.IsChecked = on; }
+                finally { _suppressedUiControls.Remove(tog); }
+                if (triggerEvent)
+                {
+                    tog.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                    if (tog.Command?.CanExecute(tog.CommandParameter) == true)
+                        tog.Command.Execute(tog.CommandParameter);
+                }
+                break;
+
+            case Button btn:
+                btn.BorderBrush = new SolidColorBrush(Color.Parse(on ? "#10B981" : "#CBD5E1"));
+                btn.BorderThickness = new Thickness(on ? 2 : 1);
+                if (triggerEvent)
+                {
+                    btn.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                    if (btn.Command?.CanExecute(btn.CommandParameter) == true)
+                        btn.Command.Execute(btn.CommandParameter);
+                }
+                break;
+
+            case Ellipse led:
+                led.Fill = new SolidColorBrush(Color.Parse(on ? "#10B981" : "#64748B"));
+                break;
+        }
+    }
+
+    private void SyncTaggedUserPanelElements(Control root)
+    {
+        void Visit(object? node)
+        {
+            if (node is Control c && c.Tag is string tag && !string.IsNullOrWhiteSpace(tag))
+            {
+                if (tag.StartsWith("IO:", StringComparison.OrdinalIgnoreCase))
+                {
+                    string port = tag[3..].Trim();
+                    bool on = _engines.Io.GetPort(port);
+                    if (c is Ellipse led)
+                    {
+                        led.Fill = new SolidColorBrush(Color.Parse(on ? "#10B981" : "#64748B"));
+                    }
+                    else if (c is ToggleButton tog)
+                    {
+                        _suppressedUiControls.Add(tog);
+                        try { tog.IsChecked = on; }
+                        finally { _suppressedUiControls.Remove(tog); }
+                    }
+                }
+                else if (tag.StartsWith("VAR:", StringComparison.OrdinalIgnoreCase))
+                {
+                    string varKey = tag[4..].Trim();
+                    string val = "";
+                    try { val = _engines.Variable.Get(varKey); } catch { }
+                    if (!string.IsNullOrEmpty(val))
+                    {
+                        if (c is TextBox tb)
+                        {
+                            _suppressedUiControls.Add(tb);
+                            try { tb.Text = val; }
+                            finally { _suppressedUiControls.Remove(tb); }
+                        }
+                        else if (c is TextBlock tbl)
+                        {
+                            tbl.Text = val;
+                        }
+                    }
+                }
+            }
+
+            if (node is Avalonia.LogicalTree.ILogical logical)
+            {
+                foreach (var child in logical.LogicalChildren) Visit(child);
+            }
+        }
+        Visit(root);
+    }
+
+    private void EnsureUserBlinkTimer()
+    {
+        if (_userBlinkTimer == null)
+        {
+            _userBlinkTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(450) };
+            _userBlinkTimer.Tick += (_, _) =>
+            {
+                if (_loadedUserPanels.Values.All(s => s.BlinkControls.Count == 0))
+                {
+                    _userBlinkTimer.Stop();
+                    return;
+                }
+
+                _blinkPhase = !_blinkPhase;
+                foreach (var slot in _loadedUserPanels.Values.ToList())
+                {
+                    if (slot.BlinkControls.Count == 0) continue;
+                    foreach (var name in slot.BlinkControls.ToList())
+                    {
+                        var ctrl = FindUserPanelNamedControl(slot.RootControl, name);
+                        if (ctrl != null)
+                        {
+                            double orig = slot.BlinkOriginalOpacity.TryGetValue(name, out var o) ? o : 1.0;
+                            ctrl.Opacity = _blinkPhase ? Math.Min(0.35, orig) : orig;
+                        }
+                    }
+                }
+            };
+        }
+
+        if (!_userBlinkTimer.IsEnabled)
+        {
+            _userBlinkTimer.Start();
+        }
+    }
+
+    private static int ResolveTabIndex(TabControl tab, string pageIdxOrName)
+    {
+        if (int.TryParse(pageIdxOrName, out int idx) && idx >= 0 && idx < tab.Items.Count)
+        {
+            return idx;
+        }
+        for (int i = 0; i < tab.Items.Count; i++)
+        {
+            if (tab.Items[i] is TabItem ti)
+            {
+                if (string.Equals(ti.Name, pageIdxOrName, StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(ti.Header?.ToString(), pageIdxOrName, StringComparison.OrdinalIgnoreCase))
+                {
+                    return i;
+                }
+            }
+        }
+        return -1;
+    }
+
+    private static int ResolveComboIndex(ComboBox cmb, string valOrIdx)
+    {
+        for (int i = 0; i < cmb.Items.Count; i++)
+        {
+            if (string.Equals(cmb.Items[i]?.ToString(), valOrIdx, StringComparison.OrdinalIgnoreCase))
+            {
+                return i;
+            }
+        }
+        if (int.TryParse(valOrIdx, out int idx) && idx >= 0 && idx < cmb.Items.Count)
+        {
+            return idx;
+        }
+        return -1;
+    }
+
+    private Image? FindUserPanelImageControl(Control root, string controlName)
+    {
+        var nsFound = NameScope.GetNameScope(root)?.Find<Image>(controlName);
+        if (nsFound != null) return nsFound;
+
+        Image? SearchLogical(object? node)
+        {
+            if (node is Image img)
+            {
+                string? name = img.Name;
+                string? autoId = Avalonia.Automation.AutomationProperties.GetAutomationId(img);
+                if (string.Equals(name, controlName, StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(autoId, controlName, StringComparison.OrdinalIgnoreCase))
+                {
+                    return img;
+                }
+            }
+
+            if (node is Avalonia.LogicalTree.ILogical logical)
+            {
+                foreach (var child in logical.LogicalChildren)
+                {
+                    var res = SearchLogical(child);
+                    if (res != null) return res;
+                }
+            }
+            return null;
+        }
+
+        return SearchLogical(root);
+    }
+
+    private void OnUserDisplayRequested(string camName, string controlName)
+    {
+        var (targetPanel, targetCtrlName) = ARCOS.Core.Engines.UserPanelEngine.SplitScopedTarget(controlName, _activeUserPanelName);
+        _engines.UserPanel.NotifyUiValueChangedInPanel(targetPanel, targetCtrlName, camName);
+        var pngBytes = _engines.Image.RenderFrameWithOverlaysToPngBytes(camName);
+        if (pngBytes == null || pngBytes.Length == 0) return;
+
+        Dispatcher.UIThread.Post(() =>
+        {
+            try
+            {
+                var slot = ResolveUserPanelSlot(targetPanel);
+                var container = this.FindControl<ContentControl>("UserFrontPanelContainer");
+                Control searchRoot = slot?.RootControl ?? (container?.Content as Control) ?? this;
+                var imgCtrl = FindUserPanelImageControl(searchRoot, targetCtrlName);
+                if (imgCtrl != null)
+                {
+                    using var ms = new MemoryStream(pngBytes);
+                    imgCtrl.Source = new Avalonia.Media.Imaging.Bitmap(ms);
+                }
+            }
+            catch { }
+        });
+    }
+
+    private Control? FindUserPanelNamedControl(Control root, string controlName)
+    {
+        var nsFound = NameScope.GetNameScope(root)?.Find<Control>(controlName);
+        if (nsFound != null) return nsFound;
+
+        Control? SearchLogical(object? node)
+        {
+            if (node is Control ctrl)
+            {
+                string? name = ctrl.Name;
+                string? autoId = Avalonia.Automation.AutomationProperties.GetAutomationId(ctrl);
+                if (string.Equals(name, controlName, StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(autoId, controlName, StringComparison.OrdinalIgnoreCase))
+                {
+                    return ctrl;
+                }
+            }
+
+            if (node is Avalonia.LogicalTree.ILogical logical)
+            {
+                foreach (var child in logical.LogicalChildren)
+                {
+                    var res = SearchLogical(child);
+                    if (res != null) return res;
+                }
+            }
+            return null;
+        }
+
+        return SearchLogical(root);
+    }
+
+    private void OnDaqUserDisplayRequested(string waveformName, string controlName)
+    {
+        var (targetPanel, targetCtrlName) = ARCOS.Core.Engines.UserPanelEngine.SplitScopedTarget(controlName, _activeUserPanelName);
+        _engines.UserPanel.NotifyUiValueChangedInPanel(targetPanel, targetCtrlName, waveformName);
+        Dispatcher.UIThread.Post(() =>
+        {
+            try
+            {
+                var slot = ResolveUserPanelSlot(targetPanel);
+                var container = this.FindControl<ContentControl>("UserFrontPanelContainer");
+                Control searchRoot = slot?.RootControl ?? (container?.Content as Control) ?? this;
+                var targetCtrl = FindUserPanelNamedControl(searchRoot, targetCtrlName);
+                if (targetCtrl == null) return;
+
+                double[] yData = Array.Empty<double>();
+                double dt = 0.001;
+                try
+                {
+                    var entry = _engines.Daq.GetWaveform(waveformName);
+                    if (entry.Channels.TryGetValue(0, out var ch))
+                    {
+                        yData = ch.Y;
+                        dt = ch.Dt <= 0 ? 0.001 : ch.Dt;
+                    }
+                }
+                catch { }
+
+                // 1. 若目標是 ContentControl / Border / AvaPlot -> 自動升級為互動式 ScottPlot 向量圖表
+                ScottPlot.Avalonia.AvaPlot? avaPlot = targetCtrl as ScottPlot.Avalonia.AvaPlot;
+                if (avaPlot == null && targetCtrl is ContentControl cc)
+                {
+                    avaPlot = cc.Content as ScottPlot.Avalonia.AvaPlot;
+                    if (avaPlot == null)
+                    {
+                        avaPlot = new ScottPlot.Avalonia.AvaPlot { HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Stretch, VerticalAlignment = Avalonia.Layout.VerticalAlignment.Stretch };
+                        cc.Content = avaPlot;
+                    }
+                }
+                else if (avaPlot == null && targetCtrl is Border bdr)
+                {
+                    avaPlot = bdr.Child as ScottPlot.Avalonia.AvaPlot;
+                    if (avaPlot == null && bdr.Child == null)
+                    {
+                        avaPlot = new ScottPlot.Avalonia.AvaPlot { HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Stretch, VerticalAlignment = Avalonia.Layout.VerticalAlignment.Stretch };
+                        bdr.Child = avaPlot;
+                    }
+                }
+
+                if (avaPlot != null)
+                {
+                    avaPlot.Plot.Clear();
+                    if (yData.Length > 0)
+                    {
+                        var sig = avaPlot.Plot.Add.Signal(yData, dt);
+                        sig.LineWidth = 2.0f;
+                        sig.Color = ScottPlot.Colors.MediumSeaGreen;
+                        avaPlot.Plot.Axes.AutoScale();
+                    }
+                    avaPlot.Plot.Title($"DAQ: {waveformName}");
+                    avaPlot.Refresh();
+                    return;
+                }
+
+                // 2. 若目標是 Image 控制項 -> 使用 Avalonia 原生純向量 DrawingImage (PolylineGeometry，100% 向量無損縮放)
+                if (targetCtrl is Image imgCtrl)
+                {
+                    double w = 480, h = 220;
+                    var group = new DrawingGroup();
+
+                    // 深色圓角背景
+                    group.Children.Add(new GeometryDrawing
+                    {
+                        Brush = new SolidColorBrush(Color.Parse("#0F172A")),
+                        Geometry = new RectangleGeometry(new Avalonia.Rect(0, 0, w, h))
+                    });
+
+                    // 向量格線
+                    var gridPen = new Pen(new SolidColorBrush(Color.Parse("#1E293B")), 1);
+                    var gridGeo = new StreamGeometry();
+                    using (var ctx = gridGeo.Open())
+                    {
+                        for (double gx = 40; gx < w - 16; gx += 60)
+                        {
+                            ctx.BeginFigure(new Avalonia.Point(gx, 24), false);
+                            ctx.LineTo(new Avalonia.Point(gx, h - 20));
+                        }
+                        for (double gy = 28; gy < h - 20; gy += 40)
+                        {
+                            ctx.BeginFigure(new Avalonia.Point(40, gy), false);
+                            ctx.LineTo(new Avalonia.Point(w - 16, gy));
+                        }
+                    }
+                    group.Children.Add(new GeometryDrawing { Pen = gridPen, Geometry = gridGeo });
+
+                    // 向量波形曲線
+                    if (yData.Length > 0)
+                    {
+                        double minV = yData.Min();
+                        double maxV = yData.Max();
+                        double span = Math.Max(1e-6, maxV - minV);
+                        double plotL = 40, plotR = w - 16, plotT = 28, plotB = h - 20;
+                        double plotW = plotR - plotL, plotH = plotB - plotT;
+
+                        var pts = new List<Avalonia.Point>(yData.Length);
+                        for (int i = 0; i < yData.Length; i++)
+                        {
+                            double px = plotL + (i * plotW / Math.Max(1, yData.Length - 1));
+                            double py = plotB - ((yData[i] - minV) / span * plotH);
+                            pts.Add(new Avalonia.Point(px, py));
+                        }
+
+                        var polyGeo = new PolylineGeometry(pts, false);
+                        var wavePen = new Pen(new SolidColorBrush(Color.Parse("#10B981")), 2);
+                        group.Children.Add(new GeometryDrawing { Pen = wavePen, Geometry = polyGeo });
+                    }
+
+                    imgCtrl.Source = new DrawingImage { Drawing = group };
+                }
+            }
+            catch { }
+        });
     }
 
 

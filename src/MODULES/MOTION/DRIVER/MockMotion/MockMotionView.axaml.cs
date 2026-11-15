@@ -115,6 +115,18 @@ public partial class MockMotionView : UserControl
         var txtW = this.FindControl<TextBlock>("TxtW");
         if (txtW != null) txtW.Text = _driver.CurrentPos.W.ToString("F3", CultureInfo.InvariantCulture);
 
+        var txtTool = this.FindControl<TextBlock>("TxtToolInfo");
+        if (txtTool != null) txtTool.Text = $"Tool: {_driver.CurrentToolName}";
+
+        var txtMove = this.FindControl<TextBlock>("TxtMoveMode");
+        if (txtMove != null) txtMove.Text = $"Mode: {_driver.LastRobotMoveMode}";
+
+        var txtExtra = this.FindControl<TextBlock>("TxtLastExtraCmd");
+        if (txtExtra != null) txtExtra.Text = $"LastExtraCMD: {(string.IsNullOrEmpty(_driver.LastExtraCommand) ? "(None)" : _driver.LastExtraCommand)}";
+
+        var txtErr = this.FindControl<TextBlock>("TxtErrorCode");
+        if (txtErr != null) txtErr.Text = $"Alarm (Err:{_driver.ControllerErrorCode})";
+
         var ledHomed = this.FindControl<Ellipse>("LedHomed");
         if (ledHomed != null) ledHomed.Fill = _driver.IsHomed ? Brushes.LimeGreen : Brushes.Gray;
 
@@ -123,5 +135,8 @@ public partial class MockMotionView : UserControl
 
         var ledDone = this.FindControl<Ellipse>("LedDone");
         if (ledDone != null) ledDone.Fill = (!_driver.IsBusy && _driver.IsHomed) ? Brushes.LimeGreen : Brushes.Gray;
+
+        var ledAlarm = this.FindControl<Ellipse>("LedAlarm");
+        if (ledAlarm != null) ledAlarm.Fill = (_driver.IsAlarm || _driver.ControllerErrorCode != 0) ? Brushes.Red : Brushes.Gray;
     }
 }

@@ -263,13 +263,14 @@ public static class ArcosMcpServer
                 new
                 {
                     name = "arcos_list_controls",
-                    description = "List interactive and named UI controls in MainWindow, the currently open Dialog (Wizard), SubPanel, or Sequencer.",
+                    description = "List interactive and named UI controls in MainWindow, the currently open Dialog (Wizard), SubPanel, Sequencer, or any loaded UserPanel (including background panels via panel param).",
                     inputSchema = new
                     {
                         type = "object",
                         properties = new
                         {
-                            scope = new { type = "string", description = "Auto | MainWindow | Dialog | SubPanel | Sequencer (default: Auto)" }
+                            scope = new { type = "string", description = "Auto | MainWindow | Dialog | SubPanel | Sequencer (default: Auto)" },
+                            panel = new { type = "string", description = "Optional UserPanel alias/name or '*' to query registered UserPanelEngine controls (works for background panels too)" }
                         }
                     }
                 },
@@ -346,14 +347,15 @@ public static class ArcosMcpServer
                 new
                 {
                     name = "arcos_capture_ui",
-                    description = "Capture a high-resolution PNG screenshot of ARCOS.App (MainWindow, active Parameter Guidance Dialog, SubPanel, or Auto-composited MainWindow + Dialog).",
+                    description = "Capture a high-resolution PNG screenshot of ARCOS.App (MainWindow, active Dialog, SubPanel/UserPanel—including background loaded UserPanels via panel param—or Auto-composited MainWindow + Dialog).",
                     inputSchema = new
                     {
                         type = "object",
                         properties = new
                         {
                             outputPath = new { type = "string", description = "File path to save the screenshot (.png)" },
-                            target = new { type = "string", description = "Auto | MainWindow | Dialog | SubPanel (default: Auto)" }
+                            target = new { type = "string", description = "Auto | MainWindow | Dialog | SubPanel | UserPanel | TestThread (default: Auto)" },
+                            panel = new { type = "string", description = "Optional loaded UserPanel alias/name (foreground or background) to capture directly without altering the active panel" }
                         },
                         required = new[] { "outputPath" }
                     }
@@ -361,14 +363,14 @@ public static class ArcosMcpServer
                 new
                 {
                     name = "arcos_basic_engine",
-                    description = "Basic Read/Write/List access for all 8 ARCOS Basic Engines: SYSTEM (Record/Timer/Counter), THREAD (status, load program, start/stop), VARIABLE (list/get/set), POINT (list/get/set coordinates), IO (list/get/set), MOTION (list/get/set position), IMAQ (list/get/load/save image), WAVEFORM (list/get/set DAQ waveform).",
+                    description = "Basic Read/Write/List access for all 9 ARCOS Engines: SYSTEM, THREAD, VARIABLE, POINT, IO, MOTION, IMAQ, WAVEFORM, and USERPANEL (multi-panel list_panels, open_panel, switch_panel, close_panel, list_controls, get, set).",
                     inputSchema = new
                     {
                         type = "object",
                         properties = new
                         {
-                            engine = new { type = "string", description = "SYSTEM | THREAD | VARIABLE | POINT | IO | MOTION | IMAQ | WAVEFORM" },
-                            action = new { type = "string", description = "list | get | set | start | stop | set_program | load | save" },
+                            engine = new { type = "string", description = "SYSTEM | THREAD | VARIABLE | POINT | IO | MOTION | IMAQ | WAVEFORM | USERPANEL" },
+                            action = new { type = "string", description = "list | get | set | start | stop | set_program | load | save | list_panels | open_panel | switch_panel | close_panel | list_controls" },
                             subType = new { type = "string", description = "For SYSTEM: Record | Timer | Counter" },
                             name = new { type = "string", description = "Target item name (e.g. Variable key, Point name, IO port/alias, Timer/Counter/Record name, Motion device, IMAQ name, Waveform name)" },
                             section = new { type = "string", description = "Section name for VARIABLE (default: Global)" },
@@ -487,12 +489,24 @@ public static class ArcosMcpServer
             isTrailingPlaceholder = r.IsTrailingPlaceholder
         }).ToList();
 
+        var loadedUserPanels = mainWin.Engines.UserPanel.GetLoadedPanels()
+            .Select(p => new
+            {
+                panelName = p.PanelName,
+                filePath = p.FilePath,
+                isActive = p.IsActive,
+                controlCount = p.ControlCount
+            })
+            .ToList();
+
         return JsonSerializer.Serialize(new
         {
             mainTabIndex = tabIdx,
             mainTabHeader = tabHeader,
             subPanelIndex = subIdx,
             subPanelContentType = subContentType,
+            activeUserPanel = mainWin.Engines.UserPanel.ActivePanelName,
+            loadedUserPanels,
             machineStatus = txtStatus?.Text ?? "IDLE",
             isSupervisorMode = pnlSup?.IsVisible ?? false,
             isLocked = seq?.IsLocked ?? false,
@@ -575,6 +589,32 @@ public static class ArcosMcpServer
 
     private static string ToolListControls(MainWindow mainWin, JsonNode? args)
     {
+        string? panelFilter = args?["panel"]?.GetValue<string>();
+        if (!string.IsNullOrWhiteSpace(panelFilter))
+        {
+            var registered = mainWin.Engines.UserPanel.QueryControlsInPanel(panelFilter);
+            return JsonSerializer.Serialize(new
+            {
+                scopeUsed = $"UserPanelEngine:{panelFilter}",
+                activeUserPanel = mainWin.Engines.UserPanel.ActivePanelName,
+                loadedUserPanels = mainWin.Engines.UserPanel.GetLoadedPanelNames(),
+                controlCount = registered.Count,
+                controls = registered.Select(c => new
+                {
+                    panelName = c.PanelName,
+                    name = c.Name,
+                    kind = c.Kind.ToString(),
+                    role = c.Role.ToString(),
+                    value = c.Value,
+                    text = c.Text,
+                    isEnabled = c.IsEnabled,
+                    isVisible = c.IsVisible,
+                    isBlinking = c.IsBlinking,
+                    bindingTarget = c.BindingTarget
+                }).ToList()
+            }, new JsonSerializerOptions { WriteIndented = true });
+        }
+
         string? scope = args?["scope"]?.GetValue<string>();
         var root = GetScopeRoot(mainWin, scope);
         var list = new List<object>();
@@ -618,6 +658,8 @@ public static class ArcosMcpServer
         {
             scopeUsed = root.GetType().Name,
             activeDialogTitle = GetActiveDialog(mainWin)?.Title ?? "",
+            activeUserPanel = mainWin.Engines.UserPanel.ActivePanelName,
+            loadedUserPanels = mainWin.Engines.UserPanel.GetLoadedPanelNames(),
             controlCount = list.Count,
             controls = list
         }, new JsonSerializerOptions { WriteIndented = true });
@@ -1744,8 +1786,87 @@ public static class ArcosMcpServer
                 });
             }
 
+            // 9. USERPANEL (multi-panel inspection, open/switch/close, control read/write)
+            case "USERPANEL":
+            {
+                string targetPanelOrCtrl = !string.IsNullOrEmpty(name) ? name : value;
+                if (action == "open_panel" || action == "open")
+                {
+                    if (string.IsNullOrWhiteSpace(targetPanelOrCtrl))
+                        throw new ArgumentException("USERPANEL open_panel requires name or value (csvi path[, alias]).");
+                    mainWin.VM.NotifyUserPanelOpen(targetPanelOrCtrl);
+                    return JsonSerializer.Serialize(new
+                    {
+                        success = true,
+                        engine = "USERPANEL",
+                        action = "open_panel",
+                        requested = targetPanelOrCtrl,
+                        activePanel = engines.UserPanel.ActivePanelName,
+                        loadedPanels = engines.UserPanel.GetLoadedPanels()
+                    });
+                }
+                if (action == "switch_panel" || action == "switch")
+                {
+                    bool ok = engines.UserPanel.SwitchPanel(targetPanelOrCtrl);
+                    return JsonSerializer.Serialize(new
+                    {
+                        success = ok,
+                        engine = "USERPANEL",
+                        action = "switch_panel",
+                        activePanel = engines.UserPanel.ActivePanelName,
+                        loadedPanels = engines.UserPanel.GetLoadedPanels()
+                    });
+                }
+                if (action == "close_panel" || action == "close")
+                {
+                    mainWin.VM.NotifyUserPanelClose(targetPanelOrCtrl);
+                    return JsonSerializer.Serialize(new
+                    {
+                        success = true,
+                        engine = "USERPANEL",
+                        action = "close_panel",
+                        activePanel = engines.UserPanel.ActivePanelName,
+                        loadedPanels = engines.UserPanel.GetLoadedPanels()
+                    });
+                }
+                if (action == "get" && !string.IsNullOrWhiteSpace(name))
+                {
+                    string readVal = engines.UserPanel.ReadControlValue(name);
+                    return JsonSerializer.Serialize(new
+                    {
+                        success = true,
+                        engine = "USERPANEL",
+                        name,
+                        value = readVal,
+                        activePanel = engines.UserPanel.ActivePanelName
+                    });
+                }
+                if ((action == "set" || action == "write") && !string.IsNullOrWhiteSpace(name))
+                {
+                    engines.UserPanel.WriteGenericControl(name, value, triggerEvent: false);
+                    return JsonSerializer.Serialize(new
+                    {
+                        success = true,
+                        engine = "USERPANEL",
+                        name,
+                        value = engines.UserPanel.ReadControlValue(name),
+                        activePanel = engines.UserPanel.ActivePanelName
+                    });
+                }
+
+                string panelQuery = (args?["section"] != null) ? section : "*";
+                return JsonSerializer.Serialize(new
+                {
+                    success = true,
+                    engine = "USERPANEL",
+                    activePanel = engines.UserPanel.ActivePanelName,
+                    loadedPanels = engines.UserPanel.GetLoadedPanels(),
+                    controls = engines.UserPanel.QueryControlsInPanel(panelQuery)
+                });
+            }
+
             default:
-                throw new ArgumentException($"Unsupported engine '{engine}'. Expected: SYSTEM | THREAD | VARIABLE | POINT | IO | MOTION | IMAQ | WAVEFORM");
+                throw new ArgumentException($"Unsupported engine '{engine}'. Expected: SYSTEM | THREAD | VARIABLE | POINT | IO | MOTION | IMAQ | WAVEFORM | USERPANEL");
         }
     }
 
@@ -1791,12 +1912,40 @@ public static class ArcosMcpServer
             });
         }
 
-        if (target.Equals("SubPanel", StringComparison.OrdinalIgnoreCase))
+        if (target.Equals("SubPanel", StringComparison.OrdinalIgnoreCase)
+            || target.Equals("UserPanel", StringComparison.OrdinalIgnoreCase)
+            || !string.IsNullOrWhiteSpace(args?["panel"]?.GetValue<string>()))
         {
+            string? panelName = args?["panel"]?.GetValue<string>();
+            if (mainWin.TryRenderUserPanelSlot(panelName, (subCtrl, w, h) =>
+            {
+                using var subMat = RenderControlToBgrMat(subCtrl, w, h);
+                Cv2.ImWrite(fullOutPath, subMat);
+                return true;
+            }, out string resolvedPanel, out string? renderErr))
+            {
+                string activeNow = mainWin.Engines.UserPanel.ActivePanelName;
+                return JsonSerializer.Serialize(new
+                {
+                    success = true,
+                    target = string.IsNullOrWhiteSpace(panelName) ? target : "UserPanel",
+                    panelName = resolvedPanel,
+                    wasBackgroundCapture = !string.Equals(resolvedPanel, activeNow, StringComparison.OrdinalIgnoreCase),
+                    activeUserPanel = activeNow,
+                    outputPath = fullOutPath,
+                    fileSize = new FileInfo(fullOutPath).Length
+                });
+            }
+
+            if (!string.IsNullOrWhiteSpace(panelName))
+            {
+                throw new ArgumentException(renderErr ?? $"Failed to capture UserPanel '{panelName}'.");
+            }
+
             var sub = mainWin.FindControl<ContentControl>("UserFrontPanelContainer");
-            var subCtrl = (sub?.Content as Control) ?? sub ?? (Control)mainWin;
-            using var subMat = RenderControlToBgrMat(subCtrl, 760, 520);
-            Cv2.ImWrite(fullOutPath, subMat);
+            var subCtrlFallback = (sub?.Content as Control) ?? sub ?? (Control)mainWin;
+            using var fallbackMat = RenderControlToBgrMat(subCtrlFallback, 760, 520);
+            Cv2.ImWrite(fullOutPath, fallbackMat);
             return JsonSerializer.Serialize(new
             {
                 success = true,

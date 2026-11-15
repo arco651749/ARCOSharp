@@ -191,6 +191,8 @@
 | **WarningBox** | `System@WarningBox::$logic, $msg;` | 條件式, 提示文字 | 當條件為真時彈出警告詢問是否繼續 | 條件式內嚴禁帶 `$` |
 | **ProgramSection**| `System@ProgramSection::$no, $name;` | 編號 (0~99), 區段名稱 | 命名當前程式區段 | 方便架構化識別 |
 | **ProgramLoad** | `System@ProgramLoad::$file.pro;` | 專案檔名 | 載入並切換至新工程檔 | 機種整線大換模使用 |
+| **UserPanelOpen** | `System@UserPanelOpen::$vi(, $alias, Background);` | CSVI 檔名, 別名, 背景旗標 | 動態載入多張 `UserPanel.csvi` 並駐留 | 詳見 [UserPanelTemplates.md](file:///d:/AntiGravity/ARCOSharp/ARCOS/references/UserPanelTemplates.md) |
+| **UserPanelClose**| `System@UserPanelClose::$panelName;` | 面板別名或檔名 | 卸載並釋放指定 `UserPanel.csvi` | 自動退回上一張可用面板 |
 | **Pause / SystemPause** | `System@Pause::($thread)(, CONDITION=$iologic);` | 目標執行緒(選填), 觸發條件(選填) | 雙層暫停：未帶 `$thread` 為全域暫停；帶 `$thread` 為分站 Local Pause | 帶 `&` 的特權緒不受全域暫停阻擋 |
 | **Resume / SystemResume**| `System@Resume::($thread)(, CONDITION=$iologic);` | 目標執行緒(選填), 觸發條件(選填) | 雙層恢復：解除全域或指定分站執行緒之暫停 | 喚醒被 Pause 暫停的任務 |
 | **IncludeModule**| `System@IncludeModule::$module;` | 模組名稱 (如 Redis, Python) | 動態載入功能模組（驅動與設備由各模組自行管理） | 調用擴充模組前必須先 Include |
@@ -272,11 +274,24 @@
 | 指令 (Command) | 語法簽名 (Signature) | 參數說明 (Parameters) | 說明與核心語意 | 防呆與注意事項 |
 | :--- | :--- | :--- | :--- | :--- |
 | **Param2UserPanel**| `User@Param2UserPanel::;` | 無參數 | 強制將底層參數全部刷新至 HMI 面板 | 必須保留 `::;` |
+| **EnableControl** | `User@EnableControl::$ctrl` | 元件名 | 啟用指定面板控制項 (`IsEnabled = true`) | 全控制項通用 |
+| **DisableControl** | `User@DisableControl::$ctrl` | 元件名 | 停用並變灰指定面板控制項 (`IsEnabled = false`) | 防止運行中誤觸 |
+| **ShowControl** | `User@ShowControl::$ctrl` | 元件名 | 顯示指定面板控制項或指標 (`IsVisible = true`) | 動態展開狀態/操作區 |
+| **HideControl** | `User@HideControl::$ctrl` | 元件名 | 隱藏指定面板控制項或指標 (`IsVisible = false`) | 動態隱藏不適用元件 |
+| **SwitchUserPanel**| `User@SwitchUserPanel::$panelName` | 面板別名或檔名 | 切換目前前景作用中的 `UserPanel.csvi` | 所有控件指令皆支援 `Panel:Control` |
+| **QueryControls** | `User@QueryControls::$var(, Panel=Active\|*\|Name, Role=..., Kind=...)` | 輸出變數, 篩選條件 | 查詢已註冊 Control / Indicator 名稱清單 | `Panel=*` 回傳 `Panel:Control` |
+| **GetControlValue**| `User@GetControlValue::$ctrl(, $var)` | 元件名, 輸出變數 | 讀取指定 Control 或 Indicator 數值 | 預設存入 `$UserPanel_<ctrl>` |
+| **SetControlValue**| `User@SetControlValue::$ctrl, $val` | 元件名, 寫入值 | 依元件類別自動寫入數值/狀態 | 通用讀寫入口 |
 | **ButtonValue** | `User@ButtonValue::$btn, $logic` | 按鈕名, ON/OFF | 改變按鈕燈號顯示狀態 (不觸發點擊事件) | 純視覺狀態回饋 |
 | **ButtonTrigger** | `User@ButtonTrigger::$btn, $logic` | 按鈕名, ON/OFF | 程式化點擊按鈕 (觸發按鈕關聯的事件程序) | 模擬人工按鈕點擊 |
 | **ButtonBlinking**| `User@ButtonBlinking::$btn, $logic` | 按鈕名, 1/0 | 啟動/關閉按鈕持續閃爍提示 | 提示作業員按壓 |
 | **ButtonText** | `User@ButtonText::$btn, $text` | 按鈕名, 顯示字串 | 動態修改按鈕表面文字 | 如 "啟動" 變為 "暫停中" |
 | **TextBoxValue**| `User@TextBoxValue::$box, $text` | 文字框名, 內容字串 | 填寫文字框內容 (純顯示，不觸發事件) | 顯示條碼或測試狀態 |
+| **TextBoxTrigger**| `User@TextBoxTrigger::$box, $text` | 文字框名, 內容字串 | 寫入文字框並同步綁定變數 | 觸發變更同步 |
+| **TextBoxBlinking**| `User@TextBoxBlinking::$box, $logic` | 文字框名, 1/0 | 啟動/關閉文字框持續閃爍提示 | 提示異常或輸入 |
+| **TextRingValue** | `User@TextRingValue::$combo, $val` | 下拉選單名, 選項/索引 | 切換下拉選單選項 (純顯示，不觸發事件) | 切換配方或模式顯示 |
+| **TextRingTrigger**| `User@TextRingTrigger::$combo, $val` | 下拉選單名, 選項/索引 | 切換下拉選單並觸發事件與變數同步 | 帶連動邏輯之選項切換 |
+| **TextRingBlinking**| `User@TextRingBlinking::$combo, $logic` | 下拉選單名, 1/0 | 啟動/關閉下拉選單閃爍提示 | 提示作業員選擇 |
 | **TabValue** | `User@TabValue::$tab, $pageIdxOrName` | 分頁元件名, 索引/頁面名 | 切換 HMI 分頁畫面 (純顯示，不觸發事件) | 自動切換至測試頁或檢驗頁 |
 | **TabTrigger** | `User@TabTrigger::$tab, $pageIdxOrName` | 分頁元件名, 索引/頁面名 | 程式化切換分頁 (觸發換頁關聯事件) | 帶連動邏輯之換頁 |
 

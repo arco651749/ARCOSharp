@@ -42,13 +42,13 @@ public class IoSubsystemTrinityAndDynamicVerificationTests
     }
 
     [Fact]
-    public void Test1_StartupIsolation_NoPreloadedIoModuleOrDriver()
+    public void Test1_StartupIsolation_PreloadsIoModule_WithNoPreloadedDriver()
     {
-        // 1. 驗證新建立的 ModuleRegistry 僅包含 Basic 核心模組，IO 模組絕對不在其中
+        // 1. 驗證新建立的 ModuleRegistry 已預載入 IO 模組，且擴充模組不在其中
         var registry = ModuleRegistry.CreateDefault();
-        Assert.False(registry.HasModule("IO"), "IO 模組開機時嚴格禁止預載入！");
+        Assert.True(registry.HasModule("IO"), "IO 模組必須於開機時預載入！");
 
-        // 2. 驗證 DriverManager 開機時絕對為空
+        // 2. 驗證 DriverManager 開機時絕對為空（硬體驅動仍採按需掛載）
         var engines = new BasicEngines();
         var driverMgr = new DriverManager(engines);
         Assert.Empty(driverMgr.GetAllDevices());
@@ -56,15 +56,15 @@ public class IoSubsystemTrinityAndDynamicVerificationTests
     }
 
     [Fact]
-    public void Test2_OnDemandDynamicLoading_IoModule_TriggeredByCommand()
+    public void Test2_PreloadedIoModule_ExecutesCommandDirectly()
     {
         var registry = ModuleRegistry.CreateDefault();
         var engines = new BasicEngines();
         var driverMgr = new DriverManager(engines);
         var executor = new CommandExecutor(registry);
 
-        // 1. 執行前確認尚未載入
-        Assert.False(registry.HasModule("IO"));
+        // 1. 確認開機即已載入 IO 模組
+        Assert.True(registry.HasModule("IO"));
 
         // 2. 下達標準 ARCOS 指令：IO@SetPort::P0.0, 1;
         var program = ProgramTable.FromText("IO@SetPort::P0.0, 1", 0, "TestIOProgram");
@@ -76,13 +76,11 @@ public class IoSubsystemTrinityAndDynamicVerificationTests
         // 3. 執行單步
         var result = executor.ExecuteStep(ctx);
 
-        // 4. 驗證 IO 模組已於下指令當下被隨選動態載入！
-        Assert.True(registry.HasModule("IO"), "下達 IO 指令時必須自動隨選加載 IO 模組！");
+        // 4. 驗證指令未發生錯誤，IO handler 存在且 P0.0 設為 true
+        Assert.NotEqual(CommandStatus.Error, result.Status);
         var handler = registry.GetHandler("IO");
         Assert.NotNull(handler);
         Assert.Equal("IO", handler.ModuleName);
-
-        // 5. 驗證指令確實被執行，P0.0 設為 true
         Assert.True(engines.Io.GetPort("P0.0"));
     }
 

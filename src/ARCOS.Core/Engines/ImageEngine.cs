@@ -16,6 +16,8 @@ public class ImageEngine : IDisposable
     private readonly object _lock = new();
     private readonly ConcurrentDictionary<string, ImaqArrayEntry> _imaqEntries = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, List<MachinePoint>> _calibCoords = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, string> _userDisplayBindings = new(StringComparer.OrdinalIgnoreCase);
+    private readonly List<string> _userDisplayControls = new();
     private readonly IoEngine? _ioEngine;
     private bool _disposed = false;
 
@@ -25,6 +27,11 @@ public class ImageEngine : IDisposable
     /// 當影像更新時通知 UI 刷新畫面：(ImaqName, CurrentIndex)
     /// </summary>
     public event Action<string, int>? ImageUpdated;
+
+    /// <summary>
+    /// 當腳本執行 Capture@Display2User::$cam, $control 時通知 UI 直接更新目標 Image 控制項：(CamName, ControlName)
+    /// </summary>
+    public event Action<string, string>? UserDisplayRequested;
 
     public ImageEngine(IoEngine? ioEngine = null)
     {
@@ -368,6 +375,114 @@ public class ImageEngine : IDisposable
     public IReadOnlyList<string> GetAllNames()
     {
         return _imaqEntries.Keys.ToList();
+    }
+
+    /// <summary>
+    /// 設定目前 UserPanel.csvi 上自動掃描到的可顯示影像控制項名稱清單 (供 Display2User Wizard 使用)
+    /// </summary>
+    public void SetUserDisplayControls(IEnumerable<string> controlNames)
+    {
+        lock (_lock)
+        {
+            _userDisplayControls.Clear();
+            if (controlNames != null)
+            {
+                foreach (var name in controlNames.Where(n => !string.IsNullOrWhiteSpace(n)).Distinct(StringComparer.OrdinalIgnoreCase))
+                {
+                    _userDisplayControls.Add(name.Trim());
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// 取得目前 UserPanel.csvi 上可顯示影像的控制項名稱清單
+    /// </summary>
+    public IReadOnlyList<string> GetUserDisplayControls()
+    {
+        lock (_lock)
+        {
+            return _userDisplayControls.ToList();
+        }
+    }
+
+    /// <summary>
+    /// 將指定攝影機/影像名稱綁定並推送顯示至 UserPanel 上的指定控制項 (對應 Capture@Display2User::$cam, $control)
+    /// </summary>
+    public void DisplayToUserControl(string camName, string controlName)
+    {
+        if (string.IsNullOrWhiteSpace(camName) || string.IsNullOrWhiteSpace(controlName)) return;
+        string cam = camName.Trim();
+        string ctrl = controlName.Trim();
+        _userDisplayBindings[ctrl] = cam;
+        UserDisplayRequested?.Invoke(cam, ctrl);
+    }
+
+    /// <summary>
+    /// 查詢指定 UserPanel 控制項最後綁定的攝影機名稱
+    /// </summary>
+    public string? GetBoundCameraForControl(string controlName)
+    {
+        if (string.IsNullOrWhiteSpace(controlName)) return null;
+        return _userDisplayBindings.TryGetValue(controlName.Trim(), out var cam) ? cam : null;
+    }
+
+    /// <summary>
+    /// 將指定攝影機目前畫面連同非破壞性 Overlay 標註與 ROI 框渲染為 PNG byte[]，供 UI Image 控制項直接轉為 Bitmap 顯示
+    /// </summary>
+    public byte[]? RenderFrameWithOverlaysToPngBytes(string name)
+    {
+        try
+        {
+            ImaqFrame? frame = null;
+            try
+            {
+                frame = GetFrame(name);
+            }
+            catch (KeyNotFoundException)
+            {
+                using var synth = new Mat(240, 320, MatType.CV_8UC3, new Scalar(30, 41, 59));
+                Cv2.Circle(synth, new Point(160, 120), 45, new Scalar(16, 185, 129), 2);
+                Cv2.Line(synth, new Point(100, 120), new Point(220, 120), new Scalar(56, 189, 248), 1);
+                Cv2.Line(synth, new Point(160, 60), new Point(160, 180), new Scalar(56, 189, 248), 1);
+                Cv2.PutText(synth, $"CAM: {name}", new Point(16, 28), HersheyFonts.HersheySimplex, 0.6, new Scalar(248, 250, 252), 1);
+                SetSingleImage(name, synth);
+                frame = GetFrame(name);
+            }
+
+            if (frame?.Image == null || frame.Image.Empty()) return null;
+
+            using var canvas = frame.Image.Clone();
+            foreach (var overlay in frame.Overlays)
+            {
+                var color = Scalar.FromRgb(0, 255, 0);
+                if (overlay.ShapeType == OverlayShapeType.Circle)
+                {
+                    Cv2.Circle(canvas, new Point((int)overlay.X1, (int)overlay.Y1), (int)overlay.Radius, color, overlay.Thickness);
+                }
+                else if (overlay.ShapeType == OverlayShapeType.Line)
+                {
+                    Cv2.Line(canvas, new Point((int)overlay.X1, (int)overlay.Y1), new Point((int)overlay.X2, (int)overlay.Y2), color, overlay.Thickness);
+                }
+                else if (overlay.ShapeType == OverlayShapeType.Crosshair)
+                {
+                    int arm = 15;
+                    Cv2.Line(canvas, new Point((int)overlay.X1 - arm, (int)overlay.Y1), new Point((int)overlay.X1 + arm, (int)overlay.Y1), color, overlay.Thickness);
+                    Cv2.Line(canvas, new Point((int)overlay.X1, (int)overlay.Y1 - arm), new Point((int)overlay.X1, (int)overlay.Y1 + arm), color, overlay.Thickness);
+                }
+                else if (overlay.ShapeType == OverlayShapeType.Text)
+                {
+                    Cv2.PutText(canvas, overlay.Text, new Point((int)overlay.X1, (int)overlay.Y1), HersheyFonts.HersheySimplex, 0.8, color, overlay.Thickness);
+                }
+            }
+
+            Cv2.ImEncode(".png", canvas, out byte[] buf);
+            return buf;
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     public void Dispose()

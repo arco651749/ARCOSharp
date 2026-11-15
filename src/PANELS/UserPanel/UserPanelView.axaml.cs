@@ -1,4 +1,5 @@
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
 using ARCOS.Core.Drivers;
@@ -48,7 +49,24 @@ public partial class UserPanelView : UserControl
 
     private void OnToggleVacuumClick(object? sender, RoutedEventArgs e)
     {
-        _vm.ToggleVacuum();
+        if (sender is ToggleButton tb && tb.IsChecked.HasValue)
+        {
+            _vm.SetVacuum(tb.IsChecked.Value);
+        }
+        else
+        {
+            _vm.ToggleVacuum();
+        }
+    }
+
+    private void OnConfirmClick(object? sender, RoutedEventArgs e)
+    {
+        _vm.ConfirmOperatorPrompt();
+    }
+
+    private void OnApplyVarsClick(object? sender, RoutedEventArgs e)
+    {
+        _vm.ApplyVariablesToEngine();
     }
 
     private void OnResetStatsClick(object? sender, RoutedEventArgs e)
@@ -62,5 +80,18 @@ public partial class UserPanelView : UserControl
         {
             _vm.ToggleIoBit(port);
         }
+    }
+
+    private void OnFilterElementsClick(object? sender, RoutedEventArgs e)
+    {
+        if (sender is Button btn && btn.Tag is string roleFilter)
+        {
+            _vm.SetRoleFilter(roleFilter);
+        }
+    }
+
+    private void OnRefreshElementsClick(object? sender, RoutedEventArgs e)
+    {
+        _vm.RefreshPanelElements();
     }
 }

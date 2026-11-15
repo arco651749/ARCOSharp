@@ -5,166 +5,224 @@
              Background="#F8FAFC">
 
     <Grid RowDefinitions="Auto,Auto,*" Margin="8">
-        <!-- 1. 產線頂部狀態欄與 CSVI 識別標籤 -->
+        <!-- 1. 產線頂部狀態欄 (Indicators: LedStationState, IndStationState) -->
         <Border Grid.Row="0" Background="#FFFFFF" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="6" Padding="12,8" Margin="0,0,0,8">
             <Grid ColumnDefinitions="*,Auto">
                 <StackPanel Grid.Column="0" Spacing="2" VerticalAlignment="Center">
                     <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                        <TextBlock Text="🏭 STATION 01 : AUTOMATED INSPECTION &amp; PACKAGING" FontWeight="Black" FontSize="15" Foreground="#0F172A"/>
+                        <TextBlock Text="🏭 ARCOS USER PANEL : IO · VARIABLE · CAPTURE · DAQ" FontWeight="Black" FontSize="14.5" Foreground="#0F172A"/>
                         <Border Background="#0284C7" CornerRadius="3" Padding="6,2">
-                            <TextBlock Text="CSVI 3.0 USER HMI" FontSize="10" FontWeight="Bold" Foreground="White"/>
+                            <TextBlock Text="CSVI 3.0 STANDARD HMI" FontSize="10" FontWeight="Bold" Foreground="White"/>
                         </Border>
                     </StackPanel>
-                    <TextBlock Text="Model: ARCOS-PROD-2026 | Recipe: Master_V1.prog | SubPanel Canvas Mounted" FontSize="11" Foreground="#64748B"/>
+                    <TextBlock Text="Supports User@*, Capture@Display2User (ImgCam1), DAQ@Display2User (PlotDaq1), and Control/Indicator Query &amp; R/W" FontSize="11" Foreground="#64748B"/>
                 </StackPanel>
 
-                <!-- 運行狀態標籤 -->
                 <Border Grid.Column="1" Background="#F1F5F9" BorderBrush="#CBD5E1" BorderThickness="1" CornerRadius="4" Padding="10,4">
                     <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                        <Ellipse Width="10" Height="10" Fill="{Binding StationStateBrush}"/>
-                        <TextBlock Text="{Binding StationState}" FontSize="12" FontWeight="Bold" Foreground="#0F172A"/>
+                        <Ellipse x:Name="LedStationState" Width="10" Height="10" Fill="{Binding StationStateBrush}"/>
+                        <TextBlock x:Name="IndStationState" Text="{Binding StationState}" FontSize="12" FontWeight="Bold" Foreground="#0F172A"/>
                     </StackPanel>
                 </Border>
             </Grid>
         </Border>
 
-        <!-- 2. 即時產能 KPI 統計卡片群 -->
+        <!-- 2. VARIABLE 即時 KPI Indicators -->
         <UniformGrid Grid.Row="1" Columns="4" Margin="0,0,0,8">
-            <!-- TOTAL PARTS -->
             <Border Background="White" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="6" Padding="10,6" Margin="0,0,4,0">
                 <StackPanel Spacing="2">
-                    <TextBlock Text="TOTAL PARTS" FontSize="10" FontWeight="Bold" Foreground="#64748B"/>
-                    <TextBlock Text="{Binding TotalParts}" FontSize="20" FontWeight="Black" Foreground="#0284C7"/>
+                    <TextBlock Text="TOTAL PARTS ($TotalCount)" FontSize="10" FontWeight="Bold" Foreground="#64748B"/>
+                    <TextBlock x:Name="IndTotalParts" Tag="VAR:$TotalCount" Text="{Binding TotalParts}" FontSize="20" FontWeight="Black" Foreground="#0284C7"/>
                 </StackPanel>
             </Border>
 
-            <!-- OK / YIELD -->
             <Border Background="White" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="6" Padding="10,6" Margin="2,0">
                 <StackPanel Spacing="2">
-                    <TextBlock Text="PASS / YIELD" FontSize="10" FontWeight="Bold" Foreground="#64748B"/>
+                    <TextBlock Text="PASS / YIELD ($OkCount)" FontSize="10" FontWeight="Bold" Foreground="#64748B"/>
                     <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Bottom">
-                        <TextBlock Text="{Binding OkParts}" FontSize="20" FontWeight="Black" Foreground="#10B981"/>
-                        <TextBlock Text="{Binding YieldRate, StringFormat='({0})'}" FontSize="13" FontWeight="Bold" Foreground="#10B981" VerticalAlignment="Center"/>
+                        <TextBlock x:Name="IndOkParts" Tag="VAR:$OkCount" Text="{Binding OkParts}" FontSize="20" FontWeight="Black" Foreground="#10B981"/>
+                        <TextBlock x:Name="IndYieldRate" Text="{Binding YieldRate, StringFormat='({0})'}" FontSize="13" FontWeight="Bold" Foreground="#10B981" VerticalAlignment="Center"/>
                     </StackPanel>
                 </StackPanel>
             </Border>
 
-            <!-- DEFECT / REJECT -->
             <Border Background="White" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="6" Padding="10,6" Margin="2,0">
                 <StackPanel Spacing="2">
-                    <TextBlock Text="DEFECT / REJECT" FontSize="10" FontWeight="Bold" Foreground="#64748B"/>
-                    <TextBlock Text="{Binding NgParts}" FontSize="20" FontWeight="Black" Foreground="#EF4444"/>
+                    <TextBlock Text="DEFECT / REJECT ($NgCount)" FontSize="10" FontWeight="Bold" Foreground="#64748B"/>
+                    <TextBlock x:Name="IndNgParts" Tag="VAR:$NgCount" Text="{Binding NgParts}" FontSize="20" FontWeight="Black" Foreground="#EF4444"/>
                 </StackPanel>
             </Border>
 
-            <!-- CYCLE TIME -->
             <Border Background="White" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="6" Padding="10,6" Margin="4,0,0,0">
                 <StackPanel Spacing="2">
-                    <TextBlock Text="CYCLE TIME" FontSize="10" FontWeight="Bold" Foreground="#64748B"/>
-                    <TextBlock Text="{Binding CycleTime}" FontSize="20" FontWeight="Black" Foreground="#F59E0B"/>
+                    <TextBlock Text="CYCLE TIME ($CycleTime)" FontSize="10" FontWeight="Bold" Foreground="#64748B"/>
+                    <TextBlock x:Name="IndCycleTime" Tag="VAR:$CycleTime" Text="{Binding CycleTime}" FontSize="20" FontWeight="Black" Foreground="#F59E0B"/>
                 </StackPanel>
             </Border>
         </UniformGrid>
 
-        <!-- 3. 主操作工作區 (左欄手動模擬控制，右欄產線重要 IO 點位矩陣) -->
-        <Grid Grid.Row="2" ColumnDefinitions="*,*">
-            <!-- 左欄：手動產線點動控制與模擬 -->
-            <Border Grid.Column="0" Background="White" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="6" Padding="12" Margin="0,0,4,0">
-                <Grid RowDefinitions="Auto,Auto,*,Auto">
-                    <TextBlock Grid.Row="0" Text="🕹️ MANUAL STATION CONTROLS" FontWeight="Bold" FontSize="12.5" Foreground="#0F172A" Margin="0,0,0,8"/>
+        <!-- 3. 主工作區：左欄 TabControl (Operations & Vars / IO Matrix / Element Inspector)，右欄 CAPTURE + DAQ 常駐顯示 -->
+        <Grid Grid.Row="2" ColumnDefinitions="1.15*,*">
+            <Border Grid.Column="0" Background="White" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="6" Padding="8" Margin="0,0,4,0">
+                <TabControl x:Name="MainTab">
+                    <!-- Tab 0: Operations, Controls & Variable I/O -->
+                    <TabItem x:Name="TabControlOps" Header="Controls &amp; Vars">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                            <StackPanel Spacing="8" Margin="4,8,4,4">
+                                <TextBlock Text="🕹️ STATION CONTROLS (User@Button*)" FontWeight="Bold" FontSize="12" Foreground="#0F172A"/>
 
-                    <StackPanel Grid.Row="1" Spacing="8">
-                        <!-- 模擬進料 -->
-                        <Button Click="OnSimulatePartFeedClick" Height="36" HorizontalAlignment="Stretch" Background="#0284C7" Foreground="White" FontWeight="Bold" CornerRadius="4">
-                            <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center" VerticalAlignment="Center">
-                                <TextBlock Text="📥" FontSize="14" VerticalAlignment="Center"/>
-                                <TextBlock Text="Simulate Part Feed (P0.0 = 1 / Start?)" FontSize="12" FontWeight="Bold" VerticalAlignment="Center"/>
-                            </StackPanel>
-                        </Button>
+                                <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto,Auto">
+                                    <Button x:Name="BtnPartFeed" Grid.Row="0" Grid.Column="0" Click="OnSimulatePartFeedClick"
+                                            Content="📥 Part Feed (P0.0)" Height="34" HorizontalAlignment="Stretch" Margin="0,0,4,6"
+                                            Background="#0284C7" Foreground="White" FontWeight="Bold" CornerRadius="4"/>
 
-                        <!-- 觸發檢測 -->
-                        <Button Click="OnTriggerInspectionClick" Height="36" HorizontalAlignment="Stretch" Background="#10B981" Foreground="White" FontWeight="Bold" CornerRadius="4">
-                            <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center" VerticalAlignment="Center">
-                                <TextBlock Text="📷" FontSize="14" VerticalAlignment="Center"/>
-                                <TextBlock Text="Trigger Inspection (P0.7 Cam Trigger)" FontSize="12" FontWeight="Bold" VerticalAlignment="Center"/>
-                            </StackPanel>
-                        </Button>
+                                    <Button x:Name="BtnInspect" Grid.Row="0" Grid.Column="1" Click="OnTriggerInspectionClick"
+                                            Content="📷 Inspect (P0.7)" Height="34" HorizontalAlignment="Stretch" Margin="4,0,0,6"
+                                            Background="#10B981" Foreground="White" FontWeight="Bold" CornerRadius="4"/>
 
-                        <!-- 剔除不良品 -->
-                        <Button Click="OnRejectPartClick" Height="36" HorizontalAlignment="Stretch" Background="#EF4444" Foreground="White" FontWeight="Bold" CornerRadius="4">
-                            <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center" VerticalAlignment="Center">
-                                <TextBlock Text="⚠️" FontSize="14" VerticalAlignment="Center"/>
-                                <TextBlock Text="Reject Cylinder Action (P1.2 Reject)" FontSize="12" FontWeight="Bold" VerticalAlignment="Center"/>
-                            </StackPanel>
-                        </Button>
+                                    <Button x:Name="BtnReject" Grid.Row="1" Grid.Column="0" Click="OnRejectPartClick"
+                                            Content="⚠️ Reject (P1.2)" Height="34" HorizontalAlignment="Stretch" Margin="0,0,4,6"
+                                            Background="#EF4444" Foreground="White" FontWeight="Bold" CornerRadius="4"/>
 
-                        <!-- 真空治具開關 -->
-                        <Button Click="OnToggleVacuumClick" Height="34" HorizontalAlignment="Stretch" Background="#0F766E" Foreground="White" FontWeight="SemiBold" CornerRadius="4">
-                            <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center" VerticalAlignment="Center">
-                                <TextBlock Text="💨" FontSize="13" VerticalAlignment="Center"/>
-                                <TextBlock Text="Toggle Vacuum Fixture (P0.5)" FontSize="12" VerticalAlignment="Center"/>
-                            </StackPanel>
-                        </Button>
+                                    <ToggleButton x:Name="TogVacuum" Grid.Row="1" Grid.Column="1" Tag="IO:P0.5"
+                                                  IsChecked="{Binding VacuumOn}" Click="OnToggleVacuumClick"
+                                                  Content="{Binding VacuumStatusText}" Height="34" HorizontalAlignment="Stretch" Margin="4,0,0,6"
+                                                  Background="#0F766E" Foreground="White" FontWeight="SemiBold" CornerRadius="4"/>
 
-                        <!-- 重設統計 -->
-                        <Button Click="OnResetStatsClick" Height="32" HorizontalAlignment="Stretch" Background="#F1F5F9" Foreground="#475569" FontWeight="SemiBold" CornerRadius="4">
-                            <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center" VerticalAlignment="Center">
-                                <TextBlock Text="🔄" FontSize="13" VerticalAlignment="Center"/>
-                                <TextBlock Text="Reset Production Stats &amp; IO" FontSize="11.5" VerticalAlignment="Center"/>
-                            </StackPanel>
-                        </Button>
-                    </StackPanel>
+                                    <Button x:Name="BtnConfirm" Grid.Row="2" Grid.Column="0" Click="OnConfirmClick"
+                                            Content="✅ Operator Confirm" Height="34" HorizontalAlignment="Stretch" Margin="0,0,4,0"
+                                            Background="#4F46E5" Foreground="White" FontWeight="Bold" CornerRadius="4"/>
 
-                    <!-- 當前流程與最後動作日誌 -->
-                    <Border Grid.Row="3" Background="#F8FAFC" BorderBrush="#CBD5E1" BorderThickness="1" CornerRadius="4" Padding="10,8" Margin="0,10,0,0">
-                        <StackPanel Spacing="4">
-                            <TextBlock Text="CURRENT STEP:" FontSize="10" FontWeight="Bold" Foreground="#64748B"/>
-                            <TextBlock Text="{Binding CurrentStep}" FontSize="12" FontWeight="Bold" Foreground="#0284C7"/>
-                            <Separator Height="1" Background="#E2E8F0" Margin="0,4"/>
-                            <TextBlock Text="{Binding LastActionLog}" FontSize="11" FontFamily="Consolas, Courier New, monospace" Foreground="#475569"/>
-                        </StackPanel>
-                    </Border>
-                </Grid>
-            </Border>
+                                    <Button x:Name="BtnResetStats" Grid.Row="2" Grid.Column="1" Click="OnResetStatsClick"
+                                            Content="🔄 Reset Stats &amp; IO" Height="34" HorizontalAlignment="Stretch" Margin="4,0,0,0"
+                                            Background="#F1F5F9" Foreground="#475569" FontWeight="SemiBold" CornerRadius="4"/>
+                                </Grid>
 
-            <!-- 右欄：重要 IO 點位狀態與手動開關 -->
-            <Border Grid.Column="1" Background="White" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="6" Padding="12" Margin="4,0,0,0">
-                <Grid RowDefinitions="Auto,*">
-                    <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="0,0,0,8">
-                        <TextBlock Grid.Column="0" Text="⚡ CRITICAL IO &amp; INTERLOCK STATUS" FontWeight="Bold" FontSize="12.5" Foreground="#0F172A"/>
-                        <TextBlock Grid.Column="1" Text="Live 150ms Poll" FontSize="10" Foreground="#94A3B8" VerticalAlignment="Center"/>
-                    </Grid>
+                                <Separator Height="1" Background="#E2E8F0" Margin="0,2"/>
 
-                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
-                        <ItemsControl ItemsSource="{Binding StationIos}">
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate>
-                                    <Border Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="4" Padding="8,4" Margin="0,0,0,4">
-                                        <Grid ColumnDefinitions="Auto,65,*,Auto,Auto">
-                                            <!-- LED 燈號 -->
-                                            <Ellipse Grid.Column="0" Width="10" Height="10" Fill="{Binding StateBrush}" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                                <TextBlock Text="📦 VARIABLE CONTROLS &amp; INDICATORS" FontWeight="Bold" FontSize="12" Foreground="#0F172A"/>
 
-                                            <!-- Port 代號 -->
-                                            <TextBlock Grid.Column="1" Text="{Binding Port}" FontFamily="Consolas" FontWeight="Bold" FontSize="11" Foreground="#0F172A" VerticalAlignment="Center"/>
+                                <Grid ColumnDefinitions="110,*,Auto" RowDefinitions="Auto,Auto,Auto,Auto">
+                                    <TextBlock Grid.Row="0" Grid.Column="0" Text="$Recipe :" VerticalAlignment="Center" FontSize="11.5" Foreground="#475569" FontWeight="SemiBold"/>
+                                    <TextBox x:Name="TxtRecipe" Grid.Row="0" Grid.Column="1" Tag="VAR:$Recipe" Text="{Binding Recipe}" Margin="0,0,6,6" FontSize="12"/>
+                                    <Button x:Name="BtnApplyVars" Grid.Row="0" Grid.RowSpan="3" Grid.Column="2" Click="OnApplyVarsClick"
+                                            Content="Sync Vars" Background="#0284C7" Foreground="White" FontWeight="Bold" VerticalAlignment="Stretch" Margin="0,0,0,6" Padding="10,0"/>
 
-                                            <!-- 名稱 -->
-                                            <TextBlock Grid.Column="2" Text="{Binding Name}" FontSize="11" Foreground="#475569" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
+                                    <TextBlock Grid.Row="1" Grid.Column="0" Text="$LotNo :" VerticalAlignment="Center" FontSize="11.5" Foreground="#475569" FontWeight="SemiBold"/>
+                                    <TextBox x:Name="TxtLotNo" Grid.Row="1" Grid.Column="1" Tag="VAR:$LotNo" Text="{Binding LotNo}" Margin="0,0,6,6" FontSize="12"/>
 
-                                            <!-- ON / OFF 文字狀態膠囊 -->
-                                            <Border Grid.Column="3" Background="{Binding StateBrush}" CornerRadius="3" Padding="6,1" Margin="6,0" VerticalAlignment="Center">
-                                                <TextBlock Text="{Binding StateText}" FontSize="9.5" FontWeight="Bold" Foreground="White"/>
-                                            </Border>
+                                    <TextBlock Grid.Row="2" Grid.Column="0" Text="$RunMode :" VerticalAlignment="Center" FontSize="11.5" Foreground="#475569" FontWeight="SemiBold"/>
+                                    <ComboBox x:Name="CmbRunMode" Grid.Row="2" Grid.Column="1" Tag="VAR:$RunMode" ItemsSource="{Binding RunModes}" SelectedItem="{Binding RunMode}" HorizontalAlignment="Stretch" Margin="0,0,6,6"/>
 
-                                            <!-- 手動切換點擊按鈕 -->
-                                            <Button Grid.Column="4" Content="Toggle" Click="OnIoToggleClick" Tag="{Binding Port}" Height="24" Padding="6,0" FontSize="10" FontWeight="SemiBold" Background="#E2E8F0" Foreground="#334155" CornerRadius="3" VerticalAlignment="Center"/>
+                                    <TextBlock Grid.Row="3" Grid.Column="0" Text="HMI Message :" VerticalAlignment="Center" FontSize="11.5" Foreground="#475569" FontWeight="SemiBold"/>
+                                    <TextBox x:Name="TxtHmiMessage" Grid.Row="3" Grid.Column="1" Grid.ColumnSpan="2" Text="Ready for sequence..." FontSize="12"/>
+                                </Grid>
+
+                                <Border Background="#F8FAFC" BorderBrush="#CBD5E1" BorderThickness="1" CornerRadius="4" Padding="10,8">
+                                    <StackPanel Spacing="4">
+                                        <Grid ColumnDefinitions="*,Auto">
+                                            <TextBlock Grid.Column="0" Text="CURRENT STEP &amp; RESULT INDICATOR:" FontSize="10" FontWeight="Bold" Foreground="#64748B"/>
+                                            <TextBlock x:Name="IndVarResult" Grid.Column="1" Tag="VAR:$InspectionResult" Text="{Binding InspectionResult}" FontSize="11" FontWeight="Black" Foreground="#0284C7"/>
                                         </Grid>
-                                    </Border>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                    </ScrollViewer>
-                </Grid>
+                                        <TextBlock x:Name="IndCurrentStep" Text="{Binding CurrentStep}" FontSize="12" FontWeight="Bold" Foreground="#0284C7"/>
+                                        <Separator Height="1" Background="#E2E8F0" Margin="0,2"/>
+                                        <TextBlock x:Name="IndActionLog" Text="{Binding LastActionLog}" FontSize="11" FontFamily="Consolas, Courier New, monospace" Foreground="#475569" TextWrapping="Wrap"/>
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+                        </ScrollViewer>
+                    </TabItem>
+
+                    <!-- Tab 1: IO Matrix -->
+                    <TabItem x:Name="TabIoMatrix" Header="IO Matrix">
+                        <Grid RowDefinitions="Auto,*" Margin="4,8,4,4">
+                            <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="0,0,0,6">
+                                <TextBlock Grid.Column="0" Text="⚡ IO PORTS &amp; VIRTUAL FLAGS (150ms Poll)" FontWeight="Bold" FontSize="12" Foreground="#0F172A"/>
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                    <Ellipse x:Name="LedP0_0" Tag="IO:P0.0" Width="9" Height="9" Fill="#64748B"/>
+                                    <TextBlock Text="P0.0" FontSize="10" Foreground="#475569"/>
+                                    <Ellipse x:Name="LedP0_5" Tag="IO:P0.5" Width="9" Height="9" Fill="#64748B"/>
+                                    <TextBlock Text="P0.5" FontSize="10" Foreground="#475569"/>
+                                    <Ellipse x:Name="LedP0_7" Tag="IO:P0.7" Width="9" Height="9" Fill="#64748B"/>
+                                    <TextBlock Text="P0.7" FontSize="10" Foreground="#475569"/>
+                                    <Ellipse x:Name="LedP1_2" Tag="IO:P1.2" Width="9" Height="9" Fill="#64748B"/>
+                                    <TextBlock Text="P1.2" FontSize="10" Foreground="#475569"/>
+                                </StackPanel>
+                            </Grid>
+
+                            <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                                <ItemsControl ItemsSource="{Binding StationIos}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="4" Padding="8,4" Margin="0,0,0,4">
+                                                <Grid ColumnDefinitions="Auto,120,*,Auto,Auto">
+                                                    <Ellipse Grid.Column="0" Width="10" Height="10" Fill="{Binding StateBrush}" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                                                    <TextBlock Grid.Column="1" Text="{Binding Port}" FontFamily="Consolas" FontWeight="Bold" FontSize="11" Foreground="#0F172A" VerticalAlignment="Center"/>
+                                                    <TextBlock Grid.Column="2" Text="{Binding Name}" FontSize="11" Foreground="#475569" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
+                                                    <Border Grid.Column="3" Background="{Binding StateBrush}" CornerRadius="3" Padding="6,1" Margin="6,0" VerticalAlignment="Center">
+                                                        <TextBlock Text="{Binding StateText}" FontSize="9.5" FontWeight="Bold" Foreground="White"/>
+                                                    </Border>
+                                                    <Button Grid.Column="4" Content="Toggle" Click="OnIoToggleClick" Tag="{Binding Port}" Height="24" Padding="8,0" FontSize="10" FontWeight="SemiBold" Background="#E2E8F0" Foreground="#334155" CornerRadius="3" VerticalAlignment="Center"/>
+                                                </Grid>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </ScrollViewer>
+                        </Grid>
+                    </TabItem>
+
+                    <!-- Tab 2: Discovered Controls & Indicators Inspector -->
+                    <TabItem x:Name="TabElements" Header="Control &amp; Indicator">
+                        <Grid RowDefinitions="Auto,*" Margin="4,8,4,4">
+                            <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="6" Margin="0,0,0,6">
+                                <TextBlock Text="Filter:" VerticalAlignment="Center" FontSize="11.5" FontWeight="Bold" Foreground="#334155"/>
+                                <Button Content="ALL" Click="OnFilterElementsClick" Tag="ALL" Height="26" Padding="10,0" FontSize="10.5"/>
+                                <Button Content="CONTROL" Click="OnFilterElementsClick" Tag="CONTROL" Height="26" Padding="10,0" FontSize="10.5" Background="#E0F2FE" Foreground="#0369A1"/>
+                                <Button Content="INDICATOR" Click="OnFilterElementsClick" Tag="INDICATOR" Height="26" Padding="10,0" FontSize="10.5" Background="#EDE9FE" Foreground="#6D28D9"/>
+                                <Button Content="Refresh" Click="OnRefreshElementsClick" Height="26" Padding="10,0" FontSize="10.5" Background="#0F172A" Foreground="White"/>
+                            </StackPanel>
+
+                            <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                                <ItemsControl ItemsSource="{Binding PanelElements}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="4" Padding="8,4" Margin="0,0,0,4">
+                                                <Grid ColumnDefinitions="Auto,135,85,*,110">
+                                                    <Border Grid.Column="0" Background="{Binding RoleBrush}" CornerRadius="3" Padding="5,1" Margin="0,0,6,0" VerticalAlignment="Center">
+                                                        <TextBlock Text="{Binding Role}" FontSize="9.5" FontWeight="Bold" Foreground="White"/>
+                                                    </Border>
+                                                    <TextBlock Grid.Column="1" Text="{Binding Name}" FontFamily="Consolas" FontWeight="Bold" FontSize="11" Foreground="#0F172A" VerticalAlignment="Center"/>
+                                                    <TextBlock Grid.Column="2" Text="{Binding Kind}" FontSize="10.5" Foreground="#64748B" VerticalAlignment="Center"/>
+                                                    <TextBlock Grid.Column="3" Text="{Binding Value}" FontFamily="Consolas" FontSize="10.5" Foreground="#0284C7" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
+                                                    <TextBlock Grid.Column="4" Text="{Binding BindingTarget}" FontFamily="Consolas" FontSize="10" Foreground="#475569" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
+                                                </Grid>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </ScrollViewer>
+                        </Grid>
+                    </TabItem>
+                </TabControl>
             </Border>
+
+            <!-- 右欄：CAPTURE 影像指標 + DAQ 波形圖表指標 -->
+            <Grid Grid.Column="1" RowDefinitions="*,*" Margin="4,0,0,0">
+                <Border Grid.Row="0" Background="#0F172A" BorderBrush="#334155" BorderThickness="1" CornerRadius="6" Padding="6" Margin="0,0,0,4" MinHeight="140">
+                    <Grid RowDefinitions="Auto,*">
+                        <TextBlock Grid.Row="0" Text="📷 CAPTURE INDICATOR : ImgCam1 (Capture@Display2User)" FontSize="10.5" FontWeight="Bold" Foreground="#94A3B8" Margin="2,0,0,4"/>
+                        <Image x:Name="ImgCam1" Grid.Row="1" AutomationProperties.AutomationId="ImgCam1" Tag="CAPTURE:Cam1" Stretch="Uniform"/>
+                    </Grid>
+                </Border>
+
+                <Border Grid.Row="1" Background="#0F172A" BorderBrush="#334155" BorderThickness="1" CornerRadius="6" Padding="6" Margin="0,4,0,0" MinHeight="140">
+                    <Grid RowDefinitions="Auto,*">
+                        <TextBlock Grid.Row="0" Text="📈 DAQ WAVEFORM INDICATOR : PlotDaq1 (DAQ@Display2User)" FontSize="10.5" FontWeight="Bold" Foreground="#94A3B8" Margin="2,0,0,4"/>
+                        <Border x:Name="PlotDaq1" Grid.Row="1" AutomationProperties.AutomationId="PlotDaq1" Tag="DAQ:Wave1" Background="#020617" CornerRadius="4"/>
+                    </Grid>
+                </Border>
+            </Grid>
         </Grid>
     </Grid>
 </UserControl>

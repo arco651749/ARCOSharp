@@ -4,7 +4,7 @@
 > **【系統最高架構準則 (Supreme Architectural Invariant)】**  
 > **以程式執行速度為唯一第一目標，視覺即時更新絕非重點。**  
 > **UI 視覺呈現必須放到合適時機進行；凡非當前 Active 的 UI 元件、分頁或視窗，絕對嚴禁進行任何更新與重繪！**  
-> 完整開發規範請見根目錄主文檔：[DEV-GUIDE.md](../../DEV-GUIDE.md)。
+> 核心執行引擎與錯誤/堆疊設計請優先見：[00_CORE_ARCHITECTURE.md](./00_CORE_ARCHITECTURE.md)；UI 與排程操作規範請見：[00_DEV_GUIDE.md](./00_DEV_GUIDE.md)。
 
 本指南專為有意於 **ARCOSharp** 自動化機台控制系統進行**二次開發、功能擴充、外掛整合與硬體驅動移植**的架構師與工程師撰寫。所有介面規格、通訊協定、路徑拓撲與生命週期流程均**嚴格依據真實原始碼實作**編寫。
 
@@ -14,6 +14,8 @@
 
 | 章節 | 文件名稱 | 核心內容說明 |
 |---|---|---|
+| **00-A** | [**核心架構與設計哲學白皮書 (Core Architecture Spec)**](./00_CORE_ARCHITECTURE.md) | **【優先必讀】** Stateless Command、Stateful Thread、7 大子引擎、Manager–Workers 隔離、`Call`/`ErrorHandler` 共用 Stack 與 `EMG STOP` 狀態機 |
+| **00-B** | [UI 更新鐵律與系統操作總綱 (Developer Guide)](./00_DEV_GUIDE.md) | 非 Active UI 不更新三大鐵律、按需拉取、`.prog`/`.init`、`94`~`99` 系統事件區與權限/編輯交互規範 |
 | **01** | [整體架構總覽 (Architecture Overview)](./01_ARCHITECTURE_OVERVIEW.md) | 分層架構、啟動流程、指令生命週期、執行緒模型與發行目錄拓撲 |
 | **02** | [ARCOS.Core API 參考手冊 (Core API Reference)](./02_CORE_API_REFERENCE.md) | `ARCOS.Core` 核心組件所有 Public API 簽章、參數、行為與最小使用範例 |
 | **03** | [ARCOS.App API 與 UI 規範 (App API Reference)](./03_APP_API_REFERENCE.md) | Avalonia 主程式 Public API、參數導引搜尋順序、快捷鍵機制與 MCP 自動化伺服器 |

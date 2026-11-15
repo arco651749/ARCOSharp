@@ -140,6 +140,11 @@ public partial class SequencerEditorControl : UserControl, ISequencerEditorHost
                 txtStatus.Foreground = new SolidColorBrush(Color.Parse("#D97706"));
                 if (led != null) led.Fill = new SolidColorBrush(Color.Parse("#F59E0B"));
             }
+            else if (status == "EMG STOP")
+            {
+                txtStatus.Foreground = new SolidColorBrush(Color.Parse("#DC2626"));
+                if (led != null) led.Fill = new SolidColorBrush(Color.Parse("#EF4444"));
+            }
             else
             {
                 txtStatus.Foreground = new SolidColorBrush(Color.Parse("#334155"));
@@ -449,7 +454,7 @@ public partial class SequencerEditorControl : UserControl, ISequencerEditorHost
         if (!ctx.IsRunning)
         {
             int startIdx = (ctx.ProgIndex >= 1 && ctx.ProgIndex <= effectiveCount) ? ctx.ProgIndex : 1;
-            _vm.StartThread(ctx.ThreadId, _currentProgNo, startIdx);
+            _vm.StartThread(ctx.ThreadId, _currentProgNo, startIdx, spawnBackgroundLoop: false);
         }
 
         UpdateMachineStatus("RUNNING");
@@ -1252,6 +1257,13 @@ public partial class SequencerEditorControl : UserControl, ISequencerEditorHost
             return;
         }
 
+        // 啟動：若處於 EMG STOP 狀態則阻擋啟動
+        if (_vm.IsEmgStopped)
+        {
+            UpdateMachineStatus("EMG STOP");
+            return;
+        }
+
         // 啟動：觸發 96: Execute On (預設指令為 Thread@Run::0,0)
         mainCtx.OnExecutionStopped -= OnOperatorMainExecutionStopped;
         mainCtx.OnExecutionStopped += OnOperatorMainExecutionStopped;
@@ -1282,6 +1294,11 @@ public partial class SequencerEditorControl : UserControl, ISequencerEditorHost
     {
         ClearRangeSelection();
         if (_vm == null) return;
+        if (_vm.IsEmgStopped)
+        {
+            UpdateMachineStatus("EMG STOP");
+            return;
+        }
         SyncUIToProgram();
 
         var ctx = GetActiveContext();

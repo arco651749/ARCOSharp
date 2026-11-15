@@ -4,6 +4,17 @@ using ARCOS.Core.Model;
 
 namespace ARCOS.Core.Execution;
 
+public enum StackFrameKind
+{
+    Call,
+    ErrorHandler
+}
+
+public readonly record struct ExecutionStackFrame(
+    ProgramTable Program,
+    int ReturnLine,
+    StackFrameKind Kind = StackFrameKind.Call);
+
 /// <summary>
 /// 執行緒即時執行上下文與獨立平行單元 (ThreadVM Execution Context)
 /// 維護當前 Program、ProgIndex (PC)、微步 CommandState、呼叫堆疊、Local/Global Pause 狀態與獨立高速 CMDEXECUTE 迴圈
@@ -12,6 +23,8 @@ public sealed class ExecutionContext
 {
     private int _progIndex = 1;
     private int _reportedProgIndex = 1;
+    private ProgramTable _program;
+    private bool _pcModifiedInStep;
     private bool _isLocalPaused;
     private CancellationTokenSource? _loopCts;
     private readonly object _pauseLock = new();
@@ -20,7 +33,26 @@ public sealed class ExecutionContext
 
     public int ThreadId { get; set; }
     public string ThreadName { get; set; }
-    public ProgramTable Program { get; set; }
+
+    public ProgramTable Program
+    {
+        get => _program;
+        set
+        {
+            if (!ReferenceEquals(_program, value))
+            {
+                _program = value;
+                _pcModifiedInStep = true;
+            }
+        }
+    }
+
+    /// <summary>
+    /// 當前單步指令執行期間，是否已由指令主動修改過 PC / Program / 堆疊
+    /// </summary>
+    public bool IsPcModified => _pcModifiedInStep;
+
+    internal void ResetPcModified() => _pcModifiedInStep = false;
 
     /// <summary>
     /// 目前指令行號 (PC)
@@ -31,6 +63,7 @@ public sealed class ExecutionContext
         get => _progIndex;
         set
         {
+            _pcModifiedInStep = true;
             if (_progIndex != value)
             {
                 _progIndex = value;
@@ -62,7 +95,7 @@ public sealed class ExecutionContext
 
     public int FailedPC { get; set; } = 1;
     public CommandState State { get; } = new();
-    public Stack<(ProgramTable Program, int ReturnLine)> CallStack { get; } = new();
+    public Stack<ExecutionStackFrame> CallStack { get; } = new();
     public string CurrentSection { get; set; } = "Global";
     public BasicEngines Engines { get; }
     public DriverManager Drivers { get; }
@@ -146,9 +179,117 @@ public sealed class ExecutionContext
     {
         ThreadId = threadId;
         ThreadName = threadName;
-        Program = program;
+        _program = program;
         Engines = engines;
         Drivers = drivers;
+    }
+
+    /// <summary>
+    /// 直接跳躍至指定 1-based 行號 (配合 CommandResult.Done() 回傳即不額外 +1)
+    /// </summary>
+    public void Jump(int line)
+    {
+        ProgIndex = line;
+    }
+
+    /// <summary>
+    /// 依標籤名稱跳躍至當前程式區內的目標行 (找不到標籤時回傳 false)
+    /// </summary>
+    public bool Jump(string label)
+    {
+        int targetLine = Program.FindLabel(label);
+        if (targetLine <= 0) return false;
+        ProgIndex = targetLine;
+        return true;
+    }
+
+    /// <summary>
+    /// 呼叫指定編號程式區作為副程式，將返回點壓入共用 CallStack
+    /// </summary>
+    public bool Call(int progNo) => Call(progNo.ToString());
+
+    /// <summary>
+    /// 呼叫指定程式區或同區段標籤作為副程式，將返回點壓入共用 CallStack (找不到目標回傳 false)
+    /// </summary>
+    public bool Call(string? targetProgOrLabel)
+    {
+        if (string.IsNullOrWhiteSpace(targetProgOrLabel))
+        {
+            return true;
+        }
+
+        var targetSubProg = VM?.FindProgram(targetProgOrLabel);
+        if (targetSubProg != null && !ReferenceEquals(targetSubProg, Program))
+        {
+            CallStack.Push(new ExecutionStackFrame(Program, ProgIndex + 1, StackFrameKind.Call));
+            Program = targetSubProg;
+            ProgIndex = 1;
+            return true;
+        }
+
+        int labelLine = Program.FindLabel(targetProgOrLabel);
+        if (labelLine > 0)
+        {
+            CallStack.Push(new ExecutionStackFrame(Program, ProgIndex + 1, StackFrameKind.Call));
+            ProgIndex = labelLine;
+            return true;
+        }
+
+        if (targetSubProg != null)
+        {
+            CallStack.Push(new ExecutionStackFrame(Program, ProgIndex + 1, StackFrameKind.Call));
+            Program = targetSubProg;
+            ProgIndex = 1;
+            return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// 自副程式返回：自動清理未重試的 ErrorHandler 幀並彈出 Call 幀；若堆疊已空則停止本執行緒
+    /// </summary>
+    public void Return()
+    {
+        while (CallStack.Count > 0 && CallStack.Peek().Kind == StackFrameKind.ErrorHandler)
+        {
+            CallStack.Pop();
+        }
+
+        if (CallStack.Count > 0)
+        {
+            var frame = CallStack.Pop();
+            Program = frame.Program;
+            ProgIndex = frame.ReturnLine;
+        }
+        else
+        {
+            _pcModifiedInStep = true;
+            IsRunning = false;
+            Engines.Io.SetPort($"{ThreadName}#Run?", false);
+        }
+    }
+
+    /// <summary>
+    /// ErrorRetry：從共用 CallStack 彈出最近的 ErrorHandler 來源幀並還原至失敗行 + offset 重試
+    /// </summary>
+    public void Retry(int offset = 0)
+    {
+        while (CallStack.Count > 0 && CallStack.Peek().Kind != StackFrameKind.ErrorHandler)
+        {
+            CallStack.Pop();
+        }
+
+        if (CallStack.Count > 0)
+        {
+            var errFrame = CallStack.Pop();
+            Program = errFrame.Program;
+            ProgIndex = Math.Max(1, errFrame.ReturnLine + offset);
+        }
+        else
+        {
+            ProgIndex = Math.Max(1, FailedPC + offset);
+        }
     }
 
     /// <summary>
@@ -247,11 +388,7 @@ public sealed class ExecutionContext
 
     public void Log(string message, bool isError = false)
     {
-        // 同步寫入系統日誌旗標與 RecordEngine SYSTEMLOG 通道 (2000 筆環狀緩衝，滿 2000 筆或 Clear Message 時批次寫入當次 Session Log 檔)
-        if (isError)
-        {
-            Engines.Io.SetPort("System#Error?", true);
-        }
+        // 寫入 RecordEngine SYSTEMLOG 通道 (執行緒層錯誤旗標 <ThreadName>#Error? 由 CommandExecutor 統一控管)
         Engines.Record.Record("SYSTEMLOG", $"[Thread {ThreadId}:{ThreadName}] {(isError ? "[ERROR] " : "")}{message}");
     }
 }

@@ -15,8 +15,8 @@ public class PointEngine
     private readonly ConcurrentDictionary<string, PointArrayEntry> _points = new(StringComparer.OrdinalIgnoreCase);
     private readonly IoEngine? _ioEngine;
 
-    private static readonly Regex PointIndexRegex = new(@"^([a-zA-Z0-9_]+)\[(\d+)\]$", RegexOptions.Compiled);
-    private static readonly Regex PointFilterRegex = new(@"^([a-zA-Z0-9_]+)@([a-zA-Z]+)(?:\(([^)]+)\))?$", RegexOptions.Compiled);
+    private static readonly Regex PointIndexRegex = new(@"^([a-zA-Z0-9_#]+)\[(\d+)\]$", RegexOptions.Compiled);
+    private static readonly Regex PointFilterRegex = new(@"^([a-zA-Z0-9_#]+)@([a-zA-Z]+)(?:\(([^)]+)\))?$", RegexOptions.Compiled);
 
     public PointEngine(IoEngine? ioEngine = null)
     {
@@ -108,7 +108,12 @@ public class PointEngine
         {
             var entry = _points.GetOrAdd(name, _ => new PointArrayEntry());
             entry.Points.Clear();
-            entry.Points.Add(point.Clone());
+            var cloned = point.Clone();
+            if (name.Contains("#Joint", StringComparison.OrdinalIgnoreCase))
+            {
+                cloned.H["Coord"] = "Joint";
+            }
+            entry.Points.Add(cloned);
             entry.CurrentIndex = 0;
             UpdateIoLastFlag(name, true);
         }
@@ -123,7 +128,12 @@ public class PointEngine
         lock (_lock)
         {
             var entry = _points.GetOrAdd(name, _ => new PointArrayEntry());
-            entry.Points.Add(point.Clone());
+            var cloned = point.Clone();
+            if (name.Contains("#Joint", StringComparison.OrdinalIgnoreCase))
+            {
+                cloned.H["Coord"] = "Joint";
+            }
+            entry.Points.Add(cloned);
             CheckPalletLast(name);
         }
     }

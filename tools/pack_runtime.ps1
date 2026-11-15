@@ -1,4 +1,4 @@
-param (
+﻿param (
     [string]$OutputDir = "$PSScriptRoot\..\dist\ARCOS_Runtime"
 )
 
@@ -46,36 +46,8 @@ dotnet publish "$PSScriptRoot\..\src\ARCOS.App\ARCOS.App.csproj" -c Release -o "
 
 $rootDlls = Get-ChildItem -Path $OutputDir -Filter "*.dll" | Select-Object -ExpandProperty Name
 
-# 3. Publish MODULE Command Execution DLLs and Deduplicate Shared DLLs
-Write-Host "`n[2/5] Publishing Module Command Execution DLLs..." -ForegroundColor Yellow
-$moduleProjects = @(
-    @{ Proj = "$PSScriptRoot\..\src\MODULES\IO\ARCOS.Module.IO.csproj"; Out = "$OutputDir\MODULES\IO"; Name = "IO.Module" },
-    @{ Proj = "$PSScriptRoot\..\src\MODULES\MOTION\ARCOS.Module.Motion.csproj"; Out = "$OutputDir\MODULES\MOTION"; Name = "Motion.Module" },
-    @{ Proj = "$PSScriptRoot\..\src\MODULES\CAPTURE\ARCOS.Module.Capture.csproj"; Out = "$OutputDir\MODULES\CAPTURE"; Name = "Capture.Module" },
-    @{ Proj = "$PSScriptRoot\..\src\MODULES\DAQ\ARCOS.Module.Daq.csproj"; Out = "$OutputDir\MODULES\DAQ"; Name = "DAQ.Module" },
-    @{ Proj = "$PSScriptRoot\..\src\MODULES\SYSTEM\ARCOS.Module.System.csproj"; Out = "$OutputDir\MODULES\SYSTEM"; Name = "System.Module" },
-    @{ Proj = "$PSScriptRoot\..\src\MODULES\THREAD\ARCOS.Module.Thread.csproj"; Out = "$OutputDir\MODULES\THREAD"; Name = "Thread.Module" },
-    @{ Proj = "$PSScriptRoot\..\src\MODULES\VARIABLE\ARCOS.Module.Variable.csproj"; Out = "$OutputDir\MODULES\VARIABLE"; Name = "Variable.Module" },
-    @{ Proj = "$PSScriptRoot\..\src\MODULES\PYTHON\ARCOS.Module.Python.csproj"; Out = "$OutputDir\MODULES\PYTHON"; Name = "Python.Module" }
-)
-
-foreach ($m in $moduleProjects) {
-    $outPath = "$($m.Out)"
-    $modName = "$($m.Name)"
-    $projPath = "$($m.Proj)"
-    Write-Host "Publishing Module Handler: $modName -> $outPath" -ForegroundColor Magenta
-
-    dotnet publish $projPath -c Release -o $outPath --nologo -v q
-
-    # 移除與根目錄重複的 DLL (保留模組本體的 DLL，如 IO.dll, Motion.dll 等)
-    Get-ChildItem -Path $outPath -Filter "*.dll" | Where-Object { $_.Name -in $rootDlls -and $_.Name -notlike "$modName*" } | Remove-Item -Force
-    # 移除重複的 PDB 與 runtimes
-    Get-ChildItem -Path $outPath -Filter "*.pdb" | Where-Object { $_.Name -notlike "$modName*" } | Remove-Item -Force
-    $nativeDir = Join-Path $outPath "runtimes"
-    if (Test-Path $nativeDir) {
-        Remove-Item -Path $nativeDir -Recurse -Force
-    }
-}
+# 3. Pure CSVI Architecture: System, Thread, Variable are deployed directly as <Module>.csvi + <Action>.csvi in step [4/5]
+Write-Host "`n[2/5] Skipping legacy *.Module.dll projects (100% Pure CSVI Modules)..." -ForegroundColor Yellow
 
 # 4. Publish MODULE Drivers (Directory-Per-Driver Isolation)
 Write-Host "`n[3/5] Publishing Module Drivers (Directory-Per-Driver Isolation)..." -ForegroundColor Yellow
@@ -115,6 +87,13 @@ foreach ($d in $driverProjects) {
             Copy-Item "$outPath\MockIO.Driver.dll" "$OutputDir\MODULES\IO\DRIVER\MockIO.csvi" -Force
         }
     }
+    if ($driverName -eq "MockMotion.Driver") {
+        $srcMockMotionCsvi = "$PSScriptRoot\..\src\MODULES\MOTION\DRIVER\MockMotion.csvi"
+        if (Test-Path -LiteralPath $srcMockMotionCsvi) {
+            Copy-Item -LiteralPath $srcMockMotionCsvi -Destination "$outPath\MockMotion.csvi" -Force
+            Copy-Item -LiteralPath $srcMockMotionCsvi -Destination "$OutputDir\MODULES\MOTION\DRIVER\MockMotion.csvi" -Force
+        }
+    }
 
     # 確保 runtimeconfig.json 包含 additionalProbingPaths 指向根目錄 (4層深度)
     $targetRc = "$outPath\$driverName.runtimeconfig.json"
@@ -127,37 +106,16 @@ foreach ($d in $driverProjects) {
     }
 }
 
-# 5. Publish CSVI Virtual Instruments (四位一體：各指令獨立 CSVI 直接放入 MODULES\IO)
+# 5. Publish CSVI Virtual Instruments (純四位一體：各指令獨立 CSVI 直接放入 MODULES\IO)
 Write-Host "`n[4/5] Publishing CSVI Virtual Instruments (Pure 4-in-1 Architecture)..." -ForegroundColor Yellow
-$tempBuild = "$OutputDir\MODULES\IO\temp_csvi_build"
-$guidanceProj = "$PSScriptRoot\..\src\MODULES\IO\USERPARAMETEREDITOR\ARCOS.Module.IO.Guidance.csproj"
-dotnet build "$guidanceProj" -c Release -o "$tempBuild" --nologo -v q
 
-$ioCommands = @(
-    "SetPort",
-    "ClrPort",
-    "Flash(OnOff)",
-    "Flash(OffOn)",
-    "WaitPortOn",
-    "WaitPortOff",
-    "CheckLogicOn",
-    "CheckLogicOff",
-    "SetPortName",
-    "AddVirtualIO",
-    "AddIODriver",
-    "InitIOPort",
-    "ForceUpdate",
-    "Shift"
-)
-
-# 部署多合一 IO.csvi (使用甫建置之最新 IO.Guidance.dll)
-Copy-Item "$tempBuild\IO.Guidance.dll" "$OutputDir\MODULES\IO\IO.csvi" -Force
-Copy-Item "$tempBuild\IO.Guidance.dll" "$PSScriptRoot\..\src\MODULES\IO\IO.csvi" -Force
-
-foreach ($cmd in $ioCommands) {
-    Copy-Item "$tempBuild\IO.Guidance.dll" "$OutputDir\MODULES\IO\$cmd.csvi" -Force
-    Copy-Item "$tempBuild\IO.Guidance.dll" "$OutputDir\MODULES\IO\io@$cmd.csvi" -Force
-    Copy-Item "$tempBuild\IO.Guidance.dll" "$PSScriptRoot\..\src\MODULES\IO\$cmd.csvi" -Force
+# 部署 IO 模組 CSVI 虛擬儀表 (純四位一體)
+$ioCsvis = Get-ChildItem -Path "$PSScriptRoot\..\src\MODULES\IO" -Filter "*.csvi" -Recurse -File
+foreach ($csvi in $ioCsvis) {
+    $rel = $csvi.FullName.Substring((Resolve-Path "$PSScriptRoot\..\src\MODULES\IO").Path.Length + 1)
+    $dest = Join-Path "$OutputDir\MODULES\IO" $rel
+    New-Item -ItemType Directory -Path (Split-Path $dest) -Force | Out-Null
+    Copy-Item -LiteralPath $csvi.FullName -Destination $dest -Force
 }
 
 # 部署 SYSTEM 模組 CSVI 虛擬儀表 (四位一體)
@@ -181,6 +139,19 @@ if (Test-Path -LiteralPath $userPanelProj) {
         Write-Host "  -> Successfully deployed UserPanel.csvi to root and MODULES\SYSTEM" -ForegroundColor Cyan
     }
     Remove-Item -Path "$tempPanelBuild" -Recurse -Force -ErrorAction SilentlyContinue
+}
+
+# 部署自訂多面板與測試面板 PANELS/*.csvi (不放入 MODULES\SYSTEM 以避免汙染 System@getCMD)
+$panelsSrcDir = "$PSScriptRoot\..\PANELS"
+if (Test-Path -LiteralPath $panelsSrcDir) {
+    New-Item -ItemType Directory -Path "$OutputDir\PANELS" -Force | Out-Null
+    $customPanelCsvis = Get-ChildItem -LiteralPath $panelsSrcDir -Filter "*.csvi" -File
+    foreach ($pCsvi in $customPanelCsvis) {
+        Copy-Item -LiteralPath $pCsvi.FullName -Destination "$OutputDir\PANELS\$($pCsvi.Name)" -Force
+        Copy-Item -LiteralPath $pCsvi.FullName -Destination "$OutputDir\$($pCsvi.Name)" -Force
+        Copy-Item -LiteralPath $pCsvi.FullName -Destination "$PSScriptRoot\..\$($pCsvi.Name)" -Force
+        Write-Host "  -> Deployed UserPanel package: $($pCsvi.Name)" -ForegroundColor Cyan
+    }
 }
 
 # 部署 THREAD 模組 CSVI 虛擬儀表 (四位一體)
@@ -228,19 +199,24 @@ foreach ($csvi in $motionCsvis) {
     Copy-Item -LiteralPath $csvi.FullName -Destination $dest -Force
 }
 
-# 部署 ExternalModules (外部獨立 CSVI 模組，例如 mycsvi.csvi)
-Write-Host "`nBuilding and packaging ExternalModules CSVI (mycsvi.csvi)..." -ForegroundColor Magenta
-$myCsviProj = "$PSScriptRoot\..\src\EXTERNALMODULES\MyCsvi\MyCsvi.csproj"
-if (Test-Path -LiteralPath $myCsviProj) {
-    $tempCsviBuild = "$OutputDir\temp_csvi_build"
-    dotnet build "$myCsviProj" -c Release -o "$tempCsviBuild" --nologo -v q
-    $myCsviDll = "$tempCsviBuild\mycsvi.dll"
-    if (Test-Path -LiteralPath $myCsviDll) {
-        Copy-Item -LiteralPath $myCsviDll -Destination "$OutputDir\ExternalModules\mycsvi.csvi" -Force
-        Copy-Item -LiteralPath $myCsviDll -Destination "$PSScriptRoot\..\ExternalModules\mycsvi.csvi" -Force
-        Write-Host "  -> Successfully deployed mycsvi.csvi to ExternalModules/" -ForegroundColor Cyan
+# 部署 CALL、POINT&PATH、USER、AIAGENT、MULTISTATION、REDIS 等純 CSVI 模組
+foreach ($pureMod in @("CALL", "POINT&PATH", "USER", "AIAGENT", "MULTISTATION", "REDIS")) {
+    $srcPureDir = "$PSScriptRoot\..\src\MODULES\$pureMod"
+    if (Test-Path -LiteralPath $srcPureDir) {
+        New-Item -ItemType Directory -Path "$OutputDir\MODULES\$pureMod" -Force | Out-Null
+        $pureCsvis = Get-ChildItem -LiteralPath $srcPureDir -Filter "*.csvi" -File
+        foreach ($csvi in $pureCsvis) {
+            Copy-Item -LiteralPath $csvi.FullName -Destination "$OutputDir\MODULES\$pureMod" -Force
+        }
     }
-    Remove-Item -Path "$tempCsviBuild" -Recurse -Force -ErrorAction SilentlyContinue
+}
+
+# 部署 ExternalModules (外部獨立 CSVI 模組，例如 mycsvi.csvi)
+Write-Host "`nDeploying ExternalModules CSVI (mycsvi.csvi)..." -ForegroundColor Magenta
+$srcExtCsvi = "$PSScriptRoot\..\ExternalModules\mycsvi.csvi"
+if (Test-Path -LiteralPath $srcExtCsvi) {
+    Copy-Item -LiteralPath $srcExtCsvi -Destination "$OutputDir\ExternalModules\mycsvi.csvi" -Force
+    Write-Host "  -> Successfully deployed mycsvi.csvi to ExternalModules/" -ForegroundColor Cyan
 }
 $srcExtReadme = "$PSScriptRoot\..\ExternalModules\README.md"
 if (Test-Path -LiteralPath $srcExtReadme) {
@@ -248,7 +224,6 @@ if (Test-Path -LiteralPath $srcExtReadme) {
 }
 
 # 徹底刪除任何 USERPARAMETEREDITOR 遺留目錄與暫存建置資料夾
-Remove-Item -Path "$tempBuild" -Recurse -Force -ErrorAction SilentlyContinue
 $oldEditor = "$OutputDir\MODULES\IO\USERPARAMETEREDITOR"
 if (Test-Path $oldEditor) {
     Remove-Item -Path $oldEditor -Recurse -Force -ErrorAction SilentlyContinue
@@ -258,9 +233,12 @@ Remove-Item -Path $oldEditorSrc -Force -ErrorAction SilentlyContinue
 
 # 6. Summary & Verification
 Write-Host "`n[5/5] Verifying Clean Deployment Topology:" -ForegroundColor Green
-foreach ($m in $moduleProjects) {
-    $files = (Get-ChildItem -Path $m.Out -File | Select-Object -ExpandProperty Name) -join ", "
-    Write-Host "  -> $($m.Out.Replace($OutputDir, 'ARCOS_Runtime')) : [ $files ]" -ForegroundColor Cyan
+foreach ($mName in @("SYSTEM", "THREAD", "VARIABLE")) {
+    $mDir = "$OutputDir\MODULES\$mName"
+    if (Test-Path $mDir) {
+        $files = (Get-ChildItem -Path $mDir -File | Select-Object -ExpandProperty Name) -join ", "
+        Write-Host "  -> ARCOS_Runtime\MODULES\$mName : [ $files ]" -ForegroundColor Cyan
+    }
 }
 foreach ($d in $driverProjects) {
     $files = (Get-ChildItem -Path $d.Out -File | Select-Object -ExpandProperty Name) -join ", "
