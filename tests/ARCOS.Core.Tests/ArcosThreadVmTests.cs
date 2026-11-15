@@ -100,14 +100,14 @@ public class ArcosThreadVmTests
         // 啟動帶 & 特權的看門狗 SubThread (如 Watchdog&，豁免暫停)
         string watchdogScript = """
             IO@SetPort::WatchdogRan;
-            System@SystemResume::;
+            System@Resume::;
             """;
         vm.StartSubThread("Watchdog&", ProgramTable.FromText(watchdogScript, 90, "Watchdog&"));
 
-        // Tick: Watchdog& 具備特權，可在全機暫停下繼續執行，並呼叫 SystemResume
+        // Tick: Watchdog& 具備特權，可在全機暫停下繼續執行，並呼叫 System@Resume
         vm.Tick();
         Assert.True(engines.Io.GetPort("WatchdogRan"));
-        vm.Tick(); // 執行 SystemResume
+        vm.Tick(); // 執行 System@Resume
         Assert.False(engines.Timer.IsSystemPaused); // 成功自動解除全機暫停！
 
         // 解除暫停後，普通 Worker 恢復推進 Step 2

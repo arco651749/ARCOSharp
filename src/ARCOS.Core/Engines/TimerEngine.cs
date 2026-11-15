@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Linq;
 
 namespace ARCOS.Core.Engines;
 
@@ -69,7 +70,7 @@ public class TimerEngine
     public int GetCount(string counterName) => _counterEngine.GetCount(counterName);
 
     /// <summary>
-    /// 同步全機暫停狀態 (對應 System@SystemPause 與 System@SystemResume)
+    /// 同步全機暫停狀態 (對應 System@Pause 與 System@Resume)
     /// </summary>
     public void SetSystemPause(bool isPaused)
     {
@@ -159,6 +160,19 @@ public class TimerEngine
         }
         return 0;
     }
+
+    /// <summary>
+    /// 取得目前已註冊的所有計時器名稱清單（依名稱排序）
+    /// </summary>
+    public IReadOnlyList<string> GetAllTimerNames()
+    {
+        return _timers.Keys.OrderBy(k => k, StringComparer.OrdinalIgnoreCase).ToList();
+    }
+
+    /// <summary>
+    /// 取得目前已註冊的所有計數器名稱清單（依名稱排序）
+    /// </summary>
+    public IReadOnlyList<string> GetAllCounterNames() => _counterEngine.GetAllCounterNames();
 }
 
 /// <summary>
@@ -207,5 +221,10 @@ public class CounterEngine
     public int GetCount(string counterName)
     {
         return _counters.TryGetValue(counterName, out int count) ? count : 0;
+    }
+
+    public IReadOnlyList<string> GetAllCounterNames()
+    {
+        return _counters.Keys.OrderBy(k => k, StringComparer.OrdinalIgnoreCase).ToList();
     }
 }
