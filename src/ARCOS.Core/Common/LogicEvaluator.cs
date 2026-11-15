@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text.Json;
 using ARCOS.Core.Engines;
 
 namespace ARCOS.Core.Common;
@@ -107,6 +108,18 @@ public class LogicEvaluator
     {
         string token = rawToken.Trim();
 
+        // 0. 支援於複合運算式中直接使用 EXIST <var> / NULL <var>
+        if (token.StartsWith("EXIST ", StringComparison.OrdinalIgnoreCase))
+        {
+            string varName = token.Substring(6).Trim();
+            return VariableExists(varName, section);
+        }
+        if (token.StartsWith("NULL ", StringComparison.OrdinalIgnoreCase))
+        {
+            string varName = token.Substring(5).Trim();
+            return VariableIsNullOrEmpty(varName, section);
+        }
+
         // 1. 檢查內部是否為比較式：如 $Count > 5 或 Status == "OK"
         if (TryEvaluateComparison(token, section, out bool compResult))
         {
@@ -120,10 +133,10 @@ public class LogicEvaluator
         // 3. 變數引用：以 $ 開頭
         if (token.StartsWith('$'))
         {
-            string varKey = token.TrimStart('$');
             try
             {
-                string val = _varEngine.Get(varKey, section);
+                string val = ResolveVariableOrJson(token, section, out bool found);
+                if (!found) return false;
                 if (bool.TryParse(val, out bool bVal)) return bVal;
                 if (double.TryParse(val, NumberStyles.Any, CultureInfo.InvariantCulture, out double dVal)) return dVal != 0;
                 return !string.IsNullOrEmpty(val);
@@ -149,22 +162,45 @@ public class LogicEvaluator
     {
         result = false;
 
-        // 0. 陣列/變數空值判定 ==[] 或 !=[] (如 Var == [] 或 Var != [])
-        if (token.Contains("==[]") || token.Contains("== []"))
+        // 0. 存在與空值後綴運算子：==NULL, !=NULL, ==EXIST, !=EXIST
+        if (TrySplitOperator(token, "==", out string leftEq, out string rightEq))
         {
-            int idx = token.IndexOf("==", StringComparison.Ordinal);
-            string leftStr = token.Substring(0, idx).Trim();
-            string val = ResolveValue(leftStr, section);
-            result = IsEmptyArrayOrValue(val);
-            return true;
+            if (rightEq.Equals("NULL", StringComparison.OrdinalIgnoreCase))
+            {
+                result = VariableIsNullOrEmpty(leftEq, section);
+                return true;
+            }
+            if (rightEq.Equals("EXIST", StringComparison.OrdinalIgnoreCase))
+            {
+                result = VariableExists(leftEq, section);
+                return true;
+            }
+            if (IsArrayEmptyLiteral(rightEq))
+            {
+                string rawVal = ResolveVariableOrJsonRaw(leftEq, section, out _);
+                result = IsEmptyArrayOrValue(rawVal);
+                return true;
+            }
         }
-        if (token.Contains("!=[]") || token.Contains("!= []"))
+
+        if (TrySplitOperator(token, "!=", out string leftNeq, out string rightNeq))
         {
-            int idx = token.IndexOf("!=", StringComparison.Ordinal);
-            string leftStr = token.Substring(0, idx).Trim();
-            string val = ResolveValue(leftStr, section);
-            result = !IsEmptyArrayOrValue(val);
-            return true;
+            if (rightNeq.Equals("NULL", StringComparison.OrdinalIgnoreCase))
+            {
+                result = !VariableIsNullOrEmpty(leftNeq, section);
+                return true;
+            }
+            if (rightNeq.Equals("EXIST", StringComparison.OrdinalIgnoreCase))
+            {
+                result = !VariableExists(leftNeq, section);
+                return true;
+            }
+            if (IsArrayEmptyLiteral(rightNeq))
+            {
+                string rawVal = ResolveVariableOrJsonRaw(leftNeq, section, out _);
+                result = !IsEmptyArrayOrValue(rawVal);
+                return true;
+            }
         }
 
         // 1. 區間判定：</> (區間外) 與 <> (區間內)
@@ -246,17 +282,130 @@ public class LogicEvaluator
         return false;
     }
 
+    private static bool TrySplitOperator(string token, string op, out string left, out string right)
+    {
+        left = string.Empty;
+        right = string.Empty;
+        int idx = token.IndexOf(op, StringComparison.Ordinal);
+        if (idx <= 0) return false;
+        left = token.Substring(0, idx).Trim();
+        right = token.Substring(idx + op.Length).Trim();
+        return !string.IsNullOrEmpty(left) && !string.IsNullOrEmpty(right);
+    }
+
+    private static bool IsArrayEmptyLiteral(string literal)
+    {
+        string trimmed = literal.Trim();
+        return trimmed == "[]" || trimmed == "[;;]";
+    }
+
+    private bool VariableExists(string rawVarExpr, string section)
+    {
+        ResolveVariableOrJsonRaw(rawVarExpr, section, out bool found);
+        return found;
+    }
+
+    private bool VariableIsNullOrEmpty(string rawVarExpr, string section)
+    {
+        string val = ResolveVariableOrJsonRaw(rawVarExpr, section, out bool found);
+        return !found || string.IsNullOrEmpty(val);
+    }
+
     private string ResolveValue(string raw, string section)
     {
         string trimmed = raw.Trim().Trim('"', '\'');
-        string varKey = trimmed.StartsWith('$') ? trimmed.TrimStart('$') : trimmed;
+        string resolved = ResolveVariableOrJson(trimmed, section, out bool found);
+        return found ? resolved : trimmed;
+    }
+
+    private string ResolveVariableOrJson(string raw, string section, out bool found)
+    {
+        return ResolveVariableCore(raw, section, rawMode: false, out found);
+    }
+
+    private string ResolveVariableOrJsonRaw(string raw, string section, out bool found)
+    {
+        return ResolveVariableCore(raw, section, rawMode: true, out found);
+    }
+
+    private string ResolveVariableCore(string raw, string section, bool rawMode, out bool found)
+    {
+        found = false;
+        string trimmed = raw.Trim().Trim('"', '\'');
+        string varExpr = trimmed.StartsWith('$') ? trimmed.Substring(1) : trimmed;
+        if (string.IsNullOrWhiteSpace(varExpr)) return string.Empty;
+
+        int jsonIdx = varExpr.IndexOf("::", StringComparison.Ordinal);
+        string varKey = jsonIdx >= 0 ? varExpr.Substring(0, jsonIdx).Trim() : varExpr;
+        string? jsonPath = jsonIdx >= 0 ? varExpr.Substring(jsonIdx + 2).Trim() : null;
+
         try
         {
-            return _varEngine.Get(varKey, section);
+            string val = rawMode ? _varEngine.GetRaw(varKey, section) : _varEngine.Get(varKey, section);
+            if (!string.IsNullOrEmpty(jsonPath))
+            {
+                if (TryExtractJsonValue(val, jsonPath, out string jsonVal))
+                {
+                    found = true;
+                    return jsonVal;
+                }
+                found = false;
+                return string.Empty;
+            }
+            found = true;
+            return val;
         }
         catch
         {
-            return trimmed;
+            return string.Empty;
+        }
+    }
+
+    private static bool TryExtractJsonValue(string jsonText, string jsonPath, out string value)
+    {
+        value = string.Empty;
+        if (string.IsNullOrWhiteSpace(jsonText)) return false;
+
+        try
+        {
+            using var doc = JsonDocument.Parse(jsonText);
+            JsonElement cur = doc.RootElement;
+            string[] segments = jsonPath.Split(new[] { "::", "." }, StringSplitOptions.RemoveEmptyEntries);
+            foreach (var rawSeg in segments)
+            {
+                string seg = rawSeg.Trim();
+                if (seg.EndsWith(']') && seg.Contains('['))
+                {
+                    int open = seg.IndexOf('[');
+                    string prop = seg.Substring(0, open).Trim();
+                    string idxStr = seg.Substring(open + 1, seg.Length - open - 2).Trim();
+                    if (!string.IsNullOrEmpty(prop))
+                    {
+                        if (cur.ValueKind != JsonValueKind.Object || !cur.TryGetProperty(prop, out cur))
+                            return false;
+                    }
+                    if (!int.TryParse(idxStr, out int arrIdx) ||
+                        cur.ValueKind != JsonValueKind.Array ||
+                        arrIdx < 0 || arrIdx >= cur.GetArrayLength())
+                        return false;
+                    cur = cur[arrIdx];
+                }
+                else
+                {
+                    if (cur.ValueKind != JsonValueKind.Object || !cur.TryGetProperty(seg, out cur))
+                        return false;
+                }
+            }
+
+            if (cur.ValueKind == JsonValueKind.Null || cur.ValueKind == JsonValueKind.Undefined)
+                return false;
+
+            value = cur.ValueKind == JsonValueKind.String ? (cur.GetString() ?? string.Empty) : cur.ToString();
+            return true;
+        }
+        catch
+        {
+            return false;
         }
     }
 

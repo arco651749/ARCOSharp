@@ -379,7 +379,8 @@ public partial class TestThreadWindow : Window, ISequencerEditorHost
 
     private void DrainPCPointer()
     {
-        int targetPC = Volatile.Read(ref _latestNoticedPC);
+        int rawPC = Volatile.Read(ref _latestNoticedPC);
+        int targetPC = _rows.Count > 0 ? Math.Clamp(rawPC, 0, _rows.Count - 1) : -1;
         if (targetPC == _currentRenderedPC) return;
 
         if (_currentRenderedPC >= 0 && _currentRenderedPC < _rows.Count)
@@ -1330,11 +1331,26 @@ public partial class TestThreadWindow : Window, ISequencerEditorHost
 
     private void SyncIoDefinitionsFromRows()
     {
-        if (_vm?.Engines?.Io == null || _rows == null) return;
+        if (_vm?.Engines == null || _rows == null) return;
         foreach (var r in _rows)
         {
             if (string.IsNullOrWhiteSpace(r.Command) || string.IsNullOrWhiteSpace(r.Parameter)) continue;
             _vm.Engines.Io.ScanAndRegister(r.Command, r.Parameter);
+        }
+
+        if (_currentProgNo >= 0 && _currentProgNo < 100)
+        {
+            var existingName = _vm.GetProgram(_currentProgNo)?.Name ?? ProgramSlotItem.GetDefaultName(_currentProgNo);
+            var snapshot = new ProgramTable { ProgramNumber = _currentProgNo, Name = existingName };
+            int lineIdx = 0;
+            foreach (var r in _rows)
+            {
+                if (r.IsTrailingPlaceholder) continue;
+                snapshot.Add(CommandItem.Parse($"{r.Command}\t{r.Parameter}", lineIdx));
+                lineIdx++;
+            }
+            _vm.Engines.Program.ActiveProgramNumber = _currentProgNo;
+            _vm.Engines.Program.SetProgram(_currentProgNo, snapshot);
         }
     }
 

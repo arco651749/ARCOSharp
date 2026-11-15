@@ -138,4 +138,33 @@ public class LogicEvaluatorTests
         Assert.False(invalid3);
         Assert.NotNull(errInv3);
     }
+
+    [Fact]
+    public void LogicEvaluator_ExtendedNullExistEmptyMatrixSectionAndJsonPath_ShouldEvaluate()
+    {
+        var io = new IoEngine();
+        var vars = new VariableEngine();
+        var evaluator = new LogicEvaluator(io, vars);
+
+        io.SetPort("Ready?", true);
+        vars.Set("LotID", "LOT_001", "Global");
+        vars.Set("EmptyMatrix", "[;;]", "Global");
+        vars.Set("Mode", "AUTO", "Thread1");
+        vars.Set("Payload", "{\"status\":\"OK\",\"items\":[{\"code\":42}]}", "Global");
+
+        // ==NULL / !=NULL / ==EXIST / !=EXIST 與複合使用
+        Assert.True(evaluator.Evaluate("Ready? & ($LotID==EXIST) & (MissingVar==NULL)"));
+        Assert.True(evaluator.Evaluate("(MissingVar!=EXIST) & ($LotID!=NULL)"));
+        Assert.True(evaluator.Evaluate("Ready? & EXIST LotID & NULL MissingVar"));
+
+        // ==[;;] / !=[;;] 空陣列檢測
+        Assert.True(evaluator.Evaluate("$EmptyMatrix==[;;]"));
+        Assert.False(evaluator.Evaluate("$EmptyMatrix!=[;;]"));
+
+        // Var@Section 與 :: JSON path
+        Assert.True(evaluator.Evaluate("$Mode@Thread1 == AUTO"));
+        Assert.True(evaluator.Evaluate("$Payload::status == OK"));
+        Assert.True(evaluator.Evaluate("$Payload::items[0]::code == 42"));
+        Assert.True(evaluator.Evaluate("$Payload::missing == NULL"));
+    }
 }

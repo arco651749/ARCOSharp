@@ -87,6 +87,7 @@ public sealed class ArcosThreadVM
         for (int i = 0; i < 100; i++)
         {
             _programs[i] = new ProgramTable { ProgramNumber = i, Name = GetDefaultProgramSlotName(i) };
+            _engines.Program.SetProgram(i, _programs[i]);
         }
 
         // 寫入系統事件程式區 (94~99) 的出廠預設指令
@@ -267,6 +268,7 @@ public sealed class ArcosThreadVM
 
         _programs[progNo] = program ?? throw new ArgumentNullException(nameof(program));
         _programs[progNo].ProgramNumber = progNo;
+        _engines.Program.SetProgram(progNo, _programs[progNo]);
 
         // 同步更新預設綁定或當前正在指向此 progNo 的主執行緒 Program 參照
         for (int i = 0; i < _mainThreads.Length; i++)

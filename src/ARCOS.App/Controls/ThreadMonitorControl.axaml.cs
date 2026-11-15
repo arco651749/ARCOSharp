@@ -105,18 +105,33 @@ public partial class ThreadMonitorControl : UserControl
 
         if (_context == null) return;
 
-        // 確保同步取得 VM 中對應 ProgramNumber 的最新 ProgramTable 實例
+        // 僅主執行緒 (Thread 0~12) 需與 VM 全域插槽 (0~99) 同步最新 ProgramTable；SubThread 持有獨立 ProgramTable 不可被覆蓋
         var prog = _context.Program;
-        if (prog != null && _context.VM != null)
+        bool isMainThread = _context.VM != null && _context.VM.MainThreads.Any(t => ReferenceEquals(t, _context));
+        if (prog != null && isMainThread)
         {
-            var latestProg = _context.VM.GetProgram(prog.ProgramNumber);
+            var latestProg = _context.VM!.GetProgram(prog.ProgramNumber);
             if (latestProg != null && !ReferenceEquals(prog, latestProg))
             {
                 _context.Program = latestProg;
                 prog = latestProg;
             }
         }
-        if (prog == null) return;
+        if (prog == null)
+        {
+            _lastProgramRef = null;
+            _lastProgramCount = 0;
+            _rows.Add(new SequencerRowViewModel
+            {
+                LineNumber = 0,
+                Command = string.Empty,
+                Parameter = string.Empty,
+                IsCurrentPC = false,
+                IsTrailingPlaceholder = true
+            });
+            DrainPCPointer();
+            return;
+        }
 
         _lastProgramRef = prog;
         _lastProgramCount = prog.Count;
@@ -129,9 +144,20 @@ public partial class ThreadMonitorControl : UserControl
                 LineNumber = i,
                 Command = item.Command,
                 Parameter = item.RawParameter,
-                IsCurrentPC = false
+                IsCurrentPC = false,
+                IsTrailingPlaceholder = false
             });
         }
+
+        // 所有 Thread (Main / Worker 1~12 / SubThread) 皆固定保留最下方空白佔位列，方便執行完畢後 PC 停駐顯示
+        _rows.Add(new SequencerRowViewModel
+        {
+            LineNumber = prog.Count,
+            Command = string.Empty,
+            Parameter = string.Empty,
+            IsCurrentPC = false,
+            IsTrailingPlaceholder = true
+        });
 
         var txtProgNo = this.FindControl<TextBlock>("TxtProgramNo");
         if (txtProgNo != null) txtProgNo.Text = prog.ProgramNumber.ToString();
@@ -152,11 +178,12 @@ public partial class ThreadMonitorControl : UserControl
     {
         if (_context == null) return;
 
-        // 檢查該 Thread 綁定的 Program 是否因編輯器修改或 Thread@Run 切換而改變
+        // 檢查該 Thread 綁定的 Program 是否因編輯器修改或 Thread@Run 切換而改變（僅限 MainThread，避免 SubThread 被 VM 空插槽覆寫）
         var currentProg = _context.Program;
-        if (currentProg != null && _context.VM != null)
+        bool isMainThread = _context.VM != null && _context.VM.MainThreads.Any(t => ReferenceEquals(t, _context));
+        if (currentProg != null && isMainThread)
         {
-            var vmProg = _context.VM.GetProgram(currentProg.ProgramNumber);
+            var vmProg = _context.VM!.GetProgram(currentProg.ProgramNumber);
             if (vmProg != null && !ReferenceEquals(currentProg, vmProg))
             {
                 _context.Program = vmProg;
@@ -201,12 +228,19 @@ public partial class ThreadMonitorControl : UserControl
         var ledCompact = this.FindControl<Avalonia.Controls.Shapes.Ellipse>("LedCompactStatus");
         if (ledCompact != null) ledCompact.Fill = ledBrush;
 
-        // 3. 更新目前指令文字
+        // 3. 更新目前指令文字（停在尾端空白列時清空顯示）
         var txtStatusMsg = this.FindControl<TextBox>("TxtStatusMessage");
-        if (txtStatusMsg != null && _context.Program != null && pc1Based >= 1 && pc1Based <= _context.Program.Count)
+        if (txtStatusMsg != null)
         {
-            var item = _context.Program[pc1Based];
-            txtStatusMsg.Text = $"{item.Command}  {item.RawParameter}";
+            if (_context.Program != null && pc1Based >= 1 && pc1Based <= _context.Program.Count)
+            {
+                var item = _context.Program[pc1Based];
+                txtStatusMsg.Text = $"{item.Command}  {item.RawParameter}";
+            }
+            else
+            {
+                txtStatusMsg.Text = string.Empty;
+            }
         }
 
         // 4. 更新 DataGrid 當前 PC 行號粉色反白指示 (與編輯頁相同，隨時顯示目前執行到的行號)

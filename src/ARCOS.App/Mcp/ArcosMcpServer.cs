@@ -432,14 +432,21 @@ public static class ArcosMcpServer
 
     private static Window? GetActiveDialog(MainWindow mainWin)
     {
-        var owned = mainWin.OwnedWindows.OfType<Window>().LastOrDefault(w => w.IsVisible);
-        if (owned != null) return owned;
+        var topOwned = FindDeepestVisibleOwned(mainWin);
+        if (topOwned != null) return topOwned;
 
         if (Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
             return desktop.Windows.LastOrDefault(w => w != mainWin && w.IsVisible);
         }
         return null;
+    }
+
+    private static Window? FindDeepestVisibleOwned(Window root)
+    {
+        var owned = root.OwnedWindows.OfType<Window>().LastOrDefault(w => w.IsVisible);
+        if (owned == null) return null;
+        return FindDeepestVisibleOwned(owned) ?? owned;
     }
 
     private static string ToolGetState(MainWindow mainWin)
