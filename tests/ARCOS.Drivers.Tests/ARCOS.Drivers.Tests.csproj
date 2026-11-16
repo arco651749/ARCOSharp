@@ -21,9 +21,11 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\ARCOS.Core\ARCOS.Core.csproj" />
+    <ProjectReference Include="..\..\src\ARCOS.CsviStudio\ARCOS.CsviStudio.csproj" />
     <ProjectReference Include="..\..\src\MODULES\IO\DRIVER\MockIO\ARCOS.Driver.MockIO.csproj" />
     <ProjectReference Include="..\..\src\MODULES\MOTION\DRIVER\MockMotion\ARCOS.Driver.MockMotion.csproj" />
     <ProjectReference Include="..\..\src\MODULES\CAPTURE\DRIVER\MockCamera\ARCOS.Driver.MockCamera.csproj" />
+    <ProjectReference Include="..\..\src\MODULES\CAPTURE\DRIVER\DirectShowCamera\ARCOS.Driver.DirectShowCamera.csproj" />
     <ProjectReference Include="..\..\src\MODULES\DAQ\DRIVER\MockDAQ\ARCOS.Driver.MockDaq.csproj" />
   </ItemGroup>
 

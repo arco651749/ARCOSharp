@@ -39,6 +39,11 @@ New-Item -ItemType Directory -Path "$OutputDir\POINT&PATH" -Force | Out-Null
 New-Item -ItemType Directory -Path "$OutputDir\Python" -Force | Out-Null
 
 New-Item -ItemType Directory -Path "$OutputDir\ExternalModules" -Force | Out-Null
+New-Item -ItemType Directory -Path "$OutputDir\RULES" -Force | Out-Null
+$rulesJson = "$PSScriptRoot\..\RULES\CsviLintRules.json"
+if (Test-Path -LiteralPath $rulesJson) {
+    Copy-Item -LiteralPath $rulesJson -Destination "$OutputDir\RULES\CsviLintRules.json" -Force
+}
 
 # 2. Publish ARCOS.App Host
 Write-Host "`n[1/5] Publishing ARCOS.App Host..." -ForegroundColor Yellow
@@ -55,6 +60,7 @@ $driverProjects = @(
     @{ Proj = "$PSScriptRoot\..\src\MODULES\IO\DRIVER\MockIO\ARCOS.Driver.MockIO.csproj"; Out = "$OutputDir\MODULES\IO\DRIVER\MockIO"; Name = "MockIO.Driver" },
     @{ Proj = "$PSScriptRoot\..\src\MODULES\MOTION\DRIVER\MockMotion\ARCOS.Driver.MockMotion.csproj"; Out = "$OutputDir\MODULES\MOTION\DRIVER\MockMotion"; Name = "MockMotion.Driver" },
     @{ Proj = "$PSScriptRoot\..\src\MODULES\CAPTURE\DRIVER\MockCamera\ARCOS.Driver.MockCamera.csproj"; Out = "$OutputDir\MODULES\CAPTURE\DRIVER\MockCamera"; Name = "MockCamera.Driver" },
+    @{ Proj = "$PSScriptRoot\..\src\MODULES\CAPTURE\DRIVER\DirectShowCamera\ARCOS.Driver.DirectShowCamera.csproj"; Out = "$OutputDir\MODULES\CAPTURE\DRIVER\DirectShowCamera"; Name = "DirectShowCamera.Driver" },
     @{ Proj = "$PSScriptRoot\..\src\MODULES\DAQ\DRIVER\MockDAQ\ARCOS.Driver.MockDaq.csproj"; Out = "$OutputDir\MODULES\DAQ\DRIVER\MockDAQ"; Name = "MockDAQ.Driver" }
 )
 

@@ -35,6 +35,24 @@ public partial class MainWindow : Window
         InitializeComponent();
         Position = new PixelPoint(1930, -670);
 
+        var lintPanel = this.FindControl<ARCOS.CsviStudio.Controls.CsviLintSettingsPanel>("LintSettingsPanel");
+        if (lintPanel != null)
+        {
+            lintPanel.LogRequested += AppendLog;
+            lintPanel.RunManualReviewRequested += () =>
+            {
+                var src = new Dictionary<string, string>
+                {
+                    ["Logic.cs"] = LogicEditor.Text ?? string.Empty,
+                    ["Wizard.axaml"] = WizardEditor.Text ?? string.Empty,
+                    ["Panel.axaml"] = PanelEditor.Text ?? string.Empty
+                };
+                string asmName = string.IsNullOrEmpty(_currentFilePath) ? "UnsavedCsvi" : Path.GetFileNameWithoutExtension(_currentFilePath);
+                var preComp = _compiler.Compile(asmName, src, _currentManifest, _password);
+                ARCOS.CsviStudio.Controls.CsviLintSettingsPanel.ReportWarningsAndMaybeRunLlmReview(_compiler, asmName, src, _currentManifest, preComp, AppendLog, forceRunLlm: true);
+            };
+        }
+
         SourceTabs.SelectionChanged += (s, e) =>
         {
             if (_isLoadingFile) return;
@@ -407,7 +425,8 @@ public class IoSetPortGuidance : IParameterGuidance, IModuleHandler
         var mode = (CsviPackagingMode)ModeCombo.SelectedIndex;
         _currentManifest.PackagingMode = mode;
 
-        var compRes = _compiler.Compile(Path.GetFileNameWithoutExtension(_currentFilePath), sources, _currentManifest, _password);
+        string asmName = Path.GetFileNameWithoutExtension(_currentFilePath);
+        var compRes = _compiler.Compile(asmName, sources, _currentManifest, _password);
         if (compRes.Success)
         {
             _currentAssemblyBytes = compRes.AssemblyBytes;
@@ -415,6 +434,7 @@ public class IoSetPortGuidance : IParameterGuidance, IModuleHandler
             AppendLog($"✔ Roslyn Compilation Succeeded in {compRes.ElapsedMilliseconds} ms -> {_currentFilePath} ({compRes.AssemblyBytes.Length} bytes)");
             CurrentFileBlock.Text = $"{Path.GetFileName(_currentFilePath)} [{_currentManifest.CommandKey}] ({_currentFilePath})";
             RefreshActivePreview();
+            ARCOS.CsviStudio.Controls.CsviLintSettingsPanel.ReportWarningsAndMaybeRunLlmReview(_compiler, asmName, sources, _currentManifest, compRes, AppendLog);
         }
         else
         {

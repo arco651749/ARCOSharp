@@ -1,5 +1,6 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="clr-namespace:ARCOS.CsviStudio.Controls"
         x:Class="ARCOS.CsviStudio.Views.MainWindow"
         Title="🛠️ CSVI Studio 3.0 - Grand Unified Instrument IDE"
         Width="1000" Height="700"
@@ -112,6 +113,10 @@
                                        HorizontalAlignment="Center" VerticalAlignment="Center"/>
                             </Border>
                         </ScrollViewer>
+                    </TabItem>
+
+                    <TabItem Header="🛡 AI &amp; Lint 規則" FontSize="13" FontWeight="SemiBold">
+                        <controls:CsviLintSettingsPanel x:Name="LintSettingsPanel"/>
                     </TabItem>
                 </TabControl>
             </Grid>

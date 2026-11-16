@@ -16,12 +16,14 @@ internal class Program
             return 0;
         }
 
-        // 2. 檢查是否以 CLI 命令列模式編譯 CSVI (--compile <sourceDir> <outputCsvi> [password])
+        // 2. 檢查是否以 CLI 命令列模式編譯 CSVI (--compile <sourceDir> <outputCsvi> [password] [--ai-review])
         if (args.Length >= 3 && args[0].Equals("--compile", StringComparison.OrdinalIgnoreCase))
         {
+            Console.OutputEncoding = System.Text.Encoding.UTF8;
+            bool runAiReview = args.Any(a => a.Equals("--ai-review", StringComparison.OrdinalIgnoreCase));
             string sourceDir = args[1];
             string outputCsvi = args[2];
-            string? password = args.Length >= 4 ? args[3] : null;
+            string? password = args.Length >= 4 && !args[3].StartsWith("--", StringComparison.Ordinal) ? args[3] : null;
 
             if (!Directory.Exists(sourceDir))
             {
@@ -64,6 +66,33 @@ internal class Program
             }
             File.WriteAllBytes(outputCsvi, result.AssemblyBytes);
             Console.WriteLine($"SUCCESS: Compiled {outputCsvi} ({result.AssemblyBytes.Length} bytes) in {result.ElapsedMilliseconds} ms");
+            if (result.Warnings.Count > 0)
+            {
+                Console.WriteLine($"WARNINGS ({result.Warnings.Count}):");
+                foreach (var w in result.Warnings) Console.WriteLine("  " + w);
+            }
+
+            ARCOS.CsviStudio.Services.CsviLlmReviewResult? aiRes = null;
+            if (runAiReview)
+            {
+                aiRes = await compiler.ReviewWithConfiguredLlmAsync(asmName, sources, manifest);
+                Console.WriteLine($"AI_REVIEW ({aiRes.Provider}): executed={aiRes.Executed}, succeeded={aiRes.Succeeded}");
+                if (!string.IsNullOrWhiteSpace(aiRes.Summary))
+                    Console.WriteLine($"  SUMMARY: {aiRes.Summary}");
+                if (!string.IsNullOrWhiteSpace(aiRes.InfoMessage))
+                    Console.WriteLine($"  INFO: {aiRes.InfoMessage}");
+                foreach (var w in aiRes.Warnings)
+                    Console.WriteLine("  " + w);
+            }
+
+            ARCOS.CsviStudio.Services.CsviReviewHistoryStore.Record(
+                ARCOS.CsviStudio.Services.CsviReviewHistoryStore.CreateSnapshot(
+                    source: "CLI",
+                    targetName: asmName,
+                    commandKey: manifest.CommandKey,
+                    staticWarnings: result.Warnings,
+                    aiResult: aiRes,
+                    aiPending: false));
             return 0;
         }
 

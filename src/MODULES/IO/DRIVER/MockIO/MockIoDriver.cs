@@ -29,6 +29,15 @@ public class MockIoDriver : IDriver
 
     public bool[] SimulatedInputs { get; private set; } = Array.Empty<bool>();
     public bool[] ReadbackOutputs { get; private set; } = Array.Empty<bool>();
+    /// <summary>模擬硬體端實體 DO 鎖存暫存器（用以驗證 Init 僅回讀一次 DO，之後僅週期性寫 DO / 讀 DI）</summary>
+    public bool[] HardwareOutputs { get; private set; } = Array.Empty<bool>();
+
+    /// <summary>Init 期間讀取實體硬體 DO 初值的次數（應嚴格為 1，進入背景掃描後不再增加）</summary>
+    public int InitialDoReadCount { get; private set; }
+    /// <summary>背景掃描／指令觸發寫出 DO 至硬體的累計次數</summary>
+    public int PeriodicDoWriteCount { get; private set; }
+    /// <summary>背景掃描／指令觸發自硬體讀取 DI 的累計次數</summary>
+    public int PeriodicDiReadCount { get; private set; }
 
     public event Action? IoStateUpdated;
     public event Action? PortNamesRefreshed;
@@ -39,7 +48,8 @@ public class MockIoDriver : IDriver
         DeviceName = deviceName;
         _engines = engines;
 
-        // 解析參數：支援 Device=COM1 或 Device=IP:Port，OutStart/OutSart、InputStart/InStart 容錯解析
+        // 解析參數：支援 Device=COM1 或 Device=IP:Port，OutStart/OutSart、InputStart/InStart 容錯解析，
+        // 以及 InitDO / InitDoMask 模擬設備上電時原本已開啟的實體 DO 狀態。
         var args = ArgParaHelper.ParseKeyValueArgs(param, out var posArgs);
         if (args.TryGetValue("Device", out var dev)) Device = dev;
         if (args.TryGetValue("OutStart", out var outStart) || args.TryGetValue("OutSart", out outStart)) OutStart = outStart;
@@ -50,6 +60,15 @@ public class MockIoDriver : IDriver
 
         SimulatedInputs = new bool[InPorts];
         ReadbackOutputs = new bool[OutPorts];
+        HardwareOutputs = new bool[OutPorts];
+        InitialDoReadCount = 0;
+        PeriodicDoWriteCount = 0;
+        PeriodicDiReadCount = 0;
+
+        // 【真實硬體 IO 範本步驟 1】：僅於初始化執行一次實體硬體 DO 回讀並設定為 IoEngine DO 初值，
+        // 避免軟體剛啟動時把機台原本開啟中的真空閥 / 夾持汽缸瞬間洗成 false。
+        SeedInitialOutputsFromHardwareOnce(args);
+        SyncInputsFromHardware();
 
         // 雙向同步監聽：若外部 (UI 點擊手動調試、腳本或 Telnet) 變更屬於 InStart 範圍內的點位，
         // 自動同步至 SimulatedInputs 緩衝區，杜絕 WorkerLoop 背景每 25ms 掃描強制覆寫回 false
@@ -70,6 +89,76 @@ public class MockIoDriver : IDriver
 
         _cts = new CancellationTokenSource();
         _workerTask = Task.Run(() => WorkerLoop(_cts.Token));
+    }
+
+    private void SeedInitialOutputsFromHardwareOnce(IReadOnlyDictionary<string, string> args)
+    {
+        bool[] hwDo = ReadHardwareOutputsInitialOnce(args);
+        InitialDoReadCount++;
+
+        Array.Copy(hwDo, HardwareOutputs, Math.Min(hwDo.Length, HardwareOutputs.Length));
+        Array.Copy(hwDo, ReadbackOutputs, Math.Min(hwDo.Length, ReadbackOutputs.Length));
+
+        if (_engines != null && hwDo.Length > 0)
+        {
+            _engines.Io.SetBatch(OutStart, hwDo.AsSpan());
+        }
+    }
+
+    private bool[] ReadHardwareOutputsInitialOnce(IReadOnlyDictionary<string, string> args)
+    {
+        bool[] hwDo = _engines != null ? _engines.Io.GetBatch(OutStart, OutPorts) : new bool[OutPorts];
+
+        if (args.TryGetValue("InitDoMask", out var maskStr) && !string.IsNullOrWhiteSpace(maskStr))
+        {
+            string s = maskStr.Trim();
+            ulong mask = 0;
+            bool parsed = s.StartsWith("0x", StringComparison.OrdinalIgnoreCase)
+                ? ulong.TryParse(s[2..], System.Globalization.NumberStyles.HexNumber, null, out mask)
+                : ulong.TryParse(s, out mask);
+            if (parsed)
+            {
+                for (int i = 0; i < hwDo.Length && i < 64; i++)
+                {
+                    if ((mask & (1UL << i)) != 0) hwDo[i] = true;
+                }
+            }
+        }
+
+        if (args.TryGetValue("InitDO", out var initDoStr) && !string.IsNullOrWhiteSpace(initDoStr))
+        {
+            foreach (var token in initDoStr.Split(new[] { ';', '|', ' ' }, StringSplitOptions.RemoveEmptyEntries))
+            {
+                string t = token.Trim();
+                if (TryGetPortOffset(OutStart, t, out int portOffset) && portOffset >= 0 && portOffset < hwDo.Length)
+                {
+                    hwDo[portOffset] = true;
+                }
+                else if (int.TryParse(t, out int idx) && idx >= 0 && idx < hwDo.Length)
+                {
+                    hwDo[idx] = true;
+                }
+            }
+        }
+
+        return hwDo;
+    }
+
+    private void SyncInputsFromHardware()
+    {
+        if (_engines == null) return;
+        _engines.Io.SetBatch(InStart, SimulatedInputs.AsSpan());
+        PeriodicDiReadCount++;
+    }
+
+    private void FlushOutputsToHardware()
+    {
+        if (_engines == null) return;
+        var outputs = _engines.Io.GetBatch(OutStart, OutPorts);
+        int count = Math.Min(outputs.Length, HardwareOutputs.Length);
+        Array.Copy(outputs, HardwareOutputs, count);
+        Array.Copy(outputs, ReadbackOutputs, Math.Min(outputs.Length, ReadbackOutputs.Length));
+        PeriodicDoWriteCount++;
     }
 
     public string GetInputPortName(int index) => GetPortNameAtOffset(InStart, index);
@@ -147,15 +236,11 @@ public class MockIoDriver : IDriver
                     ExecuteCommand(ticket);
                 }
 
-                // 2. 雙向批次搬運：
+                // 2. 進入運行迴圈後：僅單向「寫 DO 到硬體」與「從硬體讀 DI」（不再回讀硬體 DO）
                 if (_engines != null)
                 {
-                    // 2a. 寫回 Input 到 IoEngine
-                    _engines.Io.SetBatch(InStart, SimulatedInputs.AsSpan());
-
-                    // 2b. 從 IoEngine 讀回 Output 狀態
-                    var outputs = _engines.Io.GetBatch(OutStart, OutPorts);
-                    Array.Copy(outputs, ReadbackOutputs, Math.Min(outputs.Length, ReadbackOutputs.Length));
+                    SyncInputsFromHardware();
+                    FlushOutputsToHardware();
 
                     IoStateUpdated?.Invoke();
                 }
@@ -193,9 +278,8 @@ public class MockIoDriver : IDriver
 
             if (_engines != null)
             {
-                _engines.Io.SetBatch(InStart, SimulatedInputs.AsSpan());
-                var outputs = _engines.Io.GetBatch(OutStart, OutPorts);
-                Array.Copy(outputs, ReadbackOutputs, Math.Min(outputs.Length, ReadbackOutputs.Length));
+                SyncInputsFromHardware();
+                FlushOutputsToHardware();
             }
             PortNamesRefreshed?.Invoke();
             IoStateUpdated?.Invoke();
@@ -205,9 +289,8 @@ public class MockIoDriver : IDriver
         {
             if (_engines != null)
             {
-                _engines.Io.SetBatch(InStart, SimulatedInputs.AsSpan());
-                var outputs = _engines.Io.GetBatch(OutStart, OutPorts);
-                Array.Copy(outputs, ReadbackOutputs, Math.Min(outputs.Length, ReadbackOutputs.Length));
+                SyncInputsFromHardware();
+                FlushOutputsToHardware();
                 IoStateUpdated?.Invoke();
             }
             ticket.SetCompleted();

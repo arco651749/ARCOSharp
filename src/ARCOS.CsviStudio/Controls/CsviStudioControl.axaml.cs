@@ -35,6 +35,24 @@ public partial class CsviStudioControl : UserControl
         InitializeComponent();
         // Position is for Window only
 
+        var lintPanel = this.FindControl<CsviLintSettingsPanel>("LintSettingsPanel");
+        if (lintPanel != null)
+        {
+            lintPanel.LogRequested += AppendLog;
+            lintPanel.RunManualReviewRequested += () =>
+            {
+                var src = new Dictionary<string, string>
+                {
+                    ["Logic.cs"] = LogicEditor.Text ?? string.Empty,
+                    ["Wizard.axaml"] = WizardEditor.Text ?? string.Empty,
+                    ["Panel.axaml"] = PanelEditor.Text ?? string.Empty
+                };
+                string asmName = string.IsNullOrEmpty(_currentFilePath) ? "UnsavedCsvi" : Path.GetFileNameWithoutExtension(_currentFilePath);
+                var preComp = _compiler.Compile(asmName, src, _currentManifest, _password);
+                CsviLintSettingsPanel.ReportWarningsAndMaybeRunLlmReview(_compiler, asmName, src, _currentManifest, preComp, AppendLog, forceRunLlm: true);
+            };
+        }
+
         SourceTabs.SelectionChanged += (s, e) =>
         {
             if (_isLoadingFile) return;
@@ -412,6 +430,13 @@ public class IoSetPortGuidance : IParameterGuidance, IModuleHandler
             AppendLog($"✔ Roslyn Compilation Succeeded in {compRes.ElapsedMilliseconds} ms -> {_currentFilePath} ({compRes.AssemblyBytes.Length} bytes)");
             CurrentFileBlock.Text = $"{Path.GetFileName(_currentFilePath)} [{_currentManifest.CommandKey}] ({_currentFilePath})";
             RefreshActivePreview();
+            CsviLintSettingsPanel.ReportWarningsAndMaybeRunLlmReview(
+                _compiler,
+                Path.GetFileNameWithoutExtension(_currentFilePath),
+                sources,
+                _currentManifest,
+                compRes,
+                AppendLog);
         }
         else
         {

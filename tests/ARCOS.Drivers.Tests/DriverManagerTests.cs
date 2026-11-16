@@ -301,4 +301,46 @@ public class DriverManagerTests
 
         manager.ShutdownAll();
     }
+
+    [Fact]
+    public void MockIo_Init_ReadsHardwareOutputsStrictlyOnceThenOnlyWritesDoAndReadsDi()
+    {
+        var (engines, manager) = CreateEnvironment();
+
+        // 模擬設備上電時原本已開啟 DO P0.0 與 P0.2 (InitDoMask=0x05, 另也可寫 InitDO=P0.0;P0.2)
+        var ioDev = (MockIoDriver)manager.AddDevice(
+            "IO",
+            "MainIO",
+            "MockIO",
+            "OutStart=P0.0,OutPorts=8,InputStart=P1.0,InPorts=8,Interval=15,InitDoMask=0x05",
+            engines);
+
+        // 1. Init() 剛結束尚未進入多輪掃描前，IoEngine 應已從實體 DO 初值同步完成，且初值讀取次數嚴格為 1
+        Assert.Equal(1, ioDev.InitialDoReadCount);
+        Assert.True(engines.Io.GetPort("P0.0"));
+        Assert.False(engines.Io.GetPort("P0.1"));
+        Assert.True(engines.Io.GetPort("P0.2"));
+        Assert.True(ioDev.HardwareOutputs[0]);
+        Assert.False(ioDev.HardwareOutputs[1]);
+        Assert.True(ioDev.HardwareOutputs[2]);
+
+        // 2. 等待 WorkerLoop 執行數輪背景掃描後，InitialDoReadCount 必須維持 1 (絕不重讀 DO 覆蓋系統)，僅執行 Write DO 與 Read DI
+        Thread.Sleep(80);
+        Assert.Equal(1, ioDev.InitialDoReadCount);
+        Assert.True(ioDev.PeriodicDoWriteCount >= 2);
+        Assert.True(ioDev.PeriodicDiReadCount >= 2);
+        Assert.True(engines.Io.GetPort("P0.0"));
+        Assert.True(engines.Io.GetPort("P0.2"));
+
+        // 3. 腳本寫入 DO (P0.1 = true) 時，背景迴圈應只將新 DO 寫入硬體端，同時保持既有 DO
+        engines.Io.SetPort("P0.1", true);
+        Thread.Sleep(60);
+        Assert.Equal(1, ioDev.InitialDoReadCount);
+        Assert.True(ioDev.HardwareOutputs[1]);
+        Assert.True(ioDev.ReadbackOutputs[1]);
+        Assert.True(ioDev.HardwareOutputs[0]);
+        Assert.True(ioDev.HardwareOutputs[2]);
+
+        manager.ShutdownAll();
+    }
 }

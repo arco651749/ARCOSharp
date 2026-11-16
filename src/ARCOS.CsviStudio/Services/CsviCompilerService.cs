@@ -188,6 +188,14 @@ public class CsviCompilerService
         {
             result.Success = true;
             result.AssemblyBytes = peStream.ToArray();
+
+            try
+            {
+                var lintCfg = CsviLintConfig.Load();
+                var ruleWarnings = CsviDynamicRuleEngine.EvaluateLocalStaticWarnings(compilation, manifest, sourceFiles, lintCfg);
+                result.Warnings.AddRange(ruleWarnings);
+            }
+            catch { }
         }
         else
         {
@@ -195,5 +203,26 @@ public class CsviCompilerService
         }
 
         return result;
+    }
+
+    public Task<CsviLlmReviewResult> ReviewWithConfiguredLlmAsync(
+        string assemblyName,
+        Dictionary<string, string> sourceFiles,
+        CsviManifest manifest,
+        CsviLintConfig? configOverride = null,
+        CancellationToken ct = default)
+    {
+        var trees = sourceFiles
+            .Where(kv => kv.Key.EndsWith(".cs", StringComparison.OrdinalIgnoreCase))
+            .Select(kv => CSharpSyntaxTree.ParseText(kv.Value ?? string.Empty, path: kv.Key, encoding: Encoding.UTF8))
+            .ToList();
+        var compilation = CSharpCompilation.Create(
+            string.IsNullOrWhiteSpace(assemblyName) ? "CsviReviewTarget" : assemblyName,
+            trees,
+            DefaultReferences,
+            new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+
+        var cfg = configOverride ?? CsviLintConfig.Load();
+        return CsviLlmReviewClient.ReviewAsync(compilation, manifest, sourceFiles, cfg, ct);
     }
 }

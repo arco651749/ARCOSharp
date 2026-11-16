@@ -1,0 +1,107 @@
+{
+  "SchemaVersion": 1,
+  "LintBehavior": {
+    "WarningOnly": true,
+    "EmitLocalStaticWarningsOnCompile": true
+  },
+  "LlmReviewer": {
+    "Enabled": true,
+    "RunAfterBuild": true,
+    "Provider": "AgyCli",
+    "EndpointOrCommand": "agy",
+    "Model": "gemini-3.8-flash-low",
+    "ApiKeyEnvOrLiteral": "",
+    "CliArgsTemplate": "",
+    "TimeoutSeconds": 60,
+    "PromptTemplate": "你是 ARCOSharp 工控系統的架構審查員。請只依據以下規則審查這份 `{driver_name}` (Category={category}) 原始碼。\n注意：各廠牌硬體 SDK 函式命名不同，請從實際資料流向與生命週期語意判斷。\n\n## 審查規則清單\n{rules_text}\n\n## 回覆格式（必須為純 JSON）\n請回傳如下 JSON 物件，每個適用的規則 ID 都要填入：\n{\n  \"summary\": \"一句話總結\",\n  \"results\": [\n    {\n      \"rule_id\": \"IO-01\",\n      \"status\": \"PASS 或 FAIL\",\n      \"evidence_file\": \"Logic.cs\",\n      \"evidence_lines\": \"L10-L30\",\n      \"reasoning\": \"簡潔說明原因（繁體中文）\"\n    }\n  ]\n}\n\n## 程式碼\n{numbered_source}"
+  },
+  "Rules": [
+    {
+      "Id": "IO-01",
+      "Enabled": true,
+      "Category": "IO",
+      "RequiresInterface": "IDriver",
+      "Title": "Init 必須先回讀一次硬體 DO 初值寫入 IoEngine",
+      "PromptInstruction": "Init() 在啟動背景掃描迴圈或任何輸出寫入前，必須先從實體硬體/模擬暫存器讀取一次目前 DO 狀態並呼叫 IoEngine.SetBatch(OutStart, ...)（或 SetPort），防止啟動瞬間把原本開啟中的真空閥或汽缸洗成 false。",
+      "LocalStaticCheck": {
+        "Kind": "InitMustCall",
+        "EntryMethods": [ "Init" ],
+        "FollowPrivateCalls": true,
+        "RequiredMethodTokens": [ "SetBatch", "SetPort" ],
+        "RequiredArgumentTokens": [ "OutStart", "Out" ]
+      }
+    },
+    {
+      "Id": "IO-02",
+      "Enabled": true,
+      "Category": "IO",
+      "RequiresInterface": "IDriver",
+      "Title": "運行迴圈內僅可寫 DO / 讀 DI，不可重讀硬體 DO 覆蓋 OutStart",
+      "PromptInstruction": "進入背景掃描迴圈 (WorkerLoop / PollLoop) 後，只能從硬體讀 DI 寫入 IoEngine (InStart) 並從 IoEngine.GetBatch(OutStart, ...) 讀目標 DO 寫往硬體；禁止於迴圈內再次讀取硬體 DO 覆蓋 OutStart 的 IoEngine 狀態。",
+      "LocalStaticCheck": {
+        "Kind": "LoopMustNotCall",
+        "EntryMethods": [ "WorkerLoop", "PollLoop", "ScanLoop" ],
+        "ForbiddenMethodTokens": [ "SetBatch" ],
+        "ForbiddenArgumentTokens": [ "OutStart" ]
+      }
+    },
+    {
+      "Id": "IO-03",
+      "Enabled": true,
+      "Category": "IO",
+      "RequiresInterface": "IDriver",
+      "Title": "背景輪詢迴圈須捕捉 OperationCanceledException 與通訊例外",
+      "PromptInstruction": "背景工作迴圈必須包含 try/catch 以正確處理 OperationCanceledException（安全結束）並容錯捕捉硬體通訊例外，不可讓未捕捉例外導致宿主崩潰。",
+      "LocalStaticCheck": {
+        "Kind": "MethodMustCatch",
+        "EntryMethods": [ "WorkerLoop", "PollLoop", "ScanLoop" ]
+      }
+    },
+    {
+      "Id": "IO-04",
+      "Enabled": true,
+      "Category": "IO",
+      "RequiresInterface": "IDriver",
+      "Title": "PostTicket 須非阻塞入隊並確保完成/失敗回報，Init 重入前須取消舊工作",
+      "PromptInstruction": "PostTicket(DriverTicket) 應採用 Channel / Queue 等非阻塞機制入隊，禁止於 PostTicket 內同步阻塞或死等硬體 I/O；所有命令處理分支（包含 FORCEUPDATE / INIT 與錯誤分支）最終皆須呼叫 ticket.SetCompleted(...) 或 ticket.SetFailed(...)，防止呼叫端 await 永遠懸掛。此外，若 Init() 重複被呼叫，啟動新背景迴圈前必須先對舊 CancellationTokenSource 呼叫 Cancel()，避免雙迴圈重疊運作。",
+      "LocalStaticCheck": {
+        "Kind": "None"
+      }
+    },
+    {
+      "Id": "IO-05",
+      "Enabled": true,
+      "Category": "IO",
+      "RequiresInterface": "IDriver",
+      "Title": "訂閱 IoEngine.IoChanged 防止週期 DI 回寫覆蓋外部手動注入",
+      "PromptInstruction": "若驅動會週期呼叫 IoEngine.SetBatch(InStart, ...)，應於 Init() 訂閱 IoEngine.IoChanged，在外部（UI 面板、腳本、Telnet）手動修改 Input 時同步內部輸入緩衝區。",
+      "LocalStaticCheck": {
+        "Kind": "MustSubscribeEvent",
+        "RequiredTokens": [ "IoChanged" ]
+      }
+    },
+    {
+      "Id": "DRV-01",
+      "Enabled": true,
+      "Category": "*",
+      "RequiresInterface": "IDriver",
+      "Title": "Shutdown 與 Dispose 須取消 CancellationTokenSource 並釋放資源",
+      "PromptInstruction": "若類別持有 CancellationTokenSource，Shutdown() 必須呼叫 Cancel()，且 Dispose() 必須呼叫 Shutdown() 並釋放資源，防止背景執行緒或硬體連線洩漏。",
+      "LocalStaticCheck": {
+        "Kind": "DisposalSafety",
+        "TriggerIfSourceContains": [ "CancellationTokenSource" ]
+      }
+    },
+    {
+      "Id": "CAP-01",
+      "Enabled": true,
+      "Category": "Capture",
+      "RequiresInterface": "IDriver",
+      "Title": "Snap/Trigger 在無硬體連線時須安全降級並維護 $(Cam)#OK?",
+      "PromptInstruction": "Capture Driver 在相機斷線或無實體鏡頭時執行 Snap/Trigger，應優雅降級（例如產出含時間戳記的預設影像與設置 $(DeviceName)#OK? = false），不可拋出未捕捉例外中斷產線流程。",
+      "LocalStaticCheck": {
+        "Kind": "None"
+      }
+    }
+  ]
+}

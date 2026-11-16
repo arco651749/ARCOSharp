@@ -1,5 +1,6 @@
 using System.IO;
 using System.Text;
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using ARCOS.Core.Csvi;
@@ -45,7 +46,7 @@ public class McpServer
                 var method = request["method"]?.GetValue<string>();
                 var @params = request["params"];
 
-                var response = HandleRequest(method, @params, id);
+                var response = await HandleRequestAsync(method, @params, id, cancellationToken);
                 if (response != null)
                 {
                     await writer.WriteLineAsync(response.ToJsonString());
@@ -70,10 +71,15 @@ public class McpServer
 
     public JsonObject? HandleRequestDirect(string? method, JsonNode? @params, JsonNode? id)
     {
-        return HandleRequest(method, @params, id);
+        return HandleRequestAsync(method, @params, id).GetAwaiter().GetResult();
     }
 
-    private JsonObject? HandleRequest(string? method, JsonNode? @params, JsonNode? id)
+    public Task<JsonObject?> HandleRequestDirectAsync(string? method, JsonNode? @params, JsonNode? id, CancellationToken ct = default)
+    {
+        return HandleRequestAsync(method, @params, id, ct);
+    }
+
+    private async Task<JsonObject?> HandleRequestAsync(string? method, JsonNode? @params, JsonNode? id, CancellationToken ct = default)
     {
         var response = new JsonObject
         {
@@ -117,7 +123,7 @@ public class McpServer
             case "tools/call":
                 string toolName = @params?["name"]?.GetValue<string>() ?? string.Empty;
                 var arguments = @params?["arguments"] as JsonObject ?? new JsonObject();
-                response["result"] = ExecuteTool(toolName, arguments);
+                response["result"] = await ExecuteToolAsync(toolName, arguments, ct);
                 return response;
 
             case "resources/list":
@@ -240,9 +246,36 @@ public class McpServer
                         ["packagingMode"] = new JsonObject { ["type"] = "string", ["enum"] = new JsonArray { "PortableOpen", "PasswordLocked", "StrippedRelease" } },
                         ["password"] = new JsonObject { ["type"] = "string", ["description"] = "密碼 (若是 PasswordLocked)" },
                         ["author"] = new JsonObject { ["type"] = "string", ["description"] = "修訂作者" },
-                        ["revisionSummary"] = new JsonObject { ["type"] = "string", ["description"] = "修訂變更摘要" }
+                        ["revisionSummary"] = new JsonObject { ["type"] = "string", ["description"] = "修訂變更摘要" },
+                        ["runAiReview"] = new JsonObject { ["type"] = "boolean", ["description"] = "是否同時執行目前設定的 LLM 語意審查並回傳 aiReview 欄位 (預設 false；亦可改呼 csvi_ai_review)" }
                     },
                     ["required"] = new JsonArray { "outputPath", "commandKey", "sourceFiles" }
+                }
+            },
+            new JsonObject
+            {
+                ["name"] = "csvi_ai_review",
+                ["description"] = "對指定 sourceFiles 或 .csvi 執行本機動態規則檢查 ([LINT-WARN]) 與設定之 LLM 端點語意審查 ([AI-LINT-WARN])，回傳完整診斷與建議摘要",
+                ["inputSchema"] = new JsonObject
+                {
+                    ["type"] = "object",
+                    ["properties"] = new JsonObject
+                    {
+                        ["csviPath"] = new JsonObject { ["type"] = "string", ["description"] = ".csvi 檔案路徑 (若未傳 sourceFiles 時從中解包原始碼)" },
+                        ["sourceFiles"] = new JsonObject { ["type"] = "object", ["description"] = "可選原始碼字典：檔名 -> 代碼字串" },
+                        ["commandKey"] = new JsonObject { ["type"] = "string", ["description"] = "指令 Key，如 IO@AddIODriver::MockIO" },
+                        ["password"] = new JsonObject { ["type"] = "string", ["description"] = "解鎖密碼 (若為 PasswordLocked .csvi)" }
+                    }
+                }
+            },
+            new JsonObject
+            {
+                ["name"] = "csvi_get_last_review",
+                ["description"] = "讀取 CSVI Studio (GUI / CLI / MCP) 最近一次執行的靜態規則與 LLM 語意審查結果，包含 [LINT-WARN]、[AI-LINT-WARN]、Summary 與狀態",
+                ["inputSchema"] = new JsonObject
+                {
+                    ["type"] = "object",
+                    ["properties"] = new JsonObject()
                 }
             },
             new JsonObject
@@ -295,7 +328,7 @@ public class McpServer
         };
     }
 
-    private JsonObject ExecuteTool(string name, JsonObject args)
+    private async Task<JsonObject> ExecuteToolAsync(string name, JsonObject args, CancellationToken ct = default)
     {
         var content = new JsonArray();
 
@@ -460,6 +493,21 @@ public class McpServer
 
                     try { OnLoadFileRequested?.Invoke(Path.GetFullPath(outPath)); } catch { }
 
+                    bool runAiReview = args["runAiReview"]?.GetValue<bool>() ?? false;
+                    CsviLlmReviewResult? aiRes = null;
+                    if (runAiReview)
+                    {
+                        aiRes = await _compiler.ReviewWithConfiguredLlmAsync(asmName, sources, manifest, ct: ct);
+                    }
+
+                    CsviReviewHistoryStore.Record(CsviReviewHistoryStore.CreateSnapshot(
+                        source: "MCP",
+                        targetName: asmName,
+                        commandKey: manifest.CommandKey,
+                        staticWarnings: compRes.Warnings,
+                        aiResult: aiRes,
+                        aiPending: false));
+
                     var ret = new JsonObject
                     {
                         ["success"] = true,
@@ -468,8 +516,78 @@ public class McpServer
                         ["elapsedMs"] = compRes.ElapsedMilliseconds,
                         ["warnings"] = new JsonArray(compRes.Warnings.Select(w => (JsonNode)JsonValue.Create(w)!).ToArray())
                     };
+                    if (aiRes != null)
+                        ret["aiReview"] = BuildAiReviewJson(aiRes);
 
-                    content.Add(new JsonObject { ["type"] = "text", ["text"] = ret.ToJsonString() });
+                    content.Add(new JsonObject { ["type"] = "text", ["text"] = SerializeMcpJson(ret) });
+                    break;
+                }
+
+                case "csvi_ai_review":
+                {
+                    var sources = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                    var manifest = new CsviManifest();
+                    string asmName = "CsviReview";
+
+                    if (args["sourceFiles"] is JsonObject srcObj && srcObj.Count > 0)
+                    {
+                        foreach (var prop in srcObj)
+                        {
+                            if (prop.Value != null)
+                                sources[prop.Key] = prop.Value.GetValue<string>();
+                        }
+                    }
+                    else
+                    {
+                        string path = args["csviPath"]?.GetValue<string>()
+                            ?? throw new ArgumentException("Either sourceFiles or csviPath must be provided.");
+                        if (!File.Exists(path)) throw new FileNotFoundException("CSVI file not found", path);
+                        string? pass = args["password"]?.GetValue<string>();
+                        var pkg = CsviPackage.LoadFromBytes(File.ReadAllBytes(path), pass, unpackSources: true);
+                        foreach (var kvp in pkg.EmbeddedSourceFiles)
+                            sources[kvp.Key] = kvp.Value;
+                        manifest = pkg.Manifest;
+                        asmName = Path.GetFileNameWithoutExtension(path);
+                    }
+
+                    string? cmdKeyOverride = args["commandKey"]?.GetValue<string>();
+                    if (!string.IsNullOrWhiteSpace(cmdKeyOverride))
+                        manifest.CommandKey = cmdKeyOverride;
+
+                    var compRes = _compiler.Compile(asmName, sources, manifest);
+                    var aiRes = await _compiler.ReviewWithConfiguredLlmAsync(asmName, sources, manifest, ct: ct);
+
+                    CsviReviewHistoryStore.Record(CsviReviewHistoryStore.CreateSnapshot(
+                        source: "MCP",
+                        targetName: asmName,
+                        commandKey: manifest.CommandKey,
+                        staticWarnings: compRes.Warnings,
+                        aiResult: aiRes,
+                        aiPending: false));
+
+                    var ret = new JsonObject
+                    {
+                        ["targetName"] = asmName,
+                        ["commandKey"] = manifest.CommandKey,
+                        ["compilationSucceeded"] = compRes.Success,
+                        ["staticWarnings"] = new JsonArray(compRes.Warnings.Select(w => (JsonNode)JsonValue.Create(w)!).ToArray()),
+                        ["aiReview"] = BuildAiReviewJson(aiRes)
+                    };
+
+                    content.Add(new JsonObject { ["type"] = "text", ["text"] = SerializeMcpJson(ret) });
+                    break;
+                }
+
+                case "csvi_get_last_review":
+                {
+                    var snap = CsviReviewHistoryStore.GetLatest();
+                    var ret = new JsonObject
+                    {
+                        ["hasSnapshot"] = snap != null,
+                        ["snapshotFilePath"] = CsviReviewHistoryStore.SnapshotFilePath,
+                        ["snapshot"] = snap == null ? null : JsonSerializer.SerializeToNode(snap)
+                    };
+                    content.Add(new JsonObject { ["type"] = "text", ["text"] = SerializeMcpJson(ret) });
                     break;
                 }
 
@@ -599,6 +717,27 @@ public class McpServer
         return new JsonObject
         {
             ["content"] = content
+        };
+    }
+
+    private static readonly JsonSerializerOptions McpJsonOpts = new()
+    {
+        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+    };
+
+    private static string SerializeMcpJson(JsonNode node) => node.ToJsonString(McpJsonOpts);
+
+    private static JsonObject BuildAiReviewJson(CsviLlmReviewResult aiRes)
+    {
+        return new JsonObject
+        {
+            ["executed"] = aiRes.Executed,
+            ["succeeded"] = aiRes.Succeeded,
+            ["provider"] = aiRes.Provider,
+            ["summary"] = aiRes.Summary,
+            ["infoMessage"] = aiRes.InfoMessage,
+            ["warnings"] = new JsonArray(aiRes.Warnings.Select(w => (JsonNode)JsonValue.Create(w)!).ToArray()),
+            ["passedRuleIds"] = new JsonArray(aiRes.PassedRuleIds.Select(r => (JsonNode)JsonValue.Create(r)!).ToArray())
         };
     }
 }
