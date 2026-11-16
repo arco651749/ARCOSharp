@@ -506,4 +506,50 @@ public class ArcosThreadVmTests
         Assert.Equal(CommandStatus.Completed, retryRes.Status);
         Assert.Equal(3, vm.MainThreads[0].ProgIndex);
     }
+
+    [Fact]
+    public void FindProgram_ThreadCall_And_ThreadRun_Resolve_SectionName_And_SlotPrefix_Formats()
+    {
+        var (vm, engines) = CreateVM();
+
+        vm.LoadProgram(1, ProgramTable.FromText("""
+            Variable@Inc::CallHits,1;
+            Thread@Return::;
+            """, 1, "Station_Feeder"));
+
+        vm.LoadProgram(2, ProgramTable.FromText("""
+            Variable@Set::RunResult,SkippedLine;
+            Thread@Label::EntryLabel;
+            Variable@Set::RunResult,StartedByFormattedRun;
+            """, 2, "Press_Fit"));
+
+        // 1. 驗證 FindProgram 解析純數字、Prog N、自訂名稱、"{no}: {name}" 與 "{no}-{name}"
+        Assert.Same(vm.GetProgram(1), vm.FindProgram("1"));
+        Assert.Same(vm.GetProgram(1), vm.FindProgram("Prog 1"));
+        Assert.Same(vm.GetProgram(1), vm.FindProgram("Station_Feeder"));
+        Assert.Same(vm.GetProgram(1), vm.FindProgram("1: Station_Feeder"));
+        Assert.Same(vm.GetProgram(1), vm.FindProgram("1-FeedIn"));
+        Assert.Same(vm.GetProgram(2), vm.FindProgram("2: Press_Fit"));
+
+        // 2. 驗證 System@ProgramSection + Thread@Call("1: Station_Feeder") + Thread@Run("2: Press_Fit,2,EntryLabel") 與 Thread@Run("Station_Feeder,1")
+        vm.LoadProgram(0, ProgramTable.FromText("""
+            System@ProgramSection::1,Station_Feeder;
+            Variable@Set::CallHits,0;
+            Thread@Call::1: Station_Feeder;
+            Thread@Call::Station_Feeder;
+            Thread@Run::2: Press_Fit,2,EntryLabel;
+            """, 0, "Main"));
+
+        vm.StartThread(0, 0);
+        for (int i = 0; i < 20; i++) vm.Tick();
+
+        Assert.Equal("2", engines.Variable.Get("CallHits", vm.MainThreads[0].CurrentSection));
+        Assert.Equal("StartedByFormattedRun", engines.Variable.Get("RunResult", vm.MainThreads[2].CurrentSection));
+
+        // 3. 驗證 Thread@Run 使用區段名稱 "Station_Feeder,1"
+        vm.MainThreads[1].IsRunning = false;
+        vm.Executor.ExecuteCommandLine(vm.MainThreads[0], "Thread@Run::Station_Feeder,1;");
+        Assert.True(vm.MainThreads[1].IsRunning);
+        Assert.Equal(1, vm.MainThreads[1].Program.ProgramNumber);
+    }
 }

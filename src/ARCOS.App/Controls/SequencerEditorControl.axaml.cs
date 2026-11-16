@@ -447,7 +447,6 @@ public partial class SequencerEditorControl : UserControl, ISequencerEditorHost
         ctx.State.Reset();
         UpdatePCPointer(ctx.ProgIndex);
         DrainPCPointer();
-        ctx.Log($"[PC JUMP] PC pointer jumped to Line {lineNumber}: {(effectiveCount > lineNumber ? _rows[lineNumber].Command : "")}");
 
         var grid = this.FindControl<DataGrid>("GridCommands");
         if (grid != null && lineNumber < effectiveCount)
@@ -1153,22 +1152,41 @@ public partial class SequencerEditorControl : UserControl, ISequencerEditorHost
             ? existingProg.Name
             : ProgramSlotItem.GetDefaultName(_currentProgNo);
 
-        // 支援 System@ProgramSection 指令動態重命名程式區
+        // 支援 System@ProgramSection 指令動態重命名對應程式區插槽
+        bool anySlotRenamed = false;
         foreach (var r in _rows)
         {
             if (r.IsTrailingPlaceholder) continue;
-            if (r.Command.Equals("System@ProgramSection", StringComparison.OrdinalIgnoreCase))
+            if (!r.Command.Equals("System@ProgramSection", StringComparison.OrdinalIgnoreCase)) continue;
+
+            var parts = r.Parameter.Split(',', StringSplitOptions.TrimEntries);
+            if (parts.Length > 1 && !string.IsNullOrWhiteSpace(parts[1]))
             {
-                var parts = r.Parameter.Split(',', StringSplitOptions.TrimEntries);
-                if (parts.Length > 1 && !string.IsNullOrWhiteSpace(parts[1]))
+                int targetSlot = -1;
+                string first = parts[0];
+                int sep = first.IndexOfAny(new[] { ':', '-' });
+                if (int.TryParse(first, out int exactSlot) && exactSlot >= 0 && exactSlot < 100)
+                    targetSlot = exactSlot;
+                else if (sep > 0 && int.TryParse(first.AsSpan(0, sep).Trim(), out int prefixSlot) && prefixSlot >= 0 && prefixSlot < 100)
+                    targetSlot = prefixSlot;
+
+                if (targetSlot >= 0 && targetSlot != _currentProgNo)
+                {
+                    var targetProg = _vm.GetProgram(targetSlot);
+                    if (targetProg != null && targetProg.Name != parts[1])
+                    {
+                        targetProg.Name = parts[1];
+                        anySlotRenamed = true;
+                    }
+                }
+                else
                 {
                     name = parts[1];
                 }
-                else if (parts.Length == 1 && !string.IsNullOrWhiteSpace(parts[0]))
-                {
-                    name = parts[0];
-                }
-                break;
+            }
+            else if (parts.Length == 1 && !string.IsNullOrWhiteSpace(parts[0]) && !int.TryParse(parts[0], out _))
+            {
+                name = parts[0];
             }
         }
 
@@ -1192,7 +1210,7 @@ public partial class SequencerEditorControl : UserControl, ISequencerEditorHost
         }
         SyncIoDefinitionsFromRows();
 
-        if (nameChanged)
+        if (nameChanged || anySlotRenamed)
         {
             RefreshProgSelector(_currentProgNo);
         }

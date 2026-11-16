@@ -199,8 +199,8 @@ foreach ($csvi in $motionCsvis) {
     Copy-Item -LiteralPath $csvi.FullName -Destination $dest -Force
 }
 
-# 部署 CALL、POINT&PATH、USER、AIAGENT、MULTISTATION、REDIS 等純 CSVI 模組
-foreach ($pureMod in @("CALL", "POINT&PATH", "USER", "AIAGENT", "MULTISTATION", "REDIS")) {
+# 部署 CALL、POINT&PATH、USER、AIAGENT、MULTISTATION、REDIS、HELLO 等純 CSVI 模組
+foreach ($pureMod in @("CALL", "POINT&PATH", "USER", "AIAGENT", "MULTISTATION", "REDIS", "HELLO")) {
     $srcPureDir = "$PSScriptRoot\..\src\MODULES\$pureMod"
     if (Test-Path -LiteralPath $srcPureDir) {
         New-Item -ItemType Directory -Path "$OutputDir\MODULES\$pureMod" -Force | Out-Null
@@ -211,12 +211,12 @@ foreach ($pureMod in @("CALL", "POINT&PATH", "USER", "AIAGENT", "MULTISTATION", 
     }
 }
 
-# 部署 ExternalModules (外部獨立 CSVI 模組，例如 mycsvi.csvi)
-Write-Host "`nDeploying ExternalModules CSVI (mycsvi.csvi)..." -ForegroundColor Magenta
-$srcExtCsvi = "$PSScriptRoot\..\ExternalModules\mycsvi.csvi"
-if (Test-Path -LiteralPath $srcExtCsvi) {
-    Copy-Item -LiteralPath $srcExtCsvi -Destination "$OutputDir\ExternalModules\mycsvi.csvi" -Force
-    Write-Host "  -> Successfully deployed mycsvi.csvi to ExternalModules/" -ForegroundColor Cyan
+# 部署 ExternalModules (外部獨立 CSVI 模組，例如 hi.csvi、mycsvi.csvi)
+Write-Host "`nDeploying ExternalModules CSVIs..." -ForegroundColor Magenta
+$extCsvis = Get-ChildItem -Path "$PSScriptRoot\..\ExternalModules" -Filter "*.csvi" -File -ErrorAction SilentlyContinue
+foreach ($extCsvi in $extCsvis) {
+    Copy-Item -LiteralPath $extCsvi.FullName -Destination "$OutputDir\ExternalModules\$($extCsvi.Name)" -Force
+    Write-Host "  -> Successfully deployed $($extCsvi.Name) to ExternalModules/" -ForegroundColor Cyan
 }
 $srcExtReadme = "$PSScriptRoot\..\ExternalModules\README.md"
 if (Test-Path -LiteralPath $srcExtReadme) {

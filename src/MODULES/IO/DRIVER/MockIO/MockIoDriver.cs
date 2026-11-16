@@ -126,7 +126,7 @@ public class MockIoDriver : IDriver
     {
         _engines = engines;
         var winOwner = owner as Avalonia.Controls.Window;
-        var dlg = new MockIoGuidanceDialog(this, currentParam);
+        var dlg = new MockIoGuidanceDialog(this, currentParam, engines);
         if (winOwner != null)
         {
             return await dlg.ShowDialog<string?>(winOwner);

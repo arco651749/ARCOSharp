@@ -51,8 +51,8 @@ public class PointPathModuleHandler
             action.StartsWith("Select", StringComparison.OrdinalIgnoreCase))
         {
             int eqIdx = filteredParam.IndexOf('=');
-            int qIdx = filteredParam.IndexOf('?');
-            int cIdx = filteredParam.IndexOf(':');
+            int cIdx = filteredParam.LastIndexOf(':');
+            int qIdx = (eqIdx >= 0 && cIdx > eqIdx + 1) ? filteredParam.LastIndexOf('?', cIdx - 1) : -1;
 
             if (eqIdx > 0 && qIdx > eqIdx && cIdx > qIdx)
             {

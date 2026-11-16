@@ -1,5 +1,10 @@
 using System.Globalization;
 using System.Threading.Channels;
+using Avalonia;
+using Avalonia.Controls;
+using Avalonia.Input;
+using Avalonia.Layout;
+using Avalonia.Media;
 using ARCOS.Core.Common;
 using ARCOS.Core.Drivers;
 using ARCOS.Core.Model;
@@ -97,6 +102,163 @@ public class MockMotionDriver : IDriver
     public object? CreateDriverView()
     {
         return new MockMotionView(this);
+    }
+
+    public async Task<string?> ShowGuidanceDialogAsync(string currentParam, BasicEngines engines, object? owner = null)
+    {
+        _engines = engines;
+        if (owner is not Window ownerWin) return currentParam;
+
+        var root = new Grid { Margin = new Thickness(16), Background = Brush.Parse("#F8FAFC") };
+        root.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
+        root.RowDefinitions.Add(new RowDefinition(GridLength.Star));
+        root.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
+
+        var hdrGrid = new Grid();
+        hdrGrid.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
+        hdrGrid.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
+        hdrGrid.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Star));
+        hdrGrid.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Auto));
+        var lblSyntax = new TextBlock { Text = "Axes=...,Speed=...,Acc=...,Dec=...", Foreground = Brush.Parse("#38BDF8"), FontSize = 11, FontWeight = FontWeight.SemiBold, FontFamily = new FontFamily("Consolas"), VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(12, 0, 0, 0) };
+        Grid.SetColumn(lblSyntax, 1);
+        var txtParamIn = new TextBlock { Text = string.IsNullOrWhiteSpace(currentParam) ? "ParameterIn: (空白)" : $"ParameterIn: {currentParam.Trim()}", Foreground = Brush.Parse("#94A3B8"), FontSize = 11, FontFamily = new FontFamily("Consolas"), Margin = new Thickness(0, 4, 0, 0), TextTrimming = TextTrimming.CharacterEllipsis };
+        Grid.SetRow(txtParamIn, 1); Grid.SetColumnSpan(txtParamIn, 2);
+        hdrGrid.Children.Add(new TextBlock { Text = "Motion / MockMotion - 驅動參數導引精靈", Foreground = Brush.Parse("#F8FAFC"), FontSize = 15, FontWeight = FontWeight.Bold });
+        hdrGrid.Children.Add(lblSyntax);
+        hdrGrid.Children.Add(txtParamIn);
+        root.Children.Add(new Border { Background = Brush.Parse("#1E293B"), CornerRadius = new CornerRadius(6), Padding = new Thickness(14, 10), Margin = new Thickness(0, 0, 0, 10), Child = hdrGrid });
+
+        var bodyGrid = new Grid();
+        bodyGrid.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Star));
+        bodyGrid.ColumnDefinitions.Add(new ColumnDefinition(new GridLength(112)));
+        var fields = new StackPanel { Spacing = 10, Margin = new Thickness(0, 0, 12, 0), VerticalAlignment = VerticalAlignment.Center };
+
+        var motors = engines?.Io?.GetAllPortNames().Where(p => p.EndsWith("#Busy?", StringComparison.OrdinalIgnoreCase)).Select(p => p.Split('#')[0]).Distinct(StringComparer.OrdinalIgnoreCase).ToList() ?? new List<string>();
+        int ptCount = engines?.Point?.GetAllNames().Count ?? 0;
+        fields.Children.Add(new Border
+        {
+            Background = Brush.Parse("#F1F5F9"),
+            BorderBrush = Brush.Parse("#CBD5E1"),
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(5),
+            Padding = new Thickness(10, 6),
+            Child = new TextBlock { Text = $"目前系統軸控: {(motors.Count > 0 ? string.Join(", ", motors) : "(尚未註冊)")} | 點位數: {ptCount} | 實例: {(string.IsNullOrWhiteSpace(DeviceName) ? "Motor1" : DeviceName)}", Foreground = Brush.Parse("#475569"), FontSize = 11.5, TextWrapping = TextWrapping.Wrap }
+        });
+
+        static (StackPanel Panel, ComboBox Combo, TextBox Box, TextBlock? Meta) MakeField(string label, string meta, string watermark, bool required)
+        {
+            var accent = required ? "#DC2626" : "#2563EB";
+            var hdr = new Grid();
+            hdr.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Auto));
+            hdr.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Star));
+            hdr.Children.Add(new TextBlock { Text = label, FontWeight = FontWeight.SemiBold, Foreground = Brush.Parse(accent), FontSize = 12, VerticalAlignment = VerticalAlignment.Center });
+            TextBlock? metaLbl = null;
+            if (!string.IsNullOrEmpty(meta))
+            {
+                metaLbl = new TextBlock { Text = meta, Foreground = Brush.Parse(required ? "#64748B" : "#94A3B8"), FontSize = 11, HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Center };
+                Grid.SetColumn(metaLbl, 1); hdr.Children.Add(metaLbl);
+            }
+            var cmb = new ComboBox { HorizontalAlignment = HorizontalAlignment.Stretch, MinHeight = 32, BorderThickness = new Thickness(0), Background = Brushes.Transparent, Padding = new Thickness(8, 3, 34, 3), Foreground = Brushes.Transparent, FontSize = 13 };
+            var txt = new TextBox { Margin = new Thickness(2, 2, 32, 2), BorderThickness = new Thickness(0), Background = Brushes.White, VerticalContentAlignment = VerticalAlignment.Center, Padding = new Thickness(8, 3), FontSize = 13, FontWeight = required ? FontWeight.SemiBold : FontWeight.Normal, Foreground = Brush.Parse(required ? "#DC2626" : "#1E293B"), Watermark = watermark };
+            return (new StackPanel { Spacing = 3, Children = { hdr, new Border { BorderBrush = Brush.Parse(accent), BorderThickness = new Thickness(required ? 1.8 : 1.5), CornerRadius = new CornerRadius(5), Background = Brushes.White, Child = new Grid { Children = { cmb, txt } } } } }, cmb, txt, metaLbl);
+        }
+
+        var row1 = new Grid();
+        row1.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Star)); row1.ColumnDefinitions.Add(new ColumnDefinition(new GridLength(10))); row1.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Star));
+        var (axP, cmbAxes, txtAxes, txtAxesMeta) = MakeField("Axes (控制軸數) *", "4-Axis SCARA", "1, 3, 4, 6...", true);
+        var (spP, cmbSpeed, txtSpeed, _) = MakeField("Speed (預設速度 mm/s) *", "", "50, 100, 200...", true);
+        Grid.SetColumn(spP, 2); row1.Children.Add(axP); row1.Children.Add(spP); fields.Children.Add(row1);
+
+        var row2 = new Grid();
+        row2.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Star)); row2.ColumnDefinitions.Add(new ColumnDefinition(new GridLength(10))); row2.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Star));
+        var (acP, cmbAcc, txtAcc, _) = MakeField("Acc (加速度 mm/s^2，選填)", "", "1000", false);
+        var (dcP, cmbDec, txtDec, _) = MakeField("Dec (減速度 mm/s^2，選填)", "", "1000", false);
+        Grid.SetColumn(dcP, 2); row2.Children.Add(acP); row2.Children.Add(dcP); fields.Children.Add(row2);
+
+        var (exP, cmbExtra, txtExtra, _) = MakeField("Extra Key=Value (額外控制器參數，選填)", "如 HomeOnInit=true 或 Port=COM1", "選填擴充參數，如 Coord=Joint 或留白...", false);
+        fields.Children.Add(exP);
+
+        var btnOk = new Button { Background = Brush.Parse("#10B981"), Foreground = Brushes.White, CornerRadius = new CornerRadius(8), HorizontalAlignment = HorizontalAlignment.Stretch, VerticalAlignment = VerticalAlignment.Stretch, Margin = new Thickness(4, 12, 0, 4), HorizontalContentAlignment = HorizontalAlignment.Center, VerticalContentAlignment = VerticalAlignment.Center, Cursor = new Cursor(StandardCursorType.Hand), Content = new StackPanel { Spacing = 6, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, Children = { new TextBlock { Text = "✓", FontSize = 34, FontWeight = FontWeight.Bold, Foreground = Brushes.White, HorizontalAlignment = HorizontalAlignment.Center }, new TextBlock { Text = "套用參數", FontSize = 13, FontWeight = FontWeight.SemiBold, Foreground = Brushes.White, HorizontalAlignment = HorizontalAlignment.Center } } } };
+        Grid.SetColumn(btnOk, 1); bodyGrid.Children.Add(fields); bodyGrid.Children.Add(btnOk);
+        var bodyBorder = new Border { Background = Brushes.White, BorderBrush = Brush.Parse("#CBD5E1"), BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(6), Padding = new Thickness(14), Child = bodyGrid };
+        Grid.SetRow(bodyBorder, 1); root.Children.Add(bodyBorder);
+
+        var ftrGrid = new Grid();
+        ftrGrid.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Star)); ftrGrid.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Auto));
+        var txtOut = new TextBox { IsReadOnly = true, Background = Brush.Parse("#F1F5F9"), Foreground = Brush.Parse("#0284C7"), FontWeight = FontWeight.Bold, FontFamily = new FontFamily("Consolas"), FontSize = 13, MinHeight = 32, VerticalContentAlignment = VerticalAlignment.Center };
+        var btnCancel = new Button { Content = "取消", Width = 86, Height = 36, VerticalAlignment = VerticalAlignment.Bottom, Background = Brush.Parse("#E2E8F0"), Foreground = Brush.Parse("#334155"), FontWeight = FontWeight.SemiBold, HorizontalContentAlignment = HorizontalAlignment.Center, VerticalContentAlignment = VerticalAlignment.Center, CornerRadius = new CornerRadius(5), Cursor = new Cursor(StandardCursorType.Hand) };
+        Grid.SetColumn(btnCancel, 1);
+        ftrGrid.Children.Add(new StackPanel { Spacing = 3, Margin = new Thickness(0, 0, 12, 0), Children = { new TextBlock { Text = "ParameterOut (組合預覽):", FontSize = 11, FontWeight = FontWeight.SemiBold, Foreground = Brush.Parse("#475569") }, txtOut } });
+        ftrGrid.Children.Add(btnCancel);
+        var ftrBorder = new Border { Background = Brushes.White, BorderBrush = Brush.Parse("#CBD5E1"), BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(6), Padding = new Thickness(12, 10), Margin = new Thickness(0, 10, 0, 0), Child = ftrGrid };
+        Grid.SetRow(ftrBorder, 2); root.Children.Add(ftrBorder);
+
+        var dlg = new Window { Title = "Motion@AddMotion::MockMotion - Parameter Guidance", Width = 740, SizeToContent = SizeToContent.Height, CanResize = false, WindowStartupLocation = WindowStartupLocation.CenterOwner, Background = Brush.Parse("#F8FAFC"), Content = root };
+
+        var kv = ArgParaHelper.ParseKeyValueArgs(currentParam ?? "", out _);
+        txtAxes.Text = kv.TryGetValue("Axes", out var vAxes) && !string.IsNullOrWhiteSpace(vAxes) ? vAxes : "4";
+        txtSpeed.Text = kv.TryGetValue("Speed", out var vSpd) && !string.IsNullOrWhiteSpace(vSpd) ? vSpd : "100";
+        txtAcc.Text = kv.TryGetValue("Acc", out var vAcc) ? vAcc : "1000";
+        txtDec.Text = kv.TryGetValue("Dec", out var vDec) ? vDec : "1000";
+        txtExtra.Text = string.Join(", ", kv.Where(p => !p.Key.Equals("Axes", StringComparison.OrdinalIgnoreCase) && !p.Key.Equals("Speed", StringComparison.OrdinalIgnoreCase) && !p.Key.Equals("Acc", StringComparison.OrdinalIgnoreCase) && !p.Key.Equals("Dec", StringComparison.OrdinalIgnoreCase)).Select(p => $"{p.Key}={p.Value}"));
+
+        var vars = engines?.Variable?.GetAllVariableNames().Select(v => $"${v}").ToList() ?? new List<string>();
+        bool syncing = false;
+        void UpdatePreview()
+        {
+            string ax = txtAxes.Text?.Trim() ?? "", sp = txtSpeed.Text?.Trim() ?? "", ac = txtAcc.Text?.Trim() ?? "", dc = txtDec.Text?.Trim() ?? "", ex = txtExtra.Text?.Trim() ?? "";
+            if (txtAxesMeta != null) txtAxesMeta.Text = ax == "6" ? "6-Axis Robot" : (ax == "4" ? "4-Axis SCARA" : $"{ax} Axis");
+            bool okAll = !string.IsNullOrWhiteSpace(ax) && !string.IsNullOrWhiteSpace(sp);
+            btnOk.IsEnabled = okAll;
+            if (!okAll) { txtOut.Text = string.Empty; return; }
+            var segs = new List<string> { $"Axes={ax}", $"Speed={sp}" };
+            if (!string.IsNullOrWhiteSpace(ac)) segs.Add($"Acc={ac}");
+            if (!string.IsNullOrWhiteSpace(dc)) segs.Add($"Dec={dc}");
+            if (!string.IsNullOrWhiteSpace(ex)) segs.Add(ex);
+            txtOut.Text = string.Join(", ", segs);
+        }
+
+        var axesOpts = new List<string> { "1", "3", "4", "6", "8" }; axesOpts.AddRange(vars);
+        var speedOpts = new List<string> { "50", "100", "200", "500", "1000" }; speedOpts.AddRange(vars);
+        const string ClearVal = "(留白)";
+        var accOpts = new List<string> { ClearVal, "500", "1000", "2000", "5000" }; accOpts.AddRange(vars);
+        var extraOpts = new List<string> { ClearVal, "HomeOnInit=true", "Coord=Joint", "Port=COM1,Baud=115200" }; extraOpts.AddRange(vars);
+
+        WireWizardCombo(cmbAxes, txtAxes, () => axesOpts, "", () => syncing, v => syncing = v, UpdatePreview);
+        WireWizardCombo(cmbSpeed, txtSpeed, () => speedOpts, "", () => syncing, v => syncing = v, UpdatePreview);
+        WireWizardCombo(cmbAcc, txtAcc, () => accOpts, ClearVal, () => syncing, v => syncing = v, UpdatePreview);
+        WireWizardCombo(cmbDec, txtDec, () => accOpts, ClearVal, () => syncing, v => syncing = v, UpdatePreview);
+        WireWizardCombo(cmbExtra, txtExtra, () => extraOpts, ClearVal, () => syncing, v => syncing = v, UpdatePreview);
+
+        void ConfirmClose() { var r = txtOut.Text?.Trim() ?? ""; if (!string.IsNullOrWhiteSpace(r)) dlg.Close(r); }
+        btnCancel.Click += (_, _) => dlg.Close(null);
+        btnOk.Click += (_, _) => ConfirmClose();
+        dlg.KeyDown += (_, e) =>
+        {
+            if (cmbAxes.IsDropDownOpen || cmbSpeed.IsDropDownOpen || cmbAcc.IsDropDownOpen || cmbDec.IsDropDownOpen || cmbExtra.IsDropDownOpen) return;
+            if (e.Key == Key.Enter) ConfirmClose(); else if (e.Key == Key.Escape) dlg.Close(null);
+        };
+        UpdatePreview();
+        return await dlg.ShowDialog<string?>(ownerWin);
+    }
+
+    private static void WireWizardCombo(ComboBox? cmb, TextBox? txt, Func<List<string>> getItems, string clearSentinel,
+        Func<bool> getSync, Action<bool> setSync, Action onUpdated)
+    {
+        if (cmb == null || txt == null) return;
+        cmb.ItemsSource = getItems();
+        cmb.DropDownOpened += (_, _) => { cmb.ItemsSource = getItems(); setSync(true); cmb.SelectedIndex = -1; setSync(false); };
+        cmb.SelectionChanged += (_, _) =>
+        {
+            if (getSync() || cmb.SelectedItem == null) return;
+            string sel = cmb.SelectedItem.ToString() ?? "";
+            setSync(true);
+            txt.Text = (!string.IsNullOrEmpty(clearSentinel) && sel == clearSentinel) ? "" : sel;
+            cmb.SelectedIndex = -1;
+            setSync(false);
+            onUpdated();
+        };
+        txt.TextChanged += (_, _) => { if (!getSync()) onUpdated(); };
     }
 
     private async Task WorkerLoop(CancellationToken token)

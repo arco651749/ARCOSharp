@@ -170,6 +170,10 @@ public class DriverManager : IDisposable
     public DriverManager(BasicEngines engines, string? driversRootPath = null)
         : this(driversRootPath)
     {
+        if (engines != null)
+        {
+            engines.Drivers = this;
+        }
     }
 
     /// <summary>
@@ -237,6 +241,10 @@ public class DriverManager : IDisposable
         driver.Init(key.Item2, param, engines);
         _devices[key] = driver;
         _deviceConfigs[key] = (driverType, param, engines);
+        if (engines != null && engines.Drivers == null)
+        {
+            engines.Drivers = this;
+        }
         DeviceAdded?.Invoke(key.Item1, key.Item2, driver);
         return driver;
     }

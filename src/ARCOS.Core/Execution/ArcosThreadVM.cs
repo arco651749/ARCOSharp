@@ -290,7 +290,7 @@ public sealed class ArcosThreadVM
     }
 
     /// <summary>
-    /// 依程式區段編號 ("0"~"99", "Prog 1") 或區段名稱尋找對應的 ProgramTable
+    /// 依程式區段編號 ("0"~"99"、"Prog 1"、"1: Name"、"1-Name") 或區段名稱尋找對應的 ProgramTable
     /// </summary>
     public ProgramTable? FindProgram(string? progNumberOrName)
     {
@@ -314,6 +314,13 @@ public sealed class ArcosThreadVM
             {
                 return _programs[i];
             }
+        }
+
+        // 支援 "1: Station_Feeder" (ProgSelector / Guide UI) 與 "1-FeedIn" 格式前綴解析
+        int sepIdx = key.IndexOfAny(new[] { ':', '-' });
+        if (sepIdx > 0 && int.TryParse(key.AsSpan(0, sepIdx).Trim(), out int prefixSlot) && prefixSlot >= 0 && prefixSlot < 100)
+        {
+            return _programs[prefixSlot];
         }
 
         return null;

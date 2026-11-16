@@ -19,6 +19,8 @@ public partial class CallGuidanceWindow : Window
     private Button _btnBrowse;
     private Button _btnRefresh;
     private TextBlock _txtCsviInfo;
+    private TextBlock? _txtInitialInfo;
+    private TextBlock? _txtGuidanceBadge;
     private RadioButton _rbRuntime;
     private RadioButton _rbDebug;
     private RadioButton _rbReentrant;
@@ -65,6 +67,8 @@ public partial class CallGuidanceWindow : Window
         _btnBrowse = this.FindControl<Button>("BtnBrowse")!;
         _btnRefresh = this.FindControl<Button>("BtnRefresh")!;
         _txtCsviInfo = this.FindControl<TextBlock>("TxtCsviInfo")!;
+        _txtInitialInfo = this.FindControl<TextBlock>("TxtInitialInfo");
+        _txtGuidanceBadge = this.FindControl<TextBlock>("TxtGuidanceBadge");
         _rbRuntime = this.FindControl<RadioButton>("RbRuntime")!;
         _rbDebug = this.FindControl<RadioButton>("RbDebug")!;
         _rbReentrant = this.FindControl<RadioButton>("RbReentrant")!;
@@ -85,6 +89,11 @@ public partial class CallGuidanceWindow : Window
 
     private void SetupInitialState(string commandKey)
     {
+        if (_txtInitialInfo != null)
+        {
+            string pInfo = string.IsNullOrWhiteSpace(_currentParam) ? "(空白)" : _currentParam;
+            _txtInitialInfo.Text = $"CommandIn: {commandKey}   |   ParameterIn: {pInfo}";
+        }
         RefreshCsviList();
 
         string actionPart = commandKey.Contains('@') ? commandKey.Split('@', 2)[1].Trim() : commandKey.Trim();
@@ -222,11 +231,17 @@ public partial class CallGuidanceWindow : Window
             string cmd = $"Call@{fileName}{suffix}";
             if (_txtCommandPreview != null) _txtCommandPreview.Text = cmd;
             if (_txtCsviInfo != null) _txtCsviInfo.Text = $"路徑: {path}";
+            if (_txtGuidanceBadge != null)
+            {
+                bool hasCustom = TryLoadGuidanceFromCsvi(path) != null;
+                _txtGuidanceBadge.Text = hasCustom ? "✓ 自帶專屬參數導引" : "ℹ 使用 CALL.csvi 通用導引";
+            }
         }
         else
         {
             if (_txtCommandPreview != null) _txtCommandPreview.Text = $"Call{GetSelectedModeSuffix()}";
             if (_txtCsviInfo != null) _txtCsviInfo.Text = "請先選擇或放置 CSVI 檔案於 ExternalModules/ 目錄下";
+            if (_txtGuidanceBadge != null) _txtGuidanceBadge.Text = "ExternalModules/*.csvi";
         }
     }
 
@@ -246,8 +261,16 @@ public partial class CallGuidanceWindow : Window
         // 1. 即時回報指令名稱變更 (例如 Call@mycsvi.csvi&)
         _onCommandUpdated?.Invoke(newCommand);
 
-        // 2. 進入階段 2：探測目標 CSVI 是否自帶 IParameterGuidance 視窗
+        // 2. 進入階段 2：探測目標 CSVI 是否自帶 IParameterGuidance 視窗；若無則使用 CALL.csvi 通用 MVCON 導引
         IParameterGuidance? guidance = TryLoadGuidanceFromCsvi(csviPath);
+        if (guidance == null)
+        {
+            string? masterPath = ResolveCallMasterCsviPath();
+            if (!string.IsNullOrEmpty(masterPath))
+            {
+                guidance = TryLoadGuidanceFromCsvi(masterPath);
+            }
+        }
 
         // 關閉階段 1 視窗
         Hide();
@@ -261,12 +284,12 @@ public partial class CallGuidanceWindow : Window
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[CallGuidance] Error opening CSVI custom guidance: {ex.Message}");
+                Console.WriteLine($"[CallGuidance] Error opening CSVI guidance: {ex.Message}");
             }
         }
         else
         {
-            // 若 CSVI 未實作專屬視窗，調用通用的 ParameterGuidanceWindow 進行兜底配置
+            // 若 CSVI 與 CALL.csvi 皆不可用，調用內建通用對話框兜底
             var targetOwner = _parentOwner ?? (TopLevel.GetTopLevel(this) as Window);
             if (targetOwner != null && _engines != null)
             {
@@ -275,6 +298,18 @@ public partial class CallGuidanceWindow : Window
         }
 
         Close();
+    }
+
+    private static string? ResolveCallMasterCsviPath()
+    {
+        var candidates = new[]
+        {
+            Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "MODULES", "CALL", "CALL.csvi"),
+            Path.Combine(Directory.GetCurrentDirectory(), "MODULES", "CALL", "CALL.csvi"),
+            Path.Combine(ArcosPaths.RootDirectory, "MODULES", "CALL", "CALL.csvi"),
+            Path.Combine(ArcosPaths.RootDirectory, "src", "MODULES", "CALL", "CALL.csvi")
+        };
+        return candidates.FirstOrDefault(File.Exists);
     }
 
     private static IParameterGuidance? TryLoadGuidanceFromCsvi(string csviPath)

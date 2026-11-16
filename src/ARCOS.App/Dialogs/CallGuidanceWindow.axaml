@@ -1,8 +1,8 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="ARCOS.App.Dialogs.CallGuidanceWindow"
-        Title="Call 模組 - 外部 CSVI 虛擬儀表選擇器"
-        Width="580" Height="430"
+        Title="Call@ - Step 1 Selector"
+        Width="720" Height="575"
         WindowStartupLocation="CenterOwner"
         CanResize="False"
         RequestedThemeVariant="Light"
@@ -21,69 +21,83 @@
         </Style>
     </Window.Styles>
 
-    <Grid RowDefinitions="Auto,*,Auto" Margin="18">
-        <!-- 頂部標題區 -->
-        <Border Grid.Row="0" Background="#EFF6FF" BorderBrush="#BFDBFE" BorderThickness="1" CornerRadius="6" Padding="12,10" Margin="0,0,0,14">
-            <Grid ColumnDefinitions="Auto,*">
-                <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                    <TextBlock Text="⚡ Call 外部模組導引" FontWeight="Bold" FontSize="14" Foreground="#1D4ED8"/>
-                    <TextBlock Text="| 步驟 1: 挑選 ExternalModules/ 虛擬儀表與執行模式" FontSize="12" Foreground="#64748B" VerticalAlignment="Center"/>
-                </StackPanel>
+    <Border Background="#F8FAFC" Padding="16">
+    <Grid RowDefinitions="Auto,*,Auto">
+        <Border Grid.Row="0" Background="#1E293B" CornerRadius="6" Padding="14,10" Margin="0,0,0,10">
+            <Grid RowDefinitions="Auto,Auto" ColumnDefinitions="Auto,*">
+                <TextBlock Grid.Row="0" Grid.Column="0" Text="Call@ — 外部 CSVI 選擇與執行模式" Foreground="#F8FAFC" FontSize="15" FontWeight="Bold"/>
+                <TextBlock Grid.Row="0" Grid.Column="1" Text="語法: Call@Csvi(&amp;|&amp;&amp;)::$args" Foreground="#38BDF8" FontSize="11" FontWeight="SemiBold" FontFamily="Consolas" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="14,0,0,0" TextTrimming="CharacterEllipsis"/>
+                <TextBlock Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2" x:Name="TxtInitialInfo" Text="CommandIn: Call" Foreground="#94A3B8" FontSize="11" FontFamily="Consolas" Margin="0,4,0,0" TextTrimming="CharacterEllipsis"/>
             </Grid>
         </Border>
 
-        <!-- 主要設定卡片 -->
-        <Border Grid.Row="1" Background="#FFFFFF" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="6" Padding="16" BoxShadow="0 1 3 0 #10000000">
-            <StackPanel Spacing="14">
-                <!-- CSVI 選取 -->
-                <TextBlock Text="目標 CSVI 虛擬儀表 (Target CSVI):" FontWeight="SemiBold" FontSize="12" Foreground="#334155"/>
-                <Grid ColumnDefinitions="*,Auto">
-                    <ComboBox Grid.Column="0" x:Name="CboCsviList" Height="32" HorizontalAlignment="Stretch" Margin="0,0,8,0"/>
-                    <Button Grid.Column="1" x:Name="BtnBrowse" Content="瀏覽檔案 (Browse)..." Height="32" Padding="12,0"/>
-                </Grid>
+        <Border Grid.Row="1" Background="#FFFFFF" BorderBrush="#CBD5E1" BorderThickness="1" CornerRadius="6" Padding="14">
+            <Grid ColumnDefinitions="*,118">
+                <StackPanel Grid.Column="0" Spacing="10" Margin="0,0,12,0" VerticalAlignment="Center">
+                    <Grid ColumnDefinitions="*,Auto">
+                        <TextBlock Grid.Column="0" Text="$targetCsvi (ExternalModules/ 外部虛擬儀表清單) *" FontWeight="SemiBold" FontSize="12" Foreground="#DC2626"/>
+                        <TextBlock Grid.Column="1" x:Name="TxtGuidanceBadge" Text="ExternalModules/*.csvi" FontSize="11" Foreground="#475569"/>
+                    </Grid>
+                    <Border BorderBrush="#DC2626" BorderThickness="1.5" CornerRadius="5" Padding="2" Background="White">
+                        <Grid ColumnDefinitions="*,Auto,Auto">
+                            <ComboBox Grid.Column="0" x:Name="CboCsviList" Height="34" HorizontalAlignment="Stretch" BorderThickness="0" Background="Transparent"/>
+                            <Button Grid.Column="1" x:Name="BtnRefresh" Content="🔄" Height="32" Width="34" Margin="4,0,0,0" ToolTip.Tip="重新掃描 ExternalModules/" HorizontalContentAlignment="Center"/>
+                            <Button Grid.Column="2" x:Name="BtnBrowse" Content="瀏覽..." Height="32" Padding="10,0" Margin="4,0,0,0"/>
+                        </Grid>
+                    </Border>
+                    <TextBlock x:Name="TxtCsviInfo" Text="路徑: ExternalModules/" FontSize="11" Foreground="#475569" TextWrapping="Wrap"/>
 
-                <TextBlock x:Name="TxtCsviInfo" Text="路徑: ExternalModules/" FontSize="11" Foreground="#64748B"/>
+                    <Separator Background="#E2E8F0" Margin="0,2"/>
 
-                <Separator Background="#E2E8F0" Margin="0,4"/>
+                    <TextBlock Text="執行模式 (Execution Mode Suffix):" FontWeight="SemiBold" FontSize="12" Foreground="#1E293B"/>
+                    <Border BorderBrush="#2563EB" BorderThickness="1.5" CornerRadius="5" Padding="10,8" Background="#F8FAFC">
+                        <StackPanel Spacing="6">
+                            <RadioButton x:Name="RbRuntime" IsChecked="True">
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <TextBlock Text="Runtime 模式 (&amp;)" FontWeight="Bold" FontSize="12" Foreground="#1E293B"/>
+                                    <TextBlock Text="— 背景全速執行不開視窗（預設標準）" FontSize="11" Foreground="#64748B" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </RadioButton>
+                            <RadioButton x:Name="RbDebug">
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <TextBlock Text="Debug 模式 (無後綴)" FontWeight="Bold" FontSize="12" Foreground="#1E293B"/>
+                                    <TextBlock Text="— 顯示 FrontPanel 前面板調試視窗" FontSize="11" Foreground="#64748B" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </RadioButton>
+                            <RadioButton x:Name="RbReentrant">
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <TextBlock Text="Reentrant 模式 (&amp;&amp;)" FontWeight="Bold" FontSize="12" Foreground="#1E293B"/>
+                                    <TextBlock Text="— 多執行緒並行可重入（每次獨立實例）" FontSize="11" Foreground="#64748B" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </RadioButton>
+                        </StackPanel>
+                    </Border>
 
-                <!-- 執行模式 (Mode Suffix) -->
-                <TextBlock Text="執行模式 (Execution Mode):" FontWeight="SemiBold" FontSize="12" Foreground="#334155"/>
-                <StackPanel Spacing="8">
-                    <RadioButton x:Name="RbRuntime" IsChecked="True">
-                        <StackPanel Orientation="Horizontal" Spacing="6">
-                            <TextBlock Text="Runtime 模式 (&amp;)" FontWeight="Bold" Foreground="#1E293B"/>
-                            <TextBlock Text="- 背景全速執行，不開視窗 (生產線預設標準)" FontSize="11" Foreground="#64748B"/>
-                        </StackPanel>
-                    </RadioButton>
-                    <RadioButton x:Name="RbDebug">
-                        <StackPanel Orientation="Horizontal" Spacing="6">
-                            <TextBlock Text="Debug 模式 (無後綴)" FontWeight="Bold" Foreground="#1E293B"/>
-                            <TextBlock Text="- 顯示 FrontPanel 前面板調試視窗 (研發調機用)" FontSize="11" Foreground="#64748B"/>
-                        </StackPanel>
-                    </RadioButton>
-                    <RadioButton x:Name="RbReentrant">
-                        <StackPanel Orientation="Horizontal" Spacing="6">
-                            <TextBlock Text="Reentrant 模式 (&amp;&amp;)" FontWeight="Bold" Foreground="#1E293B"/>
-                            <TextBlock Text="- 多執行緒並行可重入 (每次調用獨立實例)" FontSize="11" Foreground="#64748B"/>
-                        </StackPanel>
-                    </RadioButton>
+                    <Border Background="#EFF6FF" BorderBrush="#BFDBFE" BorderThickness="1" CornerRadius="4" Padding="10,6">
+                        <TextBlock Text="💡 下一步將依據所選 CSVI 自動開啟專屬參數精靈（或使用 CALL.csvi 通用參數精靈）。" Foreground="#1E40AF" FontSize="11.5" TextWrapping="Wrap"/>
+                    </Border>
                 </StackPanel>
 
-                <Separator Background="#E2E8F0" Margin="0,4"/>
-
-                <!-- 指令名稱即時預覽 -->
-                <TextBlock Text="生成指令預覽 (Command Preview):" FontSize="11" Foreground="#64748B"/>
-                <TextBox x:Name="TxtCommandPreview" IsReadOnly="True" Background="#F1F5F9" Foreground="#0F172A" Height="28" FontSize="12" FontWeight="SemiBold"/>
-            </StackPanel>
+                <Button Grid.Column="1" x:Name="BtnNext"
+                        Background="#10B981" Foreground="#FFFFFF" CornerRadius="8"
+                        HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Margin="4,12,0,4"
+                        HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
+                        Cursor="Hand" ToolTip.Tip="進入步驟 2 配置目標 CSVI 參數">
+                    <StackPanel Spacing="6" HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <TextBlock Text="➔" FontSize="32" FontWeight="Bold" Foreground="#FFFFFF" HorizontalAlignment="Center"/>
+                        <TextBlock Text="下一步&#x0a;配置參數" FontSize="12.5" FontWeight="SemiBold" Foreground="#FFFFFF" TextAlignment="Center" HorizontalAlignment="Center"/>
+                    </StackPanel>
+                </Button>
+            </Grid>
         </Border>
 
-        <!-- 底部按鈕區 -->
-        <Grid Grid.Row="2" ColumnDefinitions="Auto,*,Auto" Margin="0,14,0,0">
-            <Button Grid.Column="0" x:Name="BtnRefresh" Content="🔄 重新整理" Height="32" Padding="10,0"/>
-            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="10">
-                <Button x:Name="BtnCancel" Content="取消 (Cancel)" Width="90" Height="32" Background="#E2E8F0" Foreground="#334155" HorizontalContentAlignment="Center"/>
-                <Button x:Name="BtnNext" Content="下一步：配置參數 (Configure) ➔" Height="32" Padding="14,0" Background="#2563EB" Foreground="#FFFFFF" FontWeight="Bold" HorizontalContentAlignment="Center"/>
-            </StackPanel>
-        </Grid>
+        <Border Grid.Row="2" Background="#FFFFFF" BorderBrush="#CBD5E1" BorderThickness="1" CornerRadius="6" Padding="12,10" Margin="0,10,0,0">
+            <Grid RowDefinitions="Auto,Auto" ColumnDefinitions="*,Auto">
+                <TextBlock Grid.Row="0" Grid.Column="0" Text="CommandOut (指令預覽):" FontSize="11.5" FontWeight="SemiBold" Foreground="#475569" Margin="0,0,0,6"/>
+                <TextBox Grid.Row="1" Grid.Column="0" x:Name="TxtCommandPreview" IsReadOnly="True" Background="#EEF2F6" Foreground="#0369A1" FontWeight="SemiBold" FontSize="13" FontFamily="Consolas" VerticalContentAlignment="Center" Height="34" Margin="0,0,10,0"/>
+                <Button Grid.Row="1" Grid.Column="1" x:Name="BtnCancel" Content="取消" Width="88" Height="34" Background="#E2E8F0" Foreground="#1E293B" FontWeight="SemiBold" HorizontalContentAlignment="Center" VerticalContentAlignment="Center"/>
+            </Grid>
+        </Border>
     </Grid>
+    </Border>
 </Window>

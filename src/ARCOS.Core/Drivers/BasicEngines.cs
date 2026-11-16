@@ -20,6 +20,11 @@ public class BasicEngines
     public UserPanelEngine UserPanel { get; }
     public ProgramEngine Program { get; }
 
+    /// <summary>
+    /// 可選的驅動程式總管參考，供 Guide UI 即時查詢已註冊驅動清單與執行 GetPos 等即時讀取
+    /// </summary>
+    public DriverManager? Drivers { get; set; }
+
     public BasicEngines() : this(
         new IoEngine(),
         new VariableEngine(),

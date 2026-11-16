@@ -1,16 +1,52 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             Width="620" Height="420">
+             HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
     <Grid RowDefinitions="Auto,*,Auto" Margin="16" Background="#F8FAFC">
-        <Border Grid.Row="0" Background="#1E293B" CornerRadius="6" Padding="14,10" Margin="0,0,0,12">
-            <TextBlock Text="Hello Module Configuration" Foreground="#F8FAFC" FontSize="15" FontWeight="Bold"/>
+        <Border Grid.Row="0" Background="#1E293B" CornerRadius="6" Padding="14,10" Margin="0,0,0,10">
+            <Grid RowDefinitions="Auto,Auto" ColumnDefinitions="Auto,*">
+                <TextBlock Grid.Row="0" Grid.Column="0" Text="Hello — 參數導引精靈" Foreground="#F8FAFC" FontSize="15" FontWeight="Bold"/>
+                <TextBlock Grid.Row="0" Grid.Column="1" Text="語法: @&lt;Action&gt;::&lt;Parameters&gt;;" Foreground="#38BDF8" FontSize="11" FontWeight="SemiBold" FontFamily="Consolas" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="14,0,0,0" TextTrimming="CharacterEllipsis"/>
+                <TextBlock Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2" Name="TxtParamInInfo" Text="ParameterIn: (空白)" Foreground="#94A3B8" FontSize="11" FontFamily="Consolas" Margin="0,4,0,0" TextTrimming="CharacterEllipsis"/>
+            </Grid>
         </Border>
-        <Border Grid.Row="1" Background="White" BorderBrush="#CBD5E1" BorderThickness="1" CornerRadius="6" Padding="16">
-            <TextBox Name="TxtParamOut" Text="" IsReadOnly="True"/>
+
+        <Border Grid.Row="1" Background="White" BorderBrush="#CBD5E1" BorderThickness="1" CornerRadius="6" Padding="14">
+            <Grid ColumnDefinitions="*,112">
+                <StackPanel Grid.Column="0" Spacing="10" Margin="0,0,12,0" VerticalAlignment="Center">
+                    <Border Background="#F8FAFC" BorderBrush="#CBD5E1" BorderThickness="1" CornerRadius="6" Padding="14">
+                        <StackPanel Spacing="8">
+                            <TextBlock Text="Hello 範例純 CSVI 模組總覽 (Sample Master Instrument)" FontSize="13" FontWeight="Bold" Foreground="#0F172A"/>
+                            <TextBlock Text="本模組示範 ARCOS Pure CSVI 四位一體結構（Logic + Wizard + Panel + Manifest）。實際步驟指令請於 Sequencer 選用 Hello@Init 或 Hello@HelloWorld。" FontSize="12" Foreground="#334155" TextWrapping="Wrap"/>
+                            <TextBlock Name="TxtMasterMeta" Text="" FontSize="11" FontFamily="Consolas" Foreground="#0F766E" TextWrapping="Wrap"/>
+                            <TextBlock Text="語法範例: Hello@HelloWorld::hello world;  |  Hello@Init;" FontSize="11" FontFamily="Consolas" Foreground="#475569" TextWrapping="Wrap"/>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+
+                <Button Grid.Column="1" Name="BtnOk"
+                        Background="#10B981" Foreground="White" CornerRadius="8"
+                        HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Margin="4,12,0,4"
+                        HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
+                        Cursor="Hand" ToolTip.Tip="套用目前組合參數 (Enter)">
+                    <StackPanel Spacing="6" HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <TextBlock Text="✓" FontSize="34" FontWeight="Bold" Foreground="White" HorizontalAlignment="Center"/>
+                        <TextBlock Text="套用參數" FontSize="13" FontWeight="SemiBold" Foreground="White" HorizontalAlignment="Center"/>
+                    </StackPanel>
+                </Button>
+            </Grid>
         </Border>
-        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="10" Margin="0,12,0,0">
-            <Button Name="BtnCancel" Content="取消" Width="88"/>
-            <Button Name="BtnOk" Content="套用" Width="100" Background="#2563EB" Foreground="White"/>
-        </StackPanel>
+
+        <Border Grid.Row="2" Background="White" BorderBrush="#CBD5E1" BorderThickness="1" CornerRadius="6" Padding="12,10" Margin="0,10,0,0">
+            <Grid ColumnDefinitions="*,Auto">
+                <StackPanel Grid.Column="0" Spacing="3" Margin="0,0,12,0">
+                    <TextBlock Text="ParameterOut (組合預覽):" FontSize="11" FontWeight="SemiBold" Foreground="#475569"/>
+                    <TextBox Name="TxtParamOut" IsReadOnly="True" Background="#F1F5F9" Foreground="#0284C7"
+                             FontWeight="Bold" FontFamily="Consolas" FontSize="13" MinHeight="32" VerticalContentAlignment="Center"/>
+                </StackPanel>
+                <Button Grid.Column="1" Name="BtnCancel" Content="取消" Width="86" Height="36"
+                        Background="#E2E8F0" Foreground="#334155" FontWeight="SemiBold"
+                        VerticalAlignment="Bottom" Cursor="Hand" HorizontalContentAlignment="Center" VerticalContentAlignment="Center"/>
+            </Grid>
+        </Border>
     </Grid>
 </UserControl>
