@@ -152,20 +152,49 @@ public class DaqEngine
     }
 
     /// <summary>
-    /// 平均值公差檢查，寫入 $(name)#OK? (對應 DAQ@CompareAvgInRange)
+    /// 依時間區間 [startSec, endSec]（單位：秒；endSec &lt; 0 代表波形結尾）從通道資料切出對應樣本區段。
     /// </summary>
-    public bool CompareAvgInRange(string name, double max, double min, int startIdx = 0, int endIdx = -1, int channel = 0)
+    private static ReadOnlySpan<double> SliceBySeconds(WaveformChannelData chData, double startSec, double endSec)
+    {
+        if (chData.Y.Length == 0) return ReadOnlySpan<double>.Empty;
+        double dt = chData.Dt > 0 ? chData.Dt : 0.001;
+
+        int rawStart = startSec <= 0.0 ? 0 : (int)Math.Floor(startSec / dt + 1e-9);
+        if (rawStart >= chData.Y.Length) return ReadOnlySpan<double>.Empty;
+        int s = Math.Max(0, rawStart);
+
+        int e;
+        if (endSec < 0.0)
+        {
+            e = chData.Y.Length - 1;
+        }
+        else
+        {
+            int rawEnd = (int)Math.Floor(endSec / dt + 1e-9);
+            if (rawEnd < s) return ReadOnlySpan<double>.Empty;
+            e = Math.Clamp(rawEnd, s, chData.Y.Length - 1);
+        }
+
+        return chData.Y.AsSpan(s, e - s + 1);
+    }
+
+    /// <summary>
+    /// 平均值公差檢查（依時間區間秒數切片），寫入 $(name)#OK? (對應 DAQ@CompareAvgInRange)
+    /// </summary>
+    public bool CompareAvgInRange(string name, double max, double min, double startSec = 0.0, double endSec = -1.0, int channel = 0)
     {
         if (_waveforms.TryGetValue(name, out var entry) && entry.Channels.TryGetValue(channel, out var chData))
         {
-            if (chData.Y.Length == 0) return false;
+            var slice = SliceBySeconds(chData, startSec, endSec);
+            if (slice.IsEmpty)
+            {
+                _ioEngine?.SetPort($"{name}#OK?", false);
+                return false;
+            }
 
-            int s = Math.Clamp(startIdx, 0, chData.Y.Length - 1);
-            int e = endIdx < 0 ? chData.Y.Length - 1 : Math.Clamp(endIdx, s, chData.Y.Length - 1);
-            var slice = chData.Y.Skip(s).Take(e - s + 1).ToArray();
-            if (slice.Length == 0) return false;
-
-            double avg = slice.Average();
+            double sum = 0.0;
+            for (int i = 0; i < slice.Length; i++) sum += slice[i];
+            double avg = sum / slice.Length;
             bool isOk = (avg <= max) && (avg >= min);
             _ioEngine?.SetPort($"{name}#OK?", isOk);
             return isOk;
@@ -174,21 +203,26 @@ public class DaqEngine
     }
 
     /// <summary>
-    /// 極值公差檢查，寫入 $(name)#OK? (對應 DAQ@CompareMaxMinInRange)
+    /// 極值公差檢查（依時間區間秒數切片），寫入 $(name)#OK? (對應 DAQ@CompareMaxMinInRange)
     /// </summary>
-    public bool CompareMaxMinInRange(string name, double max, double min, int channel = 0, int startIdx = 0, int endIdx = -1)
+    public bool CompareMaxMinInRange(string name, double max, double min, int channel = 0, double startSec = 0.0, double endSec = -1.0)
     {
         if (_waveforms.TryGetValue(name, out var entry) && entry.Channels.TryGetValue(channel, out var chData))
         {
-            if (chData.Y.Length == 0) return false;
+            var slice = SliceBySeconds(chData, startSec, endSec);
+            if (slice.IsEmpty)
+            {
+                _ioEngine?.SetPort($"{name}#OK?", false);
+                return false;
+            }
 
-            int s = Math.Clamp(startIdx, 0, chData.Y.Length - 1);
-            int e = endIdx < 0 ? chData.Y.Length - 1 : Math.Clamp(endIdx, s, chData.Y.Length - 1);
-            var slice = chData.Y.Skip(s).Take(e - s + 1).ToArray();
-            if (slice.Length == 0) return false;
-
-            double currentMax = slice.Max();
-            double currentMin = slice.Min();
+            double currentMax = double.NegativeInfinity;
+            double currentMin = double.PositiveInfinity;
+            for (int i = 0; i < slice.Length; i++)
+            {
+                if (slice[i] > currentMax) currentMax = slice[i];
+                if (slice[i] < currentMin) currentMin = slice[i];
+            }
 
             bool isOk = (currentMax <= max) && (currentMin >= min);
             _ioEngine?.SetPort($"{name}#OK?", isOk);
@@ -198,28 +232,86 @@ public class DaqEngine
     }
 
     /// <summary>
-    /// 【包絡線檢測】逐點比對是否落在上下限波形包絡線內 (對應 DAQ@CompareCoverBy)
+    /// 將單一通道波形以線性插值超取樣（重取樣）至目標取樣間隔 targetDt，回傳長度 targetCount 之陣列。
+    /// 若原本 Dt 與目標一致且長度相同，則直接複製原陣列避免插值誤差。
+    /// </summary>
+    public static double[] ResampleWaveform(WaveformChannelData ch, double targetDt, int targetCount)
+    {
+        if (ch.Y.Length == 0 || targetCount <= 0) return Array.Empty<double>();
+        double srcDt = ch.Dt > 0 ? ch.Dt : 0.001;
+        double safeTargetDt = targetDt > 0 ? targetDt : srcDt;
+
+        if (Math.Abs(srcDt - safeTargetDt) <= safeTargetDt * 1e-9 && ch.Y.Length == targetCount)
+        {
+            return (double[])ch.Y.Clone();
+        }
+
+        var result = new double[targetCount];
+        if (ch.Y.Length == 1)
+        {
+            Array.Fill(result, ch.Y[0]);
+            return result;
+        }
+
+        for (int j = 0; j < targetCount; j++)
+        {
+            double t = j * safeTargetDt;
+            double pos = t / srcDt;
+            if (pos <= 0.0)
+            {
+                result[j] = ch.Y[0];
+            }
+            else if (pos >= ch.Y.Length - 1)
+            {
+                result[j] = ch.Y[^1];
+            }
+            else
+            {
+                int i0 = (int)Math.Floor(pos);
+                int i1 = Math.Min(i0 + 1, ch.Y.Length - 1);
+                double frac = pos - i0;
+                result[j] = ch.Y[i0] + (ch.Y[i1] - ch.Y[i0]) * frac;
+            }
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// 【包絡線檢測】自動超取樣對齊至參與波形中之最高 Sample Rate（最小 Dt）後，逐點比對是否落在上下限波形包絡線內 (對應 DAQ@CompareCoverBy)
     /// </summary>
     public bool CompareCoverBy(string name, string upperSpecName, string? lowerSpecName = null, int channel = 0)
     {
-        if (!_waveforms.TryGetValue(name, out var entry) || !entry.Channels.TryGetValue(channel, out var chData))
+        if (!_waveforms.TryGetValue(name, out var entry) || !entry.Channels.TryGetValue(channel, out var chData) || chData.Y.Length == 0)
             return false;
 
-        if (!_waveforms.TryGetValue(upperSpecName, out var upperEntry) || !upperEntry.Channels.TryGetValue(channel, out var upperCh))
+        if (!_waveforms.TryGetValue(upperSpecName, out var upperEntry) || !upperEntry.Channels.TryGetValue(channel, out var upperCh) || upperCh.Y.Length == 0)
             return false;
 
-        var y = chData.Y;
-        var upY = upperCh.Y;
+        double dtTarget = chData.Dt > 0 ? chData.Dt : 0.001;
+        double dtUpper = upperCh.Dt > 0 ? upperCh.Dt : 0.001;
+        double targetDt = Math.Min(dtTarget, dtUpper);
+        double commonDuration = Math.Min(chData.Y.Length * dtTarget, upperCh.Y.Length * dtUpper);
 
+        WaveformChannelData? lowerCh = null;
         if (!string.IsNullOrWhiteSpace(lowerSpecName) &&
             _waveforms.TryGetValue(lowerSpecName, out var lowerEntry) &&
-            lowerEntry.Channels.TryGetValue(channel, out var lowerCh))
+            lowerEntry.Channels.TryGetValue(channel, out var foundLower) &&
+            foundLower.Y.Length > 0)
         {
-            var lowY = lowerCh.Y;
-            int checkCount = Math.Min(y.Length, Math.Min(upY.Length, lowY.Length));
-            if (checkCount == 0) return false;
+            lowerCh = foundLower;
+            double dtLower = lowerCh.Dt > 0 ? lowerCh.Dt : 0.001;
+            targetDt = Math.Min(targetDt, dtLower);
+            commonDuration = Math.Min(commonDuration, lowerCh.Y.Length * dtLower);
+        }
 
-            bool allWithinCover = true;
+        int checkCount = Math.Max(1, (int)Math.Round(commonDuration / targetDt));
+        var y = ResampleWaveform(chData, targetDt, checkCount);
+        var upY = ResampleWaveform(upperCh, targetDt, checkCount);
+        var lowY = lowerCh != null ? ResampleWaveform(lowerCh, targetDt, checkCount) : null;
+
+        bool allWithinCover = true;
+        if (lowY != null)
+        {
             for (int i = 0; i < checkCount; i++)
             {
                 if (y[i] > upY[i] || y[i] < lowY[i])
@@ -228,17 +320,10 @@ public class DaqEngine
                     break;
                 }
             }
-
-            _ioEngine?.SetPort($"{name}#OK?", allWithinCover);
-            return allWithinCover;
         }
         else
         {
             // 若僅提供單一包絡線，檢查 y[i] <= upY[i]
-            int checkCount = Math.Min(y.Length, upY.Length);
-            if (checkCount == 0) return false;
-
-            bool allWithinCover = true;
             for (int i = 0; i < checkCount; i++)
             {
                 if (y[i] > upY[i])
@@ -247,10 +332,21 @@ public class DaqEngine
                     break;
                 }
             }
-
-            _ioEngine?.SetPort($"{name}#OK?", allWithinCover);
-            return allWithinCover;
         }
+
+        _ioEngine?.SetPort($"{name}#OK?", allWithinCover);
+        return allWithinCover;
+    }
+
+    /// <summary>
+    /// 依時間區間（秒）與取樣率產生模擬波形 (對應 DAQ@WaveFormGenerate；點數 = rate * durationSec)
+    /// </summary>
+    public void GenerateWaveformByDuration(string name, string waveType = "Sine", double rate = 1000.0, double durationSec = 1.0, double amplitude = 5.0, double offset = 0.0, int channel = 0)
+    {
+        double safeRate = rate > 0 ? rate : 1000.0;
+        double safeSec = durationSec > 0 ? durationSec : 1.0;
+        int count = Math.Max(1, (int)Math.Round(safeRate * safeSec));
+        GenerateWaveform(name, waveType, safeRate, count, amplitude, offset, channel);
     }
 
     /// <summary>
@@ -291,6 +387,7 @@ public class DaqEngine
 
     /// <summary>
     /// 波形間或波形與常數的四則運算 (對應 DAQ@Calculate::$waveform = $w1 {+-*/} $w2)
+    /// 兩側皆為波形時，自動超取樣對齊至最高 Sample Rate（最小 Dt）後再逐點計算。
     /// </summary>
     public void CalculateWaveform(string targetName, string leftOperand, char op, string rightOperand, int channel = 0)
     {
@@ -299,16 +396,21 @@ public class DaqEngine
         if (!_waveforms.TryGetValue(leftOperand, out var leftEntry) || !leftEntry.Channels.TryGetValue(channel, out var leftCh))
             return;
 
-        var leftY = leftCh.Y;
-        if (leftY.Length == 0) return;
+        if (leftCh.Y.Length == 0) return;
 
-        var resultY = new double[leftY.Length];
+        double dtLeft = leftCh.Dt > 0 ? leftCh.Dt : 0.001;
         if (_waveforms.TryGetValue(rightOperand, out var rightEntry) && rightEntry.Channels.TryGetValue(channel, out var rightCh) && rightCh.Y.Length > 0)
         {
-            var rightY = rightCh.Y;
-            for (int i = 0; i < leftY.Length; i++)
+            double dtRight = rightCh.Dt > 0 ? rightCh.Dt : 0.001;
+            double targetDt = Math.Min(dtLeft, dtRight);
+            int targetCount = Math.Max(1, (int)Math.Round((leftCh.Y.Length * dtLeft) / targetDt));
+            var leftY = ResampleWaveform(leftCh, targetDt, targetCount);
+            var rightY = ResampleWaveform(rightCh, targetDt, targetCount);
+            var resultY = new double[targetCount];
+
+            for (int i = 0; i < targetCount; i++)
             {
-                double r = i < rightY.Length ? rightY[i] : rightY[^1];
+                double r = rightY[i];
                 resultY[i] = op switch
                 {
                     '+' => leftY[i] + r,
@@ -318,9 +420,13 @@ public class DaqEngine
                     _ => leftY[i]
                 };
             }
+
+            SetWaveform(targetName, leftCh.T0, targetDt, resultY, channel);
         }
-        else if (double.TryParse(rightOperand, out double scalar))
+        else if (double.TryParse(rightOperand, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double scalar))
         {
+            var leftY = leftCh.Y;
+            var resultY = new double[leftY.Length];
             for (int i = 0; i < leftY.Length; i++)
             {
                 resultY[i] = op switch
@@ -332,41 +438,44 @@ public class DaqEngine
                     _ => leftY[i]
                 };
             }
-        }
 
-        SetWaveform(targetName, leftCh.T0, leftCh.Dt, resultY, channel);
+            SetWaveform(targetName, leftCh.T0, dtLeft, resultY, channel);
+        }
     }
 
     /// <summary>
     /// 將多組波形依序合併為單一波形 (對應 DAQ@MergeWaveForm::$WaveForm, $WaveForm1, $WaveForm2...)
+    /// 若各來源波形 Sample Rate 不同，先自動超取樣對齊至最高 Sample Rate（最小 Dt）再串接。
     /// </summary>
     public void MergeWaveforms(string targetName, IEnumerable<string> sourceNames, int channel = 0)
     {
         if (string.IsNullOrWhiteSpace(targetName) || sourceNames == null) return;
 
-        var merged = new List<double>();
-        double dt = 0.001;
-        DateTime t0 = DateTime.Now;
-        bool first = true;
-
+        var channels = new List<WaveformChannelData>();
         foreach (var src in sourceNames)
         {
             if (string.IsNullOrWhiteSpace(src)) continue;
-            if (_waveforms.TryGetValue(src.Trim(), out var entry) && entry.Channels.TryGetValue(channel, out var chData))
+            if (_waveforms.TryGetValue(src.Trim(), out var entry) && entry.Channels.TryGetValue(channel, out var chData) && chData.Y.Length > 0)
             {
-                if (first)
-                {
-                    dt = chData.Dt;
-                    t0 = chData.T0;
-                    first = false;
-                }
-                merged.AddRange(chData.Y);
+                channels.Add(chData);
             }
+        }
+
+        if (channels.Count == 0) return;
+
+        double targetDt = channels.Min(c => c.Dt > 0 ? c.Dt : 0.001);
+        DateTime t0 = channels[0].T0;
+        var merged = new List<double>();
+        foreach (var chData in channels)
+        {
+            double srcDt = chData.Dt > 0 ? chData.Dt : 0.001;
+            int segCount = Math.Max(1, (int)Math.Round((chData.Y.Length * srcDt) / targetDt));
+            merged.AddRange(ResampleWaveform(chData, targetDt, segCount));
         }
 
         if (merged.Count > 0)
         {
-            SetWaveform(targetName, t0, dt, merged.ToArray(), channel);
+            SetWaveform(targetName, t0, targetDt, merged.ToArray(), channel);
         }
     }
 

@@ -91,7 +91,7 @@ public static class CommandSyntaxBridge
                 ? $"{wbCond}, {parsed.Get("msg")}"
                 : parsed.Get("msg"),
             "System@Pause" or "System@Resume" => BuildPauseResumeLegacy(parsed),
-            "System@TimerReset" => parsed.TryGet("timeoutSec", out var tSec) && !string.IsNullOrWhiteSpace(tSec)
+            "System@TimerReset" => parsed.TryGet("target", out var tSec) && !string.IsNullOrWhiteSpace(tSec)
                 ? $"{parsed.Get("timer")}, {tSec}"
                 : parsed.Get("timer"),
             "System@TimerCheck" => parsed.Get("timer"),
@@ -105,7 +105,7 @@ public static class CommandSyntaxBridge
             "System@LogRecordCycleTime" => parsed.TryGet("prefix", out var ctPre) && !string.IsNullOrWhiteSpace(ctPre)
                 ? $"{parsed.Get("rec")}, {ctPre}"
                 : parsed.Get("rec"),
-            "System@ProgramLoad" => parsed.Get("path"),
+            "System@ProgramLoad" => parsed.Get("file"),
             "System@ProgramSection" => parsed.TryGet("title", out var psTitle) && !string.IsNullOrWhiteSpace(psTitle)
                 ? $"{parsed.Get("section")}, {psTitle}"
                 : parsed.Get("section"),
@@ -115,7 +115,7 @@ public static class CommandSyntaxBridge
 
             // ======================== THREAD (31) ========================
             "Thread@If" or "Thread@ElseIf" => parsed.Get("logic"),
-            "Thread@Else" or "Thread@EndIf" or "Thread@Return" => string.Empty,
+            "Thread@Else" or "Thread@EndIf" => string.Empty,
             "Thread@ForeachStart" => parsed.Get("label"),
             "Thread@ForeachLoop" => BuildForeachLoopLegacy(parsed),
             "Thread@ForeachBreak" or "Thread@ForeachContinue" => parsed.Get("logic"),
@@ -123,14 +123,14 @@ public static class CommandSyntaxBridge
             "Thread@Run" => BuildThreadRunLegacy(parsed),
             "Thread@Wait" => string.Join(", ", parsed.GetList("threads")),
             "Thread@Suspend" or "Thread@Resume" => BuildWithOptionalCondition(parsed.Get("thread"), parsed),
-            "Thread@Stop" => BuildThreadStopLegacy(parsed),
+            "Thread@Stop" or "Thread@GoOn" => BuildThreadStopLegacy(parsed),
             "Thread@SubThreadStart" => BuildWithOptionalCondition(parsed.Get("sub"), parsed),
             "Thread@SubThreadEnd" or "Thread@SubThreadSuspend" => parsed.Get("sub"),
             "Thread@SubThreadScript" => JoinNonEmpty(", ", parsed.Get("sub"), parsed.Get("file")),
             "Thread@SubThreadWait" => BuildSubThreadWaitLegacy(parsed),
             "Thread@KeySectionLock" => BuildKeySectionLockLegacy(parsed),
             "Thread@KeySectionUnLock" => parsed.Get("lock"),
-            "Thread@GoOn" or "Thread@Repeat" or "Thread@RunNextCMD" or "Thread@SkipNextCMD" => parsed.Get("logic"),
+            "Thread@Repeat" or "Thread@Return" or "Thread@RunNextCMD" or "Thread@SkipNextCMD" => parsed.Get("logic"),
             "Thread@MutePopupMessage" => parsed.GetBool("enabled", false) ? "1" : "0",
             "Thread@ErrorHandler" => string.IsNullOrWhiteSpace(parsed.Get("label")) ? string.Empty : $"[[{parsed.Get("label").Trim('[', ']')}]]",
             "Thread@ErrorRetry" => BuildErrorRetryLegacy(parsed),
@@ -151,7 +151,7 @@ public static class CommandSyntaxBridge
                 AppendOptionalSection(JoinNonEmpty(", ", parsed.Get("var"), parsed.Get("val")), parsed),
             "Variable@LPop" or "Variable@RPop" or "Variable@LReverse" or "Variable@LGetIndexSize" =>
                 AppendOptionalSection(parsed.Get("var"), parsed),
-            "Variable@LInsert" => AppendOptionalSection(JoinNonEmpty(", ", parsed.Get("var"), parsed.Get("val"), parsed.Get("condition")), parsed),
+            "Variable@LInsert" => AppendOptionalSection(JoinNonEmpty(", ", parsed.Get("var"), parsed.Get("val"), parsed.Get("logic")), parsed),
             "Variable@LResetIndex" => BuildVarResetIndexLegacy(parsed),
             "Variable@LSetIndexValue" => AppendOptionalSection(JoinNonEmpty(", ", parsed.Get("var"), parsed.Get("index"), parsed.Get("val")), parsed),
             "Variable@LFindIndexSet" => BuildVarFindIndexSetLegacy(parsed),
@@ -162,7 +162,7 @@ public static class CommandSyntaxBridge
             "Variable@GetPointString" => AppendOptionalSection(JoinNonEmpty(", ", parsed.Get("var"), parsed.Get("pt")), parsed),
             "Variable@Publish" => string.Join(", ", parsed.GetList("vars")),
             "Variable@Subscribe" or "Variable@Flush" => parsed.Get("var"),
-            "Variable@VariableLoad" => parsed.Get("path"),
+            "Variable@VariableLoad" => parsed.Get("file"),
             "Variable@VariableSave" => BuildVarSaveLegacy(parsed),
 
             // ======================== POINT&PATH (22) ========================
@@ -175,7 +175,7 @@ public static class CommandSyntaxBridge
                 ? $"{parsed.Get("pt")}<={parsed.Get("expr")}"
                 : $"{parsed.Get("pt")}={parsed.Get("expr")}",
             "Point&Path@ClearPoint" => parsed.Get("pt"),
-            "Point&Path@EnableAxis" => JoinNonEmpty(", ", parsed.Get("pt"), parsed.Get("axes")),
+            "Point&Path@EnableAxis" => JoinNonEmpty(", ", parsed.Get("pt"), parsed.Get("axis")),
             "Point&Path@Select" => $"{parsed.Get("pt")}={parsed.Get("logic")}?{parsed.Get("true")}:{parsed.Get("false")}",
             "Point&Path@Pallet1D" => JoinNonEmpty(", ", parsed.Get("pt"), parsed.Get("count")),
             "Point&Path@Pallet2D" => JoinNonEmpty(", ", parsed.Get("pt"), parsed.Get("countX"), parsed.Get("countY")),
@@ -186,14 +186,12 @@ public static class CommandSyntaxBridge
             "Point&Path@CoordWS(2Edge)" => JoinNonEmpty(", ", parsed.Get("ws"), parsed.Get("xEnd"), parsed.Get("yEnd")),
             "Point&Path@Point2WS" or "Point&Path@WS2Point" => JoinNonEmpty(", ", parsed.Get("pt"), parsed.Get("ws")),
             "Point&Path@SelfMotion" => JoinNonEmpty(", ", parsed.Get("pt"), parsed.Get("basePt"), parsed.Get("newPt")),
-            "Point&Path@ChkInRangeXY" => parsed.TryGet("var", out var chkVar) && !string.IsNullOrWhiteSpace(chkVar)
-                ? $"{parsed.Get("pt")}, {parsed.Get("rangePt")}, {chkVar}"
-                : JoinNonEmpty(", ", parsed.Get("pt"), parsed.Get("rangePt")),
-            "Point&Path@TransImaqPoint" => JoinNonEmpty(", ", parsed.Get("imaq"), parsed.Get("pt")),
+            "Point&Path@ChkInRangeXY" => BuildChkInRangeLegacy(parsed),
+            "Point&Path@TransImaqPoint" => JoinNonEmpty(", ", parsed.Get("imaqs"), parsed.Get("pt")),
 
             // ======================== MOTION (21) ========================
-            "Motion@AddMotion" => BuildDriverInitLegacy(parsed, "mot", ("axes", "Axes"), ("speed", "Speed"), ("acc", "Acc"), ("dec", "Dec")),
-            "Motion@Home" => JoinNonEmpty(", ", parsed.Get("mot"), parsed.Get("axes"), parsed.Get("mode")),
+            "Motion@AddMotion" => BuildDriverInitLegacy(parsed, "mot", ("device", "DEVICE"), ("axis", "Axes"), ("speed", "Speed"), ("acc", "Acc"), ("dec", "Dec")),
+            "Motion@Home" => BuildMotionHomeLegacy(parsed),
             "Motion@Stop" => parsed.Get("mot"),
             "Motion@Go" or "Motion@Go(SingleAxis)" => BuildMotionGoLegacy(parsed),
             "Motion@GoPoint" or "Motion@GoPoint(SingleAxis)" or "Motion@GoPallet" or "Motion@AddPath" =>
@@ -209,81 +207,80 @@ public static class CommandSyntaxBridge
             "Motion@ExtraCMD" => JoinNonEmpty(", ", parsed.Get("mot"), parsed.Get("cmd"), tail),
 
             // ======================== CAPTURE (28) ========================
-            "Capture@AddCam" => BuildDriverInitLegacy(parsed, "cam", ("width", "Width"), ("height", "Height"), ("exposure", "Exposure"), ("file", "File")),
+            "Capture@AddCam" => BuildDriverInitLegacy(parsed, "cam", ("device", "DEVICE"), ("width", "Width"), ("height", "Height"), ("exposure", "Exposure"), ("file", "File")),
             "Capture@Config" => JoinNonEmpty(", ", parsed.Get("cam"), parsed.Get("key"), parsed.Get("val"), tail),
             "Capture@Snap" or "Capture@Trigger" => JoinNonEmpty(", ", parsed.Get("cam"), parsed.Get("imaqs"), tail),
             "Capture@UpdateImage" => parsed.Get("cam"),
-            "Capture@LoadFile" or "Capture@ROISave" or "Capture@CalibrateLoad" =>
-                JoinNonEmpty(", ", parsed.Get("imaq"), parsed.Get("path")),
+            "Capture@LoadFile" => JoinNonEmpty(", ", parsed.Get("imaqs"), parsed.Get("file")),
+            "Capture@ROISave" or "Capture@CalibrateLoad" =>
+                JoinNonEmpty(", ", parsed.Get("cam"), parsed.Get("file")),
             "Capture@ImageSave" => parsed.GetBool("burnOverlays", false)
-                ? JoinNonEmpty(", ", parsed.Get("imaq"), parsed.Get("path"), "BurnOverlays=true")
-                : JoinNonEmpty(", ", parsed.Get("imaq"), parsed.Get("path")),
-            "Capture@ClearImaq" => parsed.Get("imaq"),
-            "Capture@LoadFile2Imaq" => JoinNonEmpty(", ", parsed.Get("imaqs"), parsed.Get("path")),
-            "Capture@LoadNextImaq" => JoinNonEmpty(", ", parsed.Get("imaqs"), parsed.Get("imaq")),
+                ? JoinNonEmpty(", ", parsed.Get("imaqs"), parsed.Get("file"), "BurnOverlays=true")
+                : JoinNonEmpty(", ", parsed.Get("imaqs"), parsed.Get("file")),
+            "Capture@ClearImaq" => parsed.Get("imaqs"),
+            "Capture@LoadFile2Imaq" => JoinNonEmpty(", ", parsed.Get("imaqs"), parsed.Get("file")),
+            "Capture@LoadNextImaq" => JoinNonEmpty(", ", parsed.Get("cam"), parsed.Get("imaqs")),
             "Capture@ResetImaqIndex" => JoinNonEmpty(", ", parsed.Get("imaqs"), parsed.Get("index")),
-            "Capture@Display2User" => JoinNonEmpty(", ", parsed.Get("imaq"), parsed.Get("ctrl")),
-            "Capture@ROISet" => JoinNonEmpty(", ", parsed.Get("imaq"), parsed.Get("roi")),
-            "Capture@ROITranslate" => JoinNonEmpty(", ", parsed.Get("imaq"), parsed.Get("basePt"), parsed.Get("newPt")),
+            "Capture@Display2User" => JoinNonEmpty(", ", parsed.Get("cam"), parsed.Get("ui")),
+            "Capture@ROISet" => JoinNonEmpty(", ", parsed.Get("cam"), parsed.Get("roi")),
+            "Capture@ROITranslate" => JoinNonEmpty(", ", parsed.Get("cam"), parsed.Get("basePt"), parsed.Get("newPt")),
             "Capture@CalibrateManual" => BuildCalibrateManualLegacy(parsed),
-            "Capture@CoordSet" => JoinNonEmpty(", ", parsed.Get("imaq"), parsed.Get("pt")),
-            "Capture@CoordSet(2Edge)" => JoinNonEmpty(", ", parsed.Get("imaq"), parsed.Get("xPt"), parsed.Get("yPt")),
-            "Capture@CoordSet(Org+2Edge)" => JoinNonEmpty(", ", parsed.Get("imaq"), parsed.Get("orgPt"), parsed.Get("xPt"), parsed.Get("yPt")),
+            "Capture@CoordSet" => JoinNonEmpty(", ", parsed.Get("cam"), parsed.Get("pt")),
+            "Capture@CoordSet(2Edge)" => JoinNonEmpty(", ", parsed.Get("cam"), parsed.Get("xPt"), parsed.Get("yPt")),
+            "Capture@CoordSet(Org+2Edge)" => JoinNonEmpty(", ", parsed.Get("cam"), parsed.Get("orgPt"), parsed.Get("xPt"), parsed.Get("yPt")),
             "Capture@FindCircle(InOut)" or "Capture@FindCircle(OutIn)" or "Capture@FindEdge" or "Capture@FindGap" or "Capture@FindPoint" =>
-                JoinNonEmpty(", ", parsed.Get("imaq"), parsed.Get("pt")),
+                JoinNonEmpty(", ", parsed.Get("cam"), parsed.Get("pt")),
             "Capture@GeoMatchOne" or "Capture@PatternMatchOne" or "Capture@PatternMatchOne(Fast)" =>
                 BuildCaptureMatchLegacy(parsed),
 
             // ======================== DAQ (18) ========================
-            "DAQ@AddDAQ" => BuildDriverInitLegacy(parsed, "daq", ("rate", "Rate"), ("count", "Count"), ("wave", "Wave")),
+            "DAQ@AddDAQ" => BuildDriverInitLegacy(parsed, "daq", ("device", "DEVICE"), ("rate", "Rate"), ("sec", "Sec"), ("wave", "Wave")),
             "DAQ@Start" or "DAQ@Stop" => JoinNonEmpty(", ", parsed.Get("daq"), tail),
             "DAQ@Wait" => BuildDeviceTimeoutLegacy(parsed, "daq", tail),
-            "DAQ@AnalogIn" => JoinNonEmpty(", ", parsed.Get("daq"), parsed.Get("wav"), tail),
+            "DAQ@AnalogIn" => JoinNonEmpty(", ", parsed.Get("daq"), parsed.Get("var"), tail),
             "DAQ@AnalogInWaveForm" => JoinNonEmpty(", ", parsed.Get("daq"), parsed.Get("sec"), parsed.Get("wav"), tail),
             "DAQ@AnalogOut" => JoinNonEmpty(", ", parsed.Get("daq"), parsed.Get("val"), tail),
             "DAQ@AnalogOutWaveForm" => JoinNonEmpty(", ", parsed.Get("daq"), parsed.Get("wav"), tail),
             "DAQ@WaveFormGenerate" => BuildWaveFormGenerateLegacy(parsed),
-            "DAQ@WaveFormLoad" or "DAQ@WaveFormSave" => JoinNonEmpty(", ", parsed.Get("wav"), parsed.Get("path")),
+            "DAQ@WaveFormLoad" or "DAQ@WaveFormSave" => JoinNonEmpty(", ", parsed.Get("wav"), parsed.Get("file")),
             "DAQ@Calculate" => $"{parsed.Get("wav")} = {parsed.Get("expr")}",
             "DAQ@Filter" => JoinNonEmpty(", ", parsed.Get("wav"), parsed.Get("type"), parsed.Get("window")),
             "DAQ@MergeWaveForm" => BuildMergeWaveFormLegacy(parsed),
             "DAQ@CompareAvgInRange" or "DAQ@CompareMaxMinInRange" => BuildDaqCompareRangeLegacy(parsed),
             "DAQ@CompareCoverBy" => JoinNonEmpty(", ", parsed.Get("wav"), parsed.Get("upper"), parsed.Get("lower")),
-            "DAQ@Display2User" => JoinNonEmpty(", ", parsed.Get("wav"), parsed.Get("ctrl")),
+            "DAQ@Display2User" => JoinNonEmpty(", ", parsed.Get("wav"), parsed.Get("ui")),
 
             // ======================== USER (21) ========================
             "User@SwitchUserPanel" => parsed.Get("panel"),
             "User@Param2UserPanel" => string.Empty,
             "User@ShowControl" or "User@HideControl" or "User@EnableControl" or "User@DisableControl" =>
-                string.Join(", ", parsed.GetList("ctrls")),
-            "User@GetControlValue" => JoinNonEmpty(", ", parsed.Get("ctrl"), parsed.Get("var")),
-            "User@SetControlValue" => $"{parsed.Get("ctrl")}, {parsed.Get("val")}",
+                string.Join(", ", parsed.GetList("ui")),
+            "User@GetControlValue" => JoinNonEmpty(", ", parsed.Get("ui"), parsed.Get("var")),
+            "User@SetControlValue" => $"{parsed.Get("ui")}, {parsed.Get("val")}",
             "User@QueryControls" => BuildUserQueryControlsLegacy(parsed),
             "User@ButtonValue" or "User@ButtonTrigger" or "User@ButtonBlinking" or "User@TextBoxBlinking" or "User@TextRingBlinking" =>
-                $"{parsed.Get("ctrl")}, {(parsed.GetBool("on", true) ? "1" : "0")}",
+                $"{parsed.Get("ui")}, {(parsed.TryGet("logic", out var uLogic) && !string.IsNullOrWhiteSpace(uLogic) ? uLogic : "True")}",
             "User@ButtonText" or "User@TextBoxValue" or "User@TextBoxTrigger" =>
-                $"{parsed.Get("ctrl")}, {parsed.Get("text")}",
+                $"{parsed.Get("ui")}, {parsed.Get("text")}",
             "User@TextRingValue" or "User@TextRingTrigger" =>
-                $"{parsed.Get("ctrl")}, {parsed.Get("val")}",
+                $"{parsed.Get("ui")}, {parsed.Get("val")}",
             "User@TabValue" or "User@TabTrigger" =>
-                $"{parsed.Get("ctrl")}, {parsed.Get("page")}",
+                $"{parsed.Get("ui")}, {parsed.Get("page")}",
 
-            // ======================== PYTHON (12) ========================
+            // ======================== PYTHON (10) ========================
             "Python@Init" => BuildPythonSessionOnlyLegacy(parsed),
-            "Python@Reset" => string.Empty,
-            "Python@ResetSession" => parsed.Get("session"),
-            "Python@File" => AppendOptionalPythonSession(parsed.Get("path"), parsed),
+            "Python@Reset" or "Python@ResetSession" => parsed.Get("session"),
+            "Python@File" => AppendOptionalPythonSession(parsed.Get("file"), parsed),
             "Python@Script" => BuildPythonScriptLegacy(parsed, tail),
             "Python@SetVariable" => BuildPythonSetVariableLegacy(parsed),
             "Python@GetVariable" => BuildPythonGetLegacy(parsed, "var"),
             "Python@SetPoint" => BuildPythonSetLegacy(parsed, "pt"),
             "Python@GetPoint" => BuildPythonGetLegacy(parsed, "pt"),
-            "Python@SetCapture" => BuildPythonSetLegacy(parsed, "imaq"),
-            "Python@SetCaptureFile" => AppendOptionalPythonSession(JoinNonEmpty(", ", parsed.Get("imaq"), parsed.Get("path"), parsed.Get("py")), parsed),
-            "Python@GetCapture" => BuildPythonGetLegacy(parsed, "imaq"),
+            "Python@SetCapture" => BuildPythonSetLegacy(parsed, "cam"),
+            "Python@GetCapture" => BuildPythonGetLegacy(parsed, "cam"),
 
             // ======================== REDIS (9) ========================
-            "Redis@CreateSession" => JoinNonEmpty(", ", parsed.Get("session"), parsed.Get("endpoint")),
+            "Redis@CreateSession" => JoinNonEmpty(", ", parsed.Get("session"), parsed.Get("url")),
             "Redis@Set" => AppendOptionalSessionKey(JoinNonEmpty(", ", parsed.Get("key"), parsed.Get("val")), parsed),
             "Redis@Get" => AppendOptionalSessionKey(JoinNonEmpty(", ", parsed.Get("key"), parsed.Get("var")), parsed),
             "Redis@LPush" => AppendOptionalSessionKey(JoinNonEmpty(", ", parsed.Get("key"), parsed.Get("val")), parsed),
@@ -293,12 +290,13 @@ public static class CommandSyntaxBridge
             "Redis@Subscribe" => AppendOptionalSessionKey(parsed.Get("key"), parsed),
             "Redis@CMD" => AppendOptionalSessionKey(parsed.Get("cmd"), parsed),
 
-            // ======================== MULTISTATION (15) ========================
-            // 15 條 MultiStation 指令直接採用 CommandParamParser 透過 MultiStationEngine 執行，原樣保留 v2.0 結構
+            // ======================== MULTISTATION (12) ========================
+            // 12 條 MultiStation 指令直接採用 CommandParamParser 透過 MultiStationEngine 執行，原樣保留 v2.0 結構（相容舊名 SetStationON/OFF/OK/NG）
             "MultiStation@AddStation" or
+            "MultiStation@SetOn" or "MultiStation@SetOK" or
             "MultiStation@SetStationON" or "MultiStation@SetStationOFF" or
             "MultiStation@SetStationOK" or "MultiStation@SetStationNG" or
-            "MultiStation@SetData" or "MultiStation@GetData" or "MultiStation@GetPoint" or
+            "MultiStation@SetData" or "MultiStation@GetData" or
             "MultiStation@ChkStationRunState" or "MultiStation@StateShift" or
             "MultiStation@Transfer" or "MultiStation@FindFirstOK" or "MultiStation@FindEmpty" or
             "MultiStation@ResetDefault" or "MultiStation@UpdateIndicator" => rawParam,
@@ -433,7 +431,7 @@ public static class CommandSyntaxBridge
             }
             else if (key == "Point&Path@ChkInRangeXY" && parsed.PositionalArgs.Count >= 3)
             {
-                parsed.AllArgs["var"] = parsed.PositionalArgs[2].TrimStart('$');
+                parsed.AllArgs["io"] = parsed.PositionalArgs[2].TrimStart('$');
             }
             else if (key is "Point&Path@AddXYZ" or "Point&Path@AddUVW" or "Point&Path@SubXYZ" or "Point&Path@SubUVW" or
                      "Point&Path@ReplaceXYZ" or "Point&Path@ReplaceUVW" or "Point&Path@InsertOnePoint")
@@ -472,7 +470,7 @@ public static class CommandSyntaxBridge
                 {
                     if (parsed.RequiredArgs.TryGetValue(ax, out var axVal) || parsed.OptionalArgs.TryGetValue(ax, out axVal))
                     {
-                        parsed.AllArgs["safeAxis"] = ax;
+                        parsed.AllArgs["axis"] = ax;
                         parsed.AllArgs["safePos"] = axVal;
                         break;
                     }
@@ -503,19 +501,27 @@ public static class CommandSyntaxBridge
                 int comma = rawParam.IndexOf(',');
                 if (comma > 0)
                 {
-                    parsed.AllArgs["ctrl"] = rawParam.Substring(0, comma).Trim();
+                    parsed.AllArgs["ui"] = rawParam.Substring(0, comma).Trim();
                     string rhs = rawParam.Substring(comma + 1).Trim();
                     parsed.AllArgs[key == "User@SetControlValue" ? "val" : "text"] = rhs;
                 }
             }
             else if (key is "User@ButtonValue" or "User@ButtonTrigger" or "User@ButtonBlinking" or "User@TextBoxBlinking" or "User@TextRingBlinking")
             {
-                if (parsed.AllArgs.TryGetValue("on", out var onRaw))
+                if (parsed.AllArgs.TryGetValue("logic", out var logicRaw) && !string.IsNullOrWhiteSpace(logicRaw))
                 {
-                    parsed.AllArgs["on"] = ARCOS.Core.Engines.UserPanelEngine.ParseLogicOn(onRaw) ? "true" : "false";
+                    string s = logicRaw.Trim();
+                    if (s.Equals("1", StringComparison.OrdinalIgnoreCase) || s.Equals("ON", StringComparison.OrdinalIgnoreCase) || s.Equals("HIGH", StringComparison.OrdinalIgnoreCase) || s.Equals("true", StringComparison.OrdinalIgnoreCase))
+                        parsed.AllArgs["logic"] = "True";
+                    else if (s.Equals("0", StringComparison.OrdinalIgnoreCase) || s.Equals("OFF", StringComparison.OrdinalIgnoreCase) || s.Equals("LOW", StringComparison.OrdinalIgnoreCase) || s.Equals("false", StringComparison.OrdinalIgnoreCase))
+                        parsed.AllArgs["logic"] = "False";
+                }
+                else
+                {
+                    parsed.AllArgs["logic"] = "True";
                 }
             }
-            else if (key is "User@GetControlValue" or "User@QueryControls")
+            else if (key is "User@GetControlValue" or "User@QueryControls" or "DAQ@AnalogIn")
             {
                 if (parsed.AllArgs.TryGetValue("var", out var uv)) parsed.AllArgs["var"] = uv.TrimStart('$');
             }
@@ -544,11 +550,7 @@ public static class CommandSyntaxBridge
             else if (key == "MultiStation@GetData" || key == "MultiStation@FindFirstOK" || key == "MultiStation@FindEmpty")
             {
                 if (parsed.AllArgs.TryGetValue("var", out var mv)) parsed.AllArgs["var"] = mv.TrimStart('$');
-                if (parsed.AllArgs.TryGetValue("pt", out var mp)) parsed.AllArgs["pt"] = mp.TrimStart('$');
-            }
-            else if (key == "MultiStation@GetPoint")
-            {
-                if (parsed.AllArgs.TryGetValue("pt", out var mp)) parsed.AllArgs["pt"] = mp.TrimStart('$');
+                if (parsed.AllArgs.TryGetValue("index", out var mi)) parsed.AllArgs["index"] = mi.TrimStart('$');
             }
             else if (key is "AIAgent@SuperviseStart" or "AIAgent@ErrorHandle")
             {
@@ -660,7 +662,7 @@ public static class CommandSyntaxBridge
             if (parsed.TryGet(key, out var v) && !string.IsNullOrWhiteSpace(v))
                 items.Add($"{legacyUpper}={v}");
         }
-        AddOpt("port", "DEVICE");
+        AddOpt("device", "DEVICE");
         AddOpt("outStart", "OUTSTART");
         AddOpt("outPorts", "OUTPORTS");
         AddOpt("inStart", "INSTART");
@@ -693,7 +695,7 @@ public static class CommandSyntaxBridge
     {
         var parts = new List<string>();
         if (!string.IsNullOrWhiteSpace(target)) parts.Add(target);
-        if (parsed.TryGet("timeoutSec", out var tSec) && !string.IsNullOrWhiteSpace(tSec))
+        if (parsed.TryGet("timeout", out var tSec) && !string.IsNullOrWhiteSpace(tSec))
         {
             parts.Add(tSec);
         }
@@ -774,10 +776,10 @@ public static class CommandSyntaxBridge
     private static string BuildKeySectionLockLegacy(ParsedCommandParams parsed)
     {
         string lockName = parsed.Get("lock");
-        string timeout = parsed.Get("timeoutSec", "5.0");
+        string timeout = parsed.Get("timeout", "5.0");
         string msg = parsed.Get("msg");
         if (!string.IsNullOrWhiteSpace(msg)) return $"{lockName}, {timeout}, {msg}";
-        if (parsed.TryGet("timeoutSec", out _)) return $"{lockName}, {timeout}";
+        if (parsed.TryGet("timeout", out _)) return $"{lockName}, {timeout}";
         return lockName;
     }
 
@@ -854,7 +856,7 @@ public static class CommandSyntaxBridge
 
     private static string BuildVarSaveLegacy(ParsedCommandParams parsed)
     {
-        var parts = new List<string> { parsed.Get("path") };
+        var parts = new List<string> { parsed.Get("file") };
         parts.AddRange(parsed.GetList("patterns"));
         return string.Join(", ", parts.Where(x => !string.IsNullOrWhiteSpace(x)));
     }
@@ -1028,7 +1030,7 @@ public static class CommandSyntaxBridge
         string coords = parsed.Get("coords").Trim();
         if (coords.StartsWith('(') && coords.EndsWith(')') && coords.Length >= 2)
             coords = coords.Substring(1, coords.Length - 2).Trim();
-        return JoinNonEmpty(", ", parsed.Get("mot"), parsed.Get("axes"), parsed.Get("speed"), coords);
+        return JoinNonEmpty(", ", parsed.Get("mot"), parsed.Get("axis"), parsed.Get("speed"), coords);
     }
 
     private static string BuildMotionGoSafeLegacy(ParsedCommandParams parsed, string tail)
@@ -1041,7 +1043,7 @@ public static class CommandSyntaxBridge
         if (!string.IsNullOrWhiteSpace(speed)) items.Add(speed);
         if (!string.IsNullOrWhiteSpace(pt)) items.Add(pt);
 
-        string safeAxis = parsed.Get("safeAxis", "Z").Trim().ToUpperInvariant();
+        string safeAxis = parsed.Get("axis", "Z").Trim().ToUpperInvariant();
         if (safeAxis != "X" && safeAxis != "Y") safeAxis = "Z";
         if (parsed.TryGet("safePos", out var safePos) && !string.IsNullOrWhiteSpace(safePos))
         {
@@ -1061,7 +1063,7 @@ public static class CommandSyntaxBridge
         var items = new List<string>();
         string dev = parsed.Get(deviceKey);
         if (!string.IsNullOrWhiteSpace(dev)) items.Add(dev);
-        if (parsed.TryGet("timeoutSec", out var tSec) && !string.IsNullOrWhiteSpace(tSec))
+        if (parsed.TryGet("timeout", out var tSec) && !string.IsNullOrWhiteSpace(tSec))
             items.Add($"TimeOut={tSec}");
         if (!string.IsNullOrWhiteSpace(tail)) items.Add(tail);
         return string.Join(", ", items);
@@ -1070,7 +1072,7 @@ public static class CommandSyntaxBridge
     private static string BuildCalibrateManualLegacy(ParsedCommandParams parsed)
     {
         var items = new List<string>();
-        string imaq = parsed.Get("imaq");
+        string imaq = parsed.Get("cam");
         if (!string.IsNullOrWhiteSpace(imaq)) items.Add(imaq);
         if (parsed.TryGet("scale", out var sc) && !string.IsNullOrWhiteSpace(sc)) items.Add($"Scale={sc}");
         if (parsed.TryGet("originX", out var ox) && !string.IsNullOrWhiteSpace(ox)) items.Add($"OriginX={ox}");
@@ -1082,8 +1084,8 @@ public static class CommandSyntaxBridge
     private static string BuildCaptureMatchLegacy(ParsedCommandParams parsed)
     {
         var items = new List<string>();
-        string imaq = parsed.Get("imaq");
-        string tpl = parsed.Get("template");
+        string imaq = parsed.Get("cam");
+        string tpl = parsed.Get("file");
         string scoreVar = parsed.Get("var");
         string pt = parsed.Get("pt");
         string angle = parsed.Get("angle");
@@ -1111,7 +1113,7 @@ public static class CommandSyntaxBridge
         if (!string.IsNullOrWhiteSpace(wav)) items.Add(wav);
         if (parsed.TryGet("type", out var t) && !string.IsNullOrWhiteSpace(t)) items.Add(t);
         if (parsed.TryGet("rate", out var r) && !string.IsNullOrWhiteSpace(r)) items.Add($"Rate={r}");
-        if (parsed.TryGet("count", out var c) && !string.IsNullOrWhiteSpace(c)) items.Add($"Count={c}");
+        if (parsed.TryGet("sec", out var s) && !string.IsNullOrWhiteSpace(s)) items.Add($"Sec={s}");
         if (parsed.TryGet("amp", out var a) && !string.IsNullOrWhiteSpace(a)) items.Add($"Amp={a}");
         if (parsed.TryGet("offset", out var o) && !string.IsNullOrWhiteSpace(o)) items.Add($"Offset={o}");
         return string.Join(", ", items);
@@ -1226,7 +1228,7 @@ public static class CommandSyntaxBridge
         if (!string.IsNullOrWhiteSpace(k)) items.Add(k);
         if (parsed.TryGet("session", out var sess) && !string.IsNullOrWhiteSpace(sess))
             items.Add($"Session={sess}");
-        if (parsed.TryGet("timeoutSec", out var tSec) && !string.IsNullOrWhiteSpace(tSec))
+        if (parsed.TryGet("timeout", out var tSec) && !string.IsNullOrWhiteSpace(tSec))
             items.Add($"TimeOut={tSec}");
         if (!string.IsNullOrWhiteSpace(tail)) items.Add(tail);
         return string.Join(", ", items);
@@ -1238,5 +1240,31 @@ public static class CommandSyntaxBridge
         if (parsed.GetBool("bypass", false) && !prompt.StartsWith('~'))
             prompt = "~" + prompt;
         return JoinNonEmpty(", ", prompt, tail);
+    }
+
+    private static string BuildChkInRangeLegacy(ParsedCommandParams parsed)
+    {
+        var items = new List<string>();
+        string pt = parsed.Get("pt");
+        string rangePt = parsed.Get("rangePt");
+        if (!string.IsNullOrWhiteSpace(pt)) items.Add(pt);
+        if (!string.IsNullOrWhiteSpace(rangePt)) items.Add(rangePt);
+        if (parsed.TryGet("io", out var chkIo) && !string.IsNullOrWhiteSpace(chkIo))
+            items.Add(chkIo);
+        if (parsed.TryGet("axis", out var axis) && !string.IsNullOrWhiteSpace(axis))
+            items.Add($"Axes={axis}");
+        return string.Join(", ", items);
+    }
+
+    private static string BuildMotionHomeLegacy(ParsedCommandParams parsed)
+    {
+        var items = new List<string>();
+        string mot = parsed.Get("mot");
+        if (!string.IsNullOrWhiteSpace(mot)) items.Add(mot);
+        if (parsed.TryGet("axis", out var axis) && !string.IsNullOrWhiteSpace(axis))
+            items.Add($"Axes={axis}");
+        if (parsed.TryGet("mode", out var mode) && !string.IsNullOrWhiteSpace(mode))
+            items.Add($"Mode={mode}");
+        return string.Join(", ", items);
     }
 }

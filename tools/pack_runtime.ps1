@@ -214,6 +214,12 @@ foreach ($pureMod in @("CALL", "POINT&PATH", "USER", "AIAGENT", "MULTISTATION", 
         foreach ($csvi in $pureCsvis) {
             Copy-Item -LiteralPath $csvi.FullName -Destination "$OutputDir\MODULES\$pureMod" -Force
         }
+        # 若 REDIS 模組附帶本機 server/（redis-server.exe、redis.conf 等），一併打包部署
+        $redisServerDir = Join-Path $srcPureDir "server"
+        if ($pureMod -eq "REDIS" -and (Test-Path -LiteralPath $redisServerDir)) {
+            Copy-Item -Path $redisServerDir -Destination "$OutputDir\MODULES\REDIS\server" -Recurse -Force
+            Write-Host "  -> Deployed bundled local Redis server into MODULES\REDIS\server" -ForegroundColor Cyan
+        }
     }
 }
 

@@ -34,6 +34,7 @@ public class MockCameraDriver : IDriver
     public int Height { get; private set; } = 480;
     public double ExposureMs { get; private set; } = 20.0;
     public string? PreloadedImagePath { get; set; }
+    public Dictionary<string, string> ConfigParameters { get; } = new(StringComparer.OrdinalIgnoreCase);
 
     public int FrameCount { get; private set; } = 0;
     public event Action? CameraStateUpdated;
@@ -323,11 +324,10 @@ public class MockCameraDriver : IDriver
             case "Trigger":
                 if (ExposureMs > 0) await Task.Delay((int)ExposureMs, token);
                 var trigMat = GenerateOrLoadImage();
-                string arrayName = string.IsNullOrEmpty(ticket.Parameter) || ticket.Parameter == customFile
-                    ? DeviceName : ticket.Parameter;
                 if (_engines != null)
                 {
-                    _engines.Image.AppendImage(arrayName, trigMat);
+                    // 永遠覆寫相機同名影像槽 $(cam)；若有指定 -> imaqs=FlyBuf，由 Trigger.csvi 同步 Append 至目標陣列
+                    _engines.Image.SetSingleImage(DeviceName, trigMat);
                     _engines.Io.SetPort($"{DeviceName}#OK?", true);
                 }
                 trigMat.Dispose();
@@ -336,9 +336,26 @@ public class MockCameraDriver : IDriver
                 break;
 
             case "Config":
-                var cfgArgs = ArgParaHelper.ParseKeyValueArgs(ticket.Parameter, out _);
-                if (cfgArgs.TryGetValue("Exposure", out var exp) && double.TryParse(exp, out double dExp)) ExposureMs = dExp;
-                if (cfgArgs.TryGetValue("File", out var f)) PreloadedImagePath = f;
+                var cfgArgs = ArgParaHelper.ParseKeyValueArgs(ticket.Parameter, out var cfgPos);
+                if (cfgPos.Count >= 3)
+                {
+                    cfgArgs[cfgPos[1]] = cfgPos[2].Trim().Trim('"');
+                }
+                else if (cfgPos.Count == 2 && !string.Equals(cfgPos[0], DeviceName, StringComparison.OrdinalIgnoreCase))
+                {
+                    cfgArgs[cfgPos[0]] = cfgPos[1].Trim().Trim('"');
+                }
+                foreach (var kv in cfgArgs)
+                {
+                    if (!kv.Key.StartsWith('_') && !kv.Key.StartsWith("Arg", StringComparison.OrdinalIgnoreCase))
+                    {
+                        ConfigParameters[kv.Key] = kv.Value.Trim().Trim('"');
+                    }
+                }
+                if (cfgArgs.TryGetValue("Exposure", out var exp) && double.TryParse(exp, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double dExp)) ExposureMs = dExp;
+                if (cfgArgs.TryGetValue("Width", out var cw) && int.TryParse(cw, out int iW) && iW > 0) Width = iW;
+                if (cfgArgs.TryGetValue("Height", out var ch) && int.TryParse(ch, out int iH) && iH > 0) Height = iH;
+                if (cfgArgs.TryGetValue("File", out var f)) PreloadedImagePath = f.Trim().Trim('"');
                 ticket.SetCompleted();
                 break;
 

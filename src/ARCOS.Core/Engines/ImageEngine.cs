@@ -222,40 +222,108 @@ public class ImageEngine : IDisposable
     public void ResetImaqIndex(string name, int index = 0) => SetIndex(name, index);
 
     /// <summary>
-    /// 批次將符合 pattern 的圖檔載入至影像陣列 (對應 Capture@LoadFile2Imaq)，並各自還原每張圖的 PNG Metadata
+    /// 批次將符合正規表示式（或萬用字元 / 單檔路徑）的圖檔載入至影像陣列 (對應 Capture@LoadFile2Imaq)，並各自還原每張圖的 PNG Metadata
     /// </summary>
     public void LoadFile2Imaq(string arrayName, string filePattern)
     {
-        string dir = Path.GetDirectoryName(filePattern) ?? "";
-        string pattern = Path.GetFileName(filePattern);
-        if (string.IsNullOrEmpty(dir)) dir = AppDomain.CurrentDomain.BaseDirectory;
-        if (string.IsNullOrEmpty(pattern)) pattern = "*.png";
+        if (string.IsNullOrWhiteSpace(arrayName) || string.IsNullOrWhiteSpace(filePattern)) return;
 
-        if (Directory.Exists(dir))
+        string raw = filePattern.Trim().Trim('"');
+        List<string> files = new();
+
+        if (File.Exists(raw))
         {
-            var files = Directory.GetFiles(dir, pattern).OrderBy(f => f).ToList();
-            foreach (var f in files)
+            files.Add(raw);
+        }
+        else if (Directory.Exists(raw))
+        {
+            files = Directory.GetFiles(raw)
+                .Where(f => Regex.IsMatch(Path.GetFileName(f), @"\.(png|jpg|jpeg|bmp|tif|tiff)$", RegexOptions.IgnoreCase))
+                .OrderBy(f => f, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+        else
+        {
+            // 從左至右找最長已存在目錄前綴，避免正規表示式內的 \d、\. 反斜線被誤判為目錄分隔符
+            int bestSep = -1;
+            string resolvedDir = string.Empty;
+            for (int i = 0; i < raw.Length; i++)
             {
-                try
+                if (raw[i] == '/' || raw[i] == '\\')
                 {
-                    var (mat, metaPayload) = DecodeImageFileWithMetadata(f);
-                    using (mat)
+                    string candidate = i == 0 ? raw.Substring(0, 1) : raw.Substring(0, i);
+                    if (candidate.EndsWith(':')) candidate += Path.DirectorySeparatorChar;
+                    if (Directory.Exists(candidate))
                     {
-                        if (!mat.Empty())
+                        bestSep = i;
+                        resolvedDir = candidate;
+                    }
+                    else if (!Path.IsPathRooted(candidate))
+                    {
+                        string baseCand = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, candidate);
+                        if (Directory.Exists(baseCand))
                         {
-                            AppendImage(
-                                arrayName,
-                                mat,
-                                metaPayload?.Metadata,
-                                metaPayload?.Calibration,
-                                metaPayload?.RoiString,
-                                metaPayload?.Overlays,
-                                metaPayload?.ParsedTimestamp);
+                            bestSep = i;
+                            resolvedDir = baseCand;
                         }
                     }
                 }
-                catch { }
             }
+
+            string dir = bestSep >= 0 ? resolvedDir : AppDomain.CurrentDomain.BaseDirectory;
+            if (dir.EndsWith(':')) dir += Path.DirectorySeparatorChar;
+            string pattern = bestSep >= 0 ? raw.Substring(bestSep + 1) : raw;
+            if (string.IsNullOrEmpty(dir)) dir = AppDomain.CurrentDomain.BaseDirectory;
+            if (string.IsNullOrEmpty(pattern)) pattern = @".*\.(png|jpg|jpeg|bmp)$";
+
+            if (Directory.Exists(dir))
+            {
+                bool hasRegexMeta = pattern.Contains('\\') || pattern.Contains('^') || pattern.Contains('$') ||
+                                    pattern.Contains('[') || pattern.Contains('(') || pattern.Contains('+') ||
+                                    pattern.Contains('|') || pattern.Contains('{') || pattern.Contains(".*");
+                if (hasRegexMeta)
+                {
+                    try
+                    {
+                        var rx = new Regex(pattern, RegexOptions.IgnoreCase);
+                        files = Directory.GetFiles(dir)
+                            .Where(f => rx.IsMatch(Path.GetFileName(f)))
+                            .OrderBy(f => f, StringComparer.OrdinalIgnoreCase)
+                            .ToList();
+                    }
+                    catch
+                    {
+                        files = Directory.GetFiles(dir, pattern).OrderBy(f => f, StringComparer.OrdinalIgnoreCase).ToList();
+                    }
+                }
+                else
+                {
+                    files = Directory.GetFiles(dir, pattern).OrderBy(f => f, StringComparer.OrdinalIgnoreCase).ToList();
+                }
+            }
+        }
+
+        foreach (var f in files)
+        {
+            try
+            {
+                var (mat, metaPayload) = DecodeImageFileWithMetadata(f);
+                using (mat)
+                {
+                    if (!mat.Empty())
+                    {
+                        AppendImage(
+                            arrayName,
+                            mat,
+                            metaPayload?.Metadata,
+                            metaPayload?.Calibration,
+                            metaPayload?.RoiString,
+                            metaPayload?.Overlays,
+                            metaPayload?.ParsedTimestamp);
+                    }
+                }
+            }
+            catch { }
         }
     }
 

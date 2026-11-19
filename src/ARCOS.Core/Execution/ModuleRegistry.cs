@@ -112,6 +112,22 @@ public sealed class ModuleRegistry
             }
         }
 
+        // 若指令名為舊版別名（如 Python@ResetSession -> Python@Reset、MultiStation@SetStationON/OFF -> SetOn、SetStationOK/NG -> SetOK），
+        // 透過 StandardCommandSchemas 透明解析至規範指令的 .csvi 檔
+        var aliasSchema = ARCOS.Core.Guidance.StandardCommandSchemas.Get($"{moduleName.Trim()}@{actionName.Trim()}");
+        if (aliasSchema != null)
+        {
+            int atIdx = aliasSchema.CommandKey.IndexOf('@');
+            if (atIdx > 0 && atIdx < aliasSchema.CommandKey.Length - 1)
+            {
+                string canonicalAction = aliasSchema.CommandKey.Substring(atIdx + 1).Trim();
+                if (!string.Equals(canonicalAction, actionName.Trim(), StringComparison.OrdinalIgnoreCase))
+                {
+                    return ResolveCommandCsviPath(moduleName, canonicalAction, customRoot);
+                }
+            }
+        }
+
         return null;
     }
 
@@ -350,6 +366,11 @@ public sealed class ModuleRegistry
     {
         if (string.IsNullOrWhiteSpace(moduleName)) return false;
         string mod = moduleName.Trim();
+        if (mod.Equals("Redis", StringComparison.OrdinalIgnoreCase))
+        {
+            string? redisDir = FindModuleDirectory("Redis", modulesRootPath) ?? FindModuleDirectory("REDIS", modulesRootPath);
+            ARCOS.Core.Engines.RedisEngine.EnsureLocalServerStarted(redisDir);
+        }
         if (HasModule(mod)) return true;
 
         bool isLegacyUnmigrated = false;

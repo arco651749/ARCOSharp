@@ -472,8 +472,8 @@ Point&Path@ClearPoint::P2;
         Assert.Equal(70.0, centerPallet[0].X, 3);
         Assert.Equal(50.0, centerPallet[0].Y, 3);
 
-        // ChkInRangeXY -> InRangeFlag = 1
-        Assert.Equal("1", engines.Variable.Get("InRangeFlag"));
+        // ChkInRangeXY -> InRangeFlag IO = true
+        Assert.True(engines.Io.GetPort("InRangeFlag"));
 
         // ClearPoint -> P2 cleared
         Assert.Empty(engines.Point.GetPointArray("P2"));

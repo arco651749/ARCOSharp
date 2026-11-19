@@ -47,7 +47,10 @@ public class MockMotionDriver : IDriver
 
     public bool IsBusy { get; private set; } = false;
     public bool IsHomed { get; private set; } = false;
+    public bool IsServoOn { get; private set; } = false;
     public bool IsAlarm { get; set; } = false;
+    public string LastHomeAxes { get; private set; } = string.Empty;
+    public string LastHomeMode { get; private set; } = string.Empty;
 
     /// <summary>
     /// 控制器本身的原生錯誤碼 (0 代表正常，非 0 為控制器原生 Error Code)
@@ -289,15 +292,52 @@ public class MockMotionDriver : IDriver
         {
             case "Home":
                 SetBusy(true);
-                await Task.Delay(60, token);
-                CurrentPos.X = 0; CurrentPos.Y = 0; CurrentPos.Z = 0;
-                CurrentPos.U = 0; CurrentPos.V = 0; CurrentPos.W = 0;
-                SyncJointFromCartesian();
-                IsHomed = true;
-                IsAlarm = false;
-                ControllerErrorCode = 0;
-                SetBusy(false);
-                ticket.SetCompleted();
+                try
+                {
+                    // 1. 盡力回復至可用狀態：先清除控制器錯誤/異警並啟用 Servo ON（不在 Home 當下跳錯）
+                    IsAlarm = false;
+                    ControllerErrorCode = 0;
+                    IsServoOn = true;
+                    _engines?.Io.SetPort($"{DeviceName}#Alarm?", false);
+                    _engines?.Io.SetPort($"{DeviceName}#ServoOn?", true);
+                    _engines?.Variable.Set("Motion#ErrorCode", "0", "Global");
+
+                    // 2. 解析選填 axes（Robot/留空 = 全軸）與 mode（ResetCounter / Positive / Negative）
+                    ParseHomeArgs(ticket.Parameter, out string homeAxes, out string homeMode);
+                    LastHomeAxes = homeAxes;
+                    LastHomeMode = homeMode;
+
+                    bool isResetCounter = homeMode.Equals("ResetCounter", StringComparison.OrdinalIgnoreCase) ||
+                                          homeMode.Equals("CounterOnly", StringComparison.OrdinalIgnoreCase);
+                    if (!isResetCounter)
+                    {
+                        await Task.Delay(60, token);
+                    }
+
+                    if (string.IsNullOrWhiteSpace(homeAxes))
+                    {
+                        CurrentPos.X = 0; CurrentPos.Y = 0; CurrentPos.Z = 0;
+                        CurrentPos.U = 0; CurrentPos.V = 0; CurrentPos.W = 0;
+                    }
+                    else
+                    {
+                        string ax = homeAxes.ToUpperInvariant();
+                        if (ax.Contains('X')) CurrentPos.X = 0;
+                        if (ax.Contains('Y')) CurrentPos.Y = 0;
+                        if (ax.Contains('Z')) CurrentPos.Z = 0;
+                        if (ax.Contains('U')) CurrentPos.U = 0;
+                        if (ax.Contains('V')) CurrentPos.V = 0;
+                        if (ax.Contains('W')) CurrentPos.W = 0;
+                    }
+
+                    SyncJointFromCartesian();
+                    IsHomed = true;
+                }
+                finally
+                {
+                    SetBusy(false);
+                    ticket.SetCompleted();
+                }
                 break;
 
             case "Go":
@@ -594,19 +634,19 @@ public class MockMotionDriver : IDriver
         var kv = ArgParaHelper.ParseKeyValueArgs(rawParameter, out var posArgs);
         foreach (var pair in kv)
         {
-            if (!pair.Key.StartsWith('_'))
+            if (!pair.Key.StartsWith('_') && !pair.Key.StartsWith("Arg", StringComparison.OrdinalIgnoreCase))
             {
-                ConfigParameters[pair.Key] = pair.Value;
+                ConfigParameters[pair.Key] = pair.Value.Trim().Trim('"');
             }
         }
 
         if (posArgs.Count >= 3)
         {
-            ConfigParameters[posArgs[1]] = posArgs[2];
+            ConfigParameters[posArgs[1]] = posArgs[2].Trim().Trim('"');
         }
         else if (posArgs.Count == 2 && !string.Equals(posArgs[0], DeviceName, StringComparison.OrdinalIgnoreCase))
         {
-            ConfigParameters[posArgs[0]] = posArgs[1];
+            ConfigParameters[posArgs[0]] = posArgs[1].Trim().Trim('"');
         }
 
         ticket.SetCompleted(DriverResponse.Ok());
@@ -998,6 +1038,65 @@ public class MockMotionDriver : IDriver
             pt.H["Coord"] = "Joint";
         }
         return pt;
+    }
+
+    private static void ParseHomeArgs(string? param, out string axes, out string mode)
+    {
+        axes = string.Empty;
+        mode = string.Empty;
+        if (string.IsNullOrWhiteSpace(param)) return;
+
+        var kv = ArgParaHelper.ParseKeyValueArgs(param, out var posArgs);
+        if (kv.TryGetValue("Axes", out var kvAxes) || kv.TryGetValue("Axis", out kvAxes))
+            axes = kvAxes.Trim();
+        if (kv.TryGetValue("Mode", out var kvMode))
+            mode = kvMode.Trim();
+
+        // 相容舊版位置參數：$mot, $axes, $mode（若省略 axes 直接寫模式關鍵字亦自動識別）
+        for (int i = 1; i < posArgs.Count; i++)
+        {
+            string tok = posArgs[i].Trim();
+            if (string.IsNullOrEmpty(tok)) continue;
+            if (IsKnownHomeMode(tok))
+            {
+                if (string.IsNullOrEmpty(mode)) mode = NormalizeHomeMode(tok);
+            }
+            else if (string.IsNullOrEmpty(axes))
+            {
+                axes = tok;
+            }
+            else if (string.IsNullOrEmpty(mode))
+            {
+                mode = NormalizeHomeMode(tok);
+            }
+        }
+        if (!string.IsNullOrEmpty(mode)) mode = NormalizeHomeMode(mode);
+    }
+
+    private static bool IsKnownHomeMode(string token) =>
+        token.Equals("ResetCounter", StringComparison.OrdinalIgnoreCase) ||
+        token.Equals("CounterOnly", StringComparison.OrdinalIgnoreCase) ||
+        token.Equals("Positive", StringComparison.OrdinalIgnoreCase) ||
+        token.Equals("Pos", StringComparison.OrdinalIgnoreCase) ||
+        token == "+" ||
+        token.Equals("Negative", StringComparison.OrdinalIgnoreCase) ||
+        token.Equals("Neg", StringComparison.OrdinalIgnoreCase) ||
+        token == "-";
+
+    private static string NormalizeHomeMode(string token)
+    {
+        if (token.Equals("CounterOnly", StringComparison.OrdinalIgnoreCase) ||
+            token.Equals("ResetCounter", StringComparison.OrdinalIgnoreCase))
+            return "ResetCounter";
+        if (token.Equals("Pos", StringComparison.OrdinalIgnoreCase) ||
+            token.Equals("Positive", StringComparison.OrdinalIgnoreCase) ||
+            token == "+")
+            return "Positive";
+        if (token.Equals("Neg", StringComparison.OrdinalIgnoreCase) ||
+            token.Equals("Negative", StringComparison.OrdinalIgnoreCase) ||
+            token == "-")
+            return "Negative";
+        return token;
     }
 
     public void Shutdown()

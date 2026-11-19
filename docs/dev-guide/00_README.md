@@ -30,7 +30,7 @@
 | **12** | [統一模組中心、內嵌 CSVI Studio 與 MCP 規格書 (Unified Modules Info Spec)](./12_UNIFIED_MODULES_INFO_SPEC.md) | 底部 6 大分頁、統一模組中心、CSVI Studio 內嵌 IDE、動態 MCP Server 與零依賴 Roslyn 編譯架構 |
 | **13** | [**【獨立完整聖經】主程式、Basic Engines 與模組/指令 CSVI 開發總手冊**](./13_COMPLETE_MODULE_AND_CSVI_DEV_GUIDE.md) | **【後續開發首選單檔】** 涵蓋主程式架構、`BasicEngines` 7 大子引擎完整函式用法、模組建立流程、`Modules Info` 用的 `<Module>.csvi` 格式與單一指令 `<Action>.csvi` 格式範本 |
 | **14** | [CSVI Studio AI 審查與動態規則引擎指南 (AI Lint & Rule Engine)](./14_CSVI_AI_LINT_AND_RULE_ENGINE.md) | 可擴充外部規則 (`RULES/CsviLintRules.json`)、本機 Roslyn AST 快篩、多端點 LLM 配置 (`AgyCli`/`ClaudeCli`/`CodexCli`/`Ollama`/HTTP)、Warning-Only 紀律與 MCP 讀取整合 |
-| **15** | [**ARCOS 指令語法 v2.0 與全系統參數 Schema 規範**](../COMMAND_SYNTAX_AND_SCHEMA_SPEC.md) | 四段式 v2.0 語法（`::` / `{}` / `->` / `[[]]`）、`CommandSchema` / `CommandParamParser` / `CommandSyntaxBridge`、Sequencer L1/L2/L3 投影與全 14 模組 251 條指令契約表 |
+| **15** | [**ARCOS 指令語法 v2.0 與全系統參數 Schema 規範**](../COMMAND_SYNTAX_AND_SCHEMA_SPEC.md) | 四段式 v2.0 語法（`::` / `{}` / `->` / `[[]]`）、`CommandSchema` / `CommandParamParser` / `CommandSyntaxBridge`、Sequencer L1/L2/L3 投影與全 14 模組 246 條指令契約表 |
 
 ---
 

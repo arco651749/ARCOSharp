@@ -33,36 +33,33 @@ ARCOS 具備 13 個主執行緒（Thread 0~12）與多個動態 SubThread。為�
    - 跨執行緒若需共用龐大模型（如 YOLO AI 權重或共用常數快取），可在各指令中帶入 `Session=VisionAI`，此時各執行緒將訪問同一個 Python 作用域。
 3. **Session 記憶體常駐 (Session Persistence)**：
    - Session 作用域在 SubThread 結束後**不會自動銷毀或回收**，確保主流程可在子執行緒結束後讀取後續結果，並在後續週期重複利用已載入之模型。
-4. **手動重置 Session (`ResetSession`)**：
-   - 若需重設某個 Session 之狀態或釋放其變數，可調用 `Python@ResetSession::[SessionName];`。
+4. **手動重置 Session (`Python@Reset`)**：
+   - 省略 `{session=...}`：`Python@Reset` 重置當前預設 Session；
+   - 指定名稱：`Python@Reset {session=VisionS1}` 僅重置該 Session；
+   - 全部重置：`Python@Reset {session=ALL}`（或 `{session=*}`）一次清空所有 Session（底層相容舊名 `Python@ResetSession`）。
 
 ---
 
 ## 🛠️ 基本語法規範
 1. **指令前綴**：所有指令均以 `Python@` 開頭。
-2. **參數分隔**：
-   - 指令名稱與參數間使用 `::` 分隔。
-   - 多個參數間使用逗號 `,` 隔開。
-   - 具名參數使用 `Key=Value`（如 `Session=Sess1`, `PythonName=py_var`, `ARCOSName=arcos_var`）。
-3. **指令結束**：每行指令結尾加上分號 `;`。
+2. **參數分隔**：採 ARCOS v2.0 四段式語法（`::` 必填、`{}` 選填、`->` 輸出、`[[Label]]` 錯誤攔截），同時向下相容舊式位置參數與分號結尾。
 
 ---
 
-## 📜 常用指令對照表
+## 📜 全 10 條指令對照表 (v2.0)
 
-| 指令 | 參數語法 | 說明 |
+| 指令 | v2.0 標準寫法 | 說明 |
 | :--- | :--- | :--- |
-| **Reset** | （無參數） | 重置全模組狀態，清空所有執行緒 Session 字典池。在重複執行 `IncludeModule` 時自動調用。 |
-| **Script** | `$script(;)`<br>`Session=$session, $script(;)` | 執行 Python 腳本。支援單行或多行腳本（各行以換行符號 `\n` 分隔，最後以 `;` 結尾）。執行於指定或隱式 Session。 |
-| **File** | `$file.py(, Session=$session);` | 執行 Python 腳本檔。若為相對路徑，自動以 `MODULES/PYTHON/` 為基準目錄。 |
-| **SetVariable** | `$var(, $val)(, Session=$session)(, PythonName=$pyvar);` | 將 ARCOS 變數或數值寫入 Python 變數。若無 `$val` 則自動讀取 ARCOS VariableEngine；自動適應數值、JSON、字串型別。 |
-| **GetVariable** | `$pyvar(, Session=$session)(, ARCOSName=$var);` | 將 Python 變數值（以 `str(obj)` 轉換）取回並存入 ARCOS 變數。 |
-| **SetPoint** | `$point(, Session=$session)(, PythonName=$pyvar);` | 將 ARCOS Point 點位（X, Y, Z, U, V, W）寫入 Python，格式為 1D `numpy.ndarray` (`dtype=np.float64`)。 |
-| **GetPoint** | `$pyvar(, Session=$session)(, ARCOSName=$point);` | 將 Python 之 NumPy 點位陣列或可迭代座標取回存入 ARCOS Point 點位。 |
-| **SetCapture** | `$capture(, Session=$session)(, PythonName=$pyvar);` | 將 ARCOS `ImageEngine` 影像 (`OpenCvSharp.Mat`) 橋接至 Python，轉換為 OpenCV `cv2` 影像 (`numpy.ndarray`)。 |
-| **GetCapture** | `$pyvar(, Session=$session)(, ARCOSName=$capture);` | 將 Python 運算後之 OpenCV `cv2` 影像存回 ARCOS `ImageEngine`，可於前面板即時顯示。 |
-| **SetCaptureFile** | `$capture, $file.png, $pyvar(, Session=$session);` | 將 ARCOS `$capture` 影像儲存至 `$file.png`（位於 `MODULES/PYTHON/`），並以 `cv2.imread` 載入至 Python 變數 `$pyvar`。 |
-| **ResetSession** | `($session);` | 清空指定 Session 之 Python 字典（若未填參數則重設當前執行緒之 Session）。 |
+| **Init** | `Python@Init {session=S1}` | 初始化 Python 執行環境並於存在時自動載入 `init.py`。 |
+| **Reset** | `Python@Reset` / `{session=S1}` / `{session=ALL}` | 重置 Python Session 狀態（留空=預設 Session、指定名稱=該 Session、`ALL`/`*`=全部重置）。 |
+| **Script** `[err]` | `Python@Script :: code="res = x * 2" {session=S1}` | 執行內嵌單行或多行 Python 程式碼。 |
+| **File** | `Python@File :: file=calc.py {session=VisionS1}` | 執行外部 `.py` 腳本檔（相對路徑以 `MODULES/PYTHON/` 為基準）。 |
+| **SetVariable** | `Python@SetVariable :: var=Count {val=10, py=py_cnt, session=S1}` | 將 ARCOS 變數或常數寫入 Python Session。 |
+| **GetVariable** | `Python@GetVariable :: py=res {session=S1} -> var=Result` | 自 Python Session 讀取變數並回寫至 ARCOS `VariableEngine`。 |
+| **SetPoint** | `Python@SetPoint :: pt=PickPos {py=p_pick, session=S1}` | 將 ARCOS 點位（X, Y, Z, U, V, W）送入 Python（`numpy.ndarray`）。 |
+| **GetPoint** | `Python@GetPoint :: py=p_out {session=S1} -> pt=PlacePos` | 自 Python 讀取點位並回寫至 ARCOS `PointEngine`。 |
+| **SetCapture** | `Python@SetCapture :: cam=Cam0 {py=img0, session=S1}` | 將 ARCOS `ImageEngine` 影像 (`OpenCvSharp.Mat`) 直接透過記憶體橋接至 Python (`numpy.ndarray`)。 |
+| **GetCapture** | `Python@GetCapture :: py=out_img {session=S1} -> cam=CamOut` | 自 Python 取得處理後影像並顯式回寫至 ARCOS `ImageEngine` 指定 `cam` 槽位。 |
 
 ---
 

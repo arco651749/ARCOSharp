@@ -328,14 +328,21 @@ public static class CommandParamParser
                     break;
                 }
 
-                // 偵測頂層 '{...}' 選填覆寫區段（非緊接 '=' 後方之值）
-                if (c == '{' && !EndsWithAssignmentOperator(mainSb))
+                // 偵測頂層 '{...}'：若緊接 '=' 後方則為 JSON/物件值，否則為選填覆寫區段
+                if (c == '{')
                 {
                     int closeIdx = FindMatchingBrace(input, i);
                     if (closeIdx < 0)
                     {
-                        syntaxError = "E005: Unclosed '{' in optional override block.";
+                        syntaxError = "E005: Unclosed '{' in command parameters.";
                         return false;
+                    }
+
+                    if (EndsWithAssignmentOperator(mainSb) || LooksLikeJsonObject(input, i, closeIdx))
+                    {
+                        mainSb.Append(input, i, closeIdx - i + 1);
+                        i = closeIdx;
+                        continue;
                     }
 
                     string inner = input.Substring(i + 1, closeIdx - i - 1).Trim();
@@ -367,6 +374,24 @@ public static class CommandParamParser
             return ch == '=';
         }
         return false;
+    }
+
+    private static bool LooksLikeJsonObject(string input, int openIdx, int closeIdx)
+    {
+        int p = openIdx + 1;
+        while (p < closeIdx && char.IsWhiteSpace(input[p])) p++;
+        if (p >= closeIdx) return true; // 空物件 {}
+        if (input[p] != '"') return false;
+        // 跳過 JSON 鍵字串，確認緊接 ':'
+        p++;
+        while (p < closeIdx)
+        {
+            if (input[p] == '\\' && p + 1 < closeIdx) { p += 2; continue; }
+            if (input[p] == '"') { p++; break; }
+            p++;
+        }
+        while (p < closeIdx && char.IsWhiteSpace(input[p])) p++;
+        return p < closeIdx && input[p] == ':';
     }
 
     private static int FindMatchingBrace(string input, int openIdx)
@@ -825,6 +850,12 @@ public static class CommandFormatter
                       (spec.ValueType == ParamValueType.LogicExpr ||
                        spec.Name.Equals("expr", StringComparison.OrdinalIgnoreCase));
 
+        // 平衡的單行 '{...}' 物件/JSON 值（緊接 key= 後方剖析器會完整保留，免加外層雙引號與 \" 跳脫）
+        if (IsBalancedSingleLineBraceObject(value))
+        {
+            return value;
+        }
+
         bool needsQuote = false;
         if (char.IsWhiteSpace(value[0]) || char.IsWhiteSpace(value[^1]))
         {
@@ -836,18 +867,43 @@ public static class CommandFormatter
         }
         else
         {
+            int parenDepth = 0;
             foreach (char c in value)
             {
-                if (c == ',' || c == '{' || c == '}' || c == '"' || c == '\n' || c == '\r' || c == '\t')
+                if (c == '{' || c == '}' || c == '"' || c == '\n' || c == '\r' || c == '\t')
                 {
                     needsQuote = true;
                     break;
                 }
-                if (!isExpr && (c == '=' || c == ' '))
+                if (c == '(')
+                {
+                    parenDepth++;
+                    continue;
+                }
+                if (c == ')')
+                {
+                    if (parenDepth == 0)
+                    {
+                        needsQuote = true;
+                        break;
+                    }
+                    parenDepth--;
+                    continue;
+                }
+                if (c == ',' && parenDepth == 0)
                 {
                     needsQuote = true;
                     break;
                 }
+                if (!isExpr && parenDepth == 0 && (c == '=' || c == ' '))
+                {
+                    needsQuote = true;
+                    break;
+                }
+            }
+            if (parenDepth != 0)
+            {
+                needsQuote = true;
             }
         }
 
@@ -869,6 +925,33 @@ public static class CommandFormatter
         }
         sb.Append('"');
         return sb.ToString();
+    }
+
+    private static bool IsBalancedSingleLineBraceObject(string value)
+    {
+        if (value.Length < 2 || value[0] != '{' || value[^1] != '}') return false;
+        bool inQuote = false;
+        int depth = 0;
+        for (int i = 0; i < value.Length; i++)
+        {
+            char c = value[i];
+            if (c == '\n' || c == '\r' || c == '\t') return false;
+            if (inQuote)
+            {
+                if (c == '\\' && i + 1 < value.Length) { i++; continue; }
+                if (c == '"') inQuote = false;
+                continue;
+            }
+            if (c == '"') { inQuote = true; continue; }
+            if (c == '{') depth++;
+            else if (c == '}')
+            {
+                depth--;
+                if (depth < 0) return false;
+                if (depth == 0 && i != value.Length - 1) return false;
+            }
+        }
+        return !inQuote && depth == 0;
     }
 
     /// <summary>
@@ -1033,19 +1116,19 @@ public static class CommandDisplayProjector
             foreach (var spec in schema.GetRequiredInputs())
             {
                 if (parsed.AllArgs.TryGetValue(spec.Name, out var v))
-                    reqAll.Add($"{spec.Name}={CommandFormatter.FormatValue(v)}");
+                    reqAll.Add($"{spec.Name}={FormatDisplayValue(v, spec, multiLineLayout)}");
             }
             foreach (var spec in schema.GetOptionalInputs())
             {
                 if (parsed.AllArgs.TryGetValue(spec.Name, out var v))
-                    optAll.Add($"{spec.Name}={CommandFormatter.FormatValue(v)}");
+                    optAll.Add($"{spec.Name}={FormatDisplayValue(v, spec, multiLineLayout)}");
                 else if (spec.DefaultValue != null)
-                    optAll.Add($"{spec.Name}={CommandFormatter.FormatValue(spec.DefaultValue)}");
+                    optAll.Add($"{spec.Name}={FormatDisplayValue(spec.DefaultValue, spec, multiLineLayout)}");
             }
             foreach (var spec in schema.GetOutputs())
             {
                 if (parsed.AllArgs.TryGetValue(spec.Name, out var v) && !string.IsNullOrWhiteSpace(v))
-                    outAll.Add($"{spec.Name}={CommandFormatter.FormatValue(v)}");
+                    outAll.Add($"{spec.Name}={FormatDisplayValue(v, spec, multiLineLayout)}");
             }
 
             return CommandFormatter.AssembleSections(reqAll, optAll, outAll, parsed.ErrorLabel, parsed.ErrorMessage, multiLineLayout, effects);
@@ -1059,9 +1142,7 @@ public static class CommandDisplayProjector
         {
             if (parsed.AllArgs.TryGetValue(spec.Name, out var val))
             {
-                string displayVal = level == CommandDisplayLevel.Compact
-                    ? FoldMultiLineValue(val, spec)
-                    : CommandFormatter.FormatValue(val, spec);
+                string displayVal = FormatDisplayValue(val, spec, multiLineLayout);
                 reqPairs.Add($"{spec.Name}={displayVal}");
             }
         }
@@ -1083,9 +1164,7 @@ public static class CommandDisplayProjector
             {
                 // 防隱藏安全鐵律：Critical 非預設參數於 L1/L2 均強制展開並加上 ⚠ 標示
                 string keyLabel = isCritical ? $"⚠{spec.Name}" : spec.Name;
-                string displayVal = level == CommandDisplayLevel.Compact
-                    ? FoldMultiLineValue(val, spec)
-                    : CommandFormatter.FormatValue(val, spec);
+                string displayVal = FormatDisplayValue(val, spec, multiLineLayout);
                 optPairs.Add($"{keyLabel}={displayVal}");
             }
         }
@@ -1099,7 +1178,7 @@ public static class CommandDisplayProjector
         {
             if (parsed.AllArgs.TryGetValue(spec.Name, out var val) && !string.IsNullOrWhiteSpace(val))
             {
-                outPairs.Add($"{spec.Name}={CommandFormatter.FormatValue(val, spec)}");
+                outPairs.Add($"{spec.Name}={FormatDisplayValue(val, spec, multiLineLayout)}");
             }
         }
 
@@ -1108,17 +1187,29 @@ public static class CommandDisplayProjector
         return CommandFormatter.AssembleSections(reqPairs, optPairs, outPairs, parsed.ErrorLabel, parsed.ErrorMessage, multiLineLayout, inlayHint);
     }
 
-    private static string FoldMultiLineValue(string value, ParamSpec? spec = null)
+    private static string FormatDisplayValue(string value, ParamSpec? spec, bool multiLineLayout)
     {
-        if (!value.Contains('\n'))
+        if (value.Contains('\n') || value.Contains('\r'))
         {
-            return CommandFormatter.FormatValue(value, spec);
+            var lines = value.Replace("\r\n", "\n").Replace('\r', '\n').Split('\n');
+            if (multiLineLayout)
+            {
+                // 多行檢視 / Tooltip：直接展開為真正換行且無 \n 與 \" 噪音的縮排程式碼區塊
+                var sb = new StringBuilder();
+                foreach (var ln in lines)
+                {
+                    sb.Append("\n  │ ").Append(ln);
+                }
+                return sb.ToString();
+            }
+
+            // 單行檢視：折疊為首行摘要 + 總行數徽章，避免橫向爆表
+            string first = lines[0].Trim();
+            if (first.Length > 40) first = first.Substring(0, 40) + "…";
+            return $"⟦{first} … ({lines.Length} lines)⟧";
         }
 
-        var lines = value.Replace("\r\n", "\n").Split('\n');
-        string first = lines[0];
-        if (first.Length > 36) first = first.Substring(0, 36) + "…";
-        return $"\"{first} … (+{lines.Length - 1} lines)\"";
+        return CommandFormatter.FormatValue(value, spec);
     }
 
     private static string BuildInlayEffects(CommandSchema schema, ParsedCommandParams parsed)

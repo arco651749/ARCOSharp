@@ -1,3 +1,5 @@
+using System.Diagnostics;
+using System.Globalization;
 using System.Threading.Channels;
 using Avalonia;
 using Avalonia.Controls;
@@ -19,16 +21,17 @@ public enum MockWaveType
 
 /// <summary>
 /// 模擬資料採集驅動 (MockDaqDriver)
-/// 對齊資料擷取與波形分析規範，內部支援：
-/// 1. 循環三角波波型：數值從 0 數到 1023 後自動歸 0 循環 (最大值 1023)
-/// 2. AI 類：AnalogIn (單點讀取)、AnalogInWaveForm / Sample (連續採樣回寫 DaqEngine)
-/// 3. AO 類：AnalogOut (單點類比輸出)、AnalogOutWaveForm (自 DaqEngine 取波形串流輸出)
-/// 4. 控制類：Start, Stop, Config, Close
+/// 內部維護時間長度 × 取樣率 (BufferSeconds * SampleRate) 之環形緩衝區 (Circular Ring Buffer)：
+/// 1. AddDAQ：依 Rate (Hz) 與 Sec (秒) 預先配置環形緩衝區
+/// 2. Start / Stop：背景持續將硬體/模擬樣本寫入內部環形緩衝區
+/// 3. AnalogIn：自環形緩衝區取得最新一筆單點數值
+/// 4. AnalogInWaveForm：自環形緩衝區擷取最近指定秒數 (sec) 之連續波形
 /// </summary>
 public class MockDaqDriver : IDriver
 {
     private BasicEngines? _engines;
     private readonly Channel<DriverTicket> _ticketQueue = Channel.CreateUnbounded<DriverTicket>();
+    private readonly object _ringLock = new();
     private CancellationTokenSource? _cts;
     private Task? _workerTask;
 
@@ -37,10 +40,18 @@ public class MockDaqDriver : IDriver
     public string DriverType => "MockDAQ";
 
     public double SampleRate { get; private set; } = 1000.0; // 1kHz
-    public int SampleCount { get; private set; } = 500;
+    public double BufferSeconds { get; private set; } = 1.0; // 1.0 秒環形緩衝
+    public int RingCapacity => Math.Max(1, (int)Math.Round(SampleRate * BufferSeconds));
+    public int SampleCount => RingCapacity;
     public MockWaveType WaveType { get; private set; } = MockWaveType.TriangleCounter;
 
-    private int _counter = 0;
+    private double[] _ringBuffer = new double[1000];
+    private int _ringWriteIndex = 0;
+    private int _ringCount = 0;
+    private long _totalSampleIndex = 0;
+    private long _lastAcquireTimestamp = 0;
+    private double _fractionalSamples = 0.0;
+
     public bool IsSampling { get; private set; } = false;
     public double InstantInputVal { get; private set; } = 0.0;
     public double InstantValue => InstantInputVal;
@@ -54,23 +65,49 @@ public class MockDaqDriver : IDriver
         DeviceName = deviceName;
         _engines = engines;
 
-        // 解析參數：Rate=1000,Count=500,Wave=Triangle
+        // 解析參數：Rate=1000,Sec=5,Wave=Triangle（向下相容舊式 Count=...）
         var args = ArgParaHelper.ParseKeyValueArgs(param, out _);
-        if (args.TryGetValue("Rate", out var rateStr) && double.TryParse(rateStr, out double r)) SampleRate = r;
-        if (args.TryGetValue("Count", out var cntStr) && int.TryParse(cntStr, out int c)) SampleCount = c;
-        if (args.TryGetValue("Wave", out var waveStr))
+        if (args.TryGetValue("Rate", out var rateStr) && double.TryParse(rateStr, NumberStyles.Any, CultureInfo.InvariantCulture, out double r) && r > 0)
+            SampleRate = r;
+
+        if ((args.TryGetValue("Sec", out var secStr) || args.TryGetValue("Duration", out secStr) || args.TryGetValue("BufferSec", out secStr)) &&
+            double.TryParse(secStr, NumberStyles.Any, CultureInfo.InvariantCulture, out double sec) && sec > 0)
         {
-            if (waveStr.Contains("Sine", StringComparison.OrdinalIgnoreCase)) WaveType = MockWaveType.Sine;
-            else if (waveStr.Contains("Square", StringComparison.OrdinalIgnoreCase)) WaveType = MockWaveType.Square;
-            else if (waveStr.Contains("Press", StringComparison.OrdinalIgnoreCase)) WaveType = MockWaveType.PressCurve;
-            else WaveType = MockWaveType.TriangleCounter;
+            BufferSeconds = sec;
+        }
+        else if (args.TryGetValue("Count", out var cntStr) && int.TryParse(cntStr, out int c) && c > 0)
+        {
+            BufferSeconds = c / SampleRate;
         }
 
-        // 初始化時產生第一筆循環三角波樣本
-        GenerateAndPushWaveform();
+        if (args.TryGetValue("Wave", out var waveStr))
+        {
+            ApplyWaveType(waveStr);
+        }
+
+        AllocateRingBuffer();
 
         _cts = new CancellationTokenSource();
         _workerTask = Task.Run(() => WorkerLoop(_cts.Token));
+    }
+
+    private void ApplyWaveType(string waveStr)
+    {
+        if (waveStr.Contains("Sine", StringComparison.OrdinalIgnoreCase)) WaveType = MockWaveType.Sine;
+        else if (waveStr.Contains("Square", StringComparison.OrdinalIgnoreCase)) WaveType = MockWaveType.Square;
+        else if (waveStr.Contains("Press", StringComparison.OrdinalIgnoreCase)) WaveType = MockWaveType.PressCurve;
+        else WaveType = MockWaveType.TriangleCounter;
+    }
+
+    private void AllocateRingBuffer()
+    {
+        lock (_ringLock)
+        {
+            _ringBuffer = new double[RingCapacity];
+            _ringWriteIndex = 0;
+            _ringCount = 0;
+            _fractionalSamples = 0.0;
+        }
     }
 
     public void PostTicket(DriverTicket ticket)
@@ -241,11 +278,11 @@ public class MockDaqDriver : IDriver
                     ExecuteCase(ticket);
                 }
 
-                // 2. 若處於連續採樣狀態，定時產生波形數據並寫回 DaqEngine
+                // 2. 若處於連續採樣狀態，持續將樣本寫入驅動內部環形緩衝區
                 if (IsSampling)
                 {
-                    GenerateAndPushWaveform();
-                    await Task.Delay((int)(SampleCount / SampleRate * 1000), token);
+                    AcquireElapsedToRingBuffer();
+                    await Task.Delay(10, token);
                 }
                 else
                 {
@@ -273,41 +310,56 @@ public class MockDaqDriver : IDriver
         {
             case "Sample":
             case "AnalogInWaveForm":
-                GenerateAndPushWaveform();
-                ticket.SetCompleted();
+            {
+                var slice = ExtractRecentWaveform(ticket.Parameter);
+                ticket.SetCompleted(DriverResponse.Ok(slice));
                 break;
+            }
 
             case "Start":
                 IsSampling = true;
+                _lastAcquireTimestamp = Stopwatch.GetTimestamp();
+                _fractionalSamples = 0.0;
+                WriteSamplesToRing(1);
                 ticket.SetCompleted();
                 break;
 
             case "Stop":
-                IsSampling = false;
+                if (IsSampling)
+                {
+                    AcquireElapsedToRingBuffer();
+                    IsSampling = false;
+                }
                 ticket.SetCompleted();
                 break;
 
             case "AnalogIn":
-                // 單點讀取：依照 0..1023 計數遞增回傳
-                InstantInputVal = _counter;
-                _counter = (_counter + 1) % 1024;
-                ticket.SetCompleted(DriverResponse.Ok(InstantInputVal));
+            {
+                // 連續採樣中直接取環形緩衝區最新一筆；未啟動連續採樣則即時擷取一筆
+                if (IsSampling)
+                {
+                    AcquireElapsedToRingBuffer();
+                }
+                double latest = ReadLatestSingleSample(acquireIfEmptyOrStopped: !IsSampling);
+                InstantInputVal = latest;
+                ticket.SetCompleted(DriverResponse.Ok(latest));
                 break;
+            }
 
             case "AnalogOut":
                 var argsAo = ArgParaHelper.ParseKeyValueArgs(ticket.Parameter, out var posArgsAo);
-                if (argsAo.TryGetValue("Value", out var vStr) && double.TryParse(vStr, out double vVal))
+                if (argsAo.TryGetValue("Value", out var vStr) && double.TryParse(vStr, NumberStyles.Any, CultureInfo.InvariantCulture, out double vVal))
                 {
                     InstantOutputVal = vVal;
                 }
-                else if (posArgsAo.Count > 0 && double.TryParse(posArgsAo[^1], out double pVal))
+                else if (posArgsAo.Count > 0 && double.TryParse(posArgsAo[^1], NumberStyles.Any, CultureInfo.InvariantCulture, out double pVal))
                 {
                     InstantOutputVal = pVal;
                 }
                 else
                 {
                     var rawParts = ticket.Parameter.Split(',', StringSplitOptions.TrimEntries);
-                    if (rawParts.Length > 0 && double.TryParse(rawParts[^1], out double rVal))
+                    if (rawParts.Length > 0 && double.TryParse(rawParts[^1], NumberStyles.Any, CultureInfo.InvariantCulture, out double rVal))
                     {
                         InstantOutputVal = rVal;
                     }
@@ -332,18 +384,33 @@ public class MockDaqDriver : IDriver
                 break;
 
             case "Config":
+            {
                 var args = ArgParaHelper.ParseKeyValueArgs(ticket.Parameter, out _);
-                if (args.TryGetValue("Rate", out var r) && double.TryParse(r, out double dr)) SampleRate = dr;
-                if (args.TryGetValue("Count", out var c) && int.TryParse(c, out int dc)) SampleCount = dc;
+                bool reallocate = false;
+                if (args.TryGetValue("Rate", out var r) && double.TryParse(r, NumberStyles.Any, CultureInfo.InvariantCulture, out double dr) && dr > 0)
+                {
+                    SampleRate = dr;
+                    reallocate = true;
+                }
+                if ((args.TryGetValue("Sec", out var sStr) || args.TryGetValue("Duration", out sStr) || args.TryGetValue("BufferSec", out sStr)) &&
+                    double.TryParse(sStr, NumberStyles.Any, CultureInfo.InvariantCulture, out double ds) && ds > 0)
+                {
+                    BufferSeconds = ds;
+                    reallocate = true;
+                }
+                else if (args.TryGetValue("Count", out var c) && int.TryParse(c, out int dc) && dc > 0)
+                {
+                    BufferSeconds = dc / SampleRate;
+                    reallocate = true;
+                }
                 if (args.TryGetValue("Wave", out var waveStr))
                 {
-                    if (waveStr.Contains("Sine", StringComparison.OrdinalIgnoreCase)) WaveType = MockWaveType.Sine;
-                    else if (waveStr.Contains("Square", StringComparison.OrdinalIgnoreCase)) WaveType = MockWaveType.Square;
-                    else if (waveStr.Contains("Press", StringComparison.OrdinalIgnoreCase)) WaveType = MockWaveType.PressCurve;
-                    else WaveType = MockWaveType.TriangleCounter;
+                    ApplyWaveType(waveStr);
                 }
+                if (reallocate) AllocateRingBuffer();
                 ticket.SetCompleted();
                 break;
+            }
 
             case "Close":
                 Shutdown();
@@ -358,47 +425,170 @@ public class MockDaqDriver : IDriver
         DaqStateUpdated?.Invoke();
     }
 
-    private void GenerateAndPushWaveform()
+    private double GenerateSingleSample(long index)
     {
-        var yData = new double[SampleCount];
         double dt = 1.0 / SampleRate;
-
-        for (int i = 0; i < SampleCount; i++)
+        if (WaveType == MockWaveType.Sine)
         {
-            if (WaveType == MockWaveType.Sine)
+            double t = index * dt;
+            return 512.0 + 511.0 * Math.Sin(2 * Math.PI * 5 * t);
+        }
+        if (WaveType == MockWaveType.Square)
+        {
+            return (index % 50 < 25) ? 1023.0 : 0.0;
+        }
+        if (WaveType == MockWaveType.PressCurve)
+        {
+            int cap = RingCapacity;
+            double progress = (double)(index % cap) / cap;
+            if (progress < 0.3) return progress / 0.3 * 800.0;
+            if (progress < 0.7) return 800.0 + (progress - 0.3) / 0.4 * 223.0;
+            return 1023.0 * (1.0 - (progress - 0.7) / 0.3);
+        }
+        // 循環三角波波型：最大值從 0 數到 1023 後再從 0 開始
+        return index % 1024;
+    }
+
+    private void WriteSamplesToRing(int count)
+    {
+        if (count <= 0) return;
+        lock (_ringLock)
+        {
+            int cap = _ringBuffer.Length;
+            double last = InstantInputVal;
+            for (int i = 0; i < count; i++)
             {
-                double t = i * dt;
-                yData[i] = 512.0 + 511.0 * Math.Sin(2 * Math.PI * 5 * t);
+                last = GenerateSingleSample(_totalSampleIndex++);
+                _ringBuffer[_ringWriteIndex] = last;
+                _ringWriteIndex = (_ringWriteIndex + 1) % cap;
+                if (_ringCount < cap) _ringCount++;
             }
-            else if (WaveType == MockWaveType.Square)
+            InstantInputVal = last;
+        }
+    }
+
+    private void AcquireElapsedToRingBuffer()
+    {
+        long now = Stopwatch.GetTimestamp();
+        if (_lastAcquireTimestamp == 0)
+        {
+            _lastAcquireTimestamp = now;
+            return;
+        }
+        double elapsedSec = (double)(now - _lastAcquireTimestamp) / Stopwatch.Frequency;
+        if (elapsedSec <= 0) return;
+        _lastAcquireTimestamp = now;
+
+        double total = elapsedSec * SampleRate + _fractionalSamples;
+        int n = (int)Math.Floor(total);
+        _fractionalSamples = total - n;
+        if (n > 0)
+        {
+            // 單次補齊上限不超過整個環形緩衝區容量
+            int cap = RingCapacity;
+            if (n > cap)
             {
-                yData[i] = (i % 50 < 25) ? 1023.0 : 0.0;
+                _totalSampleIndex += (n - cap);
+                n = cap;
             }
-            else if (WaveType == MockWaveType.PressCurve)
+            WriteSamplesToRing(n);
+            DaqStateUpdated?.Invoke();
+        }
+    }
+
+    private double ReadLatestSingleSample(bool acquireIfEmptyOrStopped)
+    {
+        lock (_ringLock)
+        {
+            if (acquireIfEmptyOrStopped || _ringCount == 0)
             {
-                double progress = (double)i / SampleCount;
-                if (progress < 0.3) yData[i] = progress / 0.3 * 800.0;
-                else if (progress < 0.7) yData[i] = 800.0 + (progress - 0.3) / 0.4 * 223.0;
-                else yData[i] = 1023.0 * (1.0 - (progress - 0.7) / 0.3);
+                double v = GenerateSingleSample(_totalSampleIndex++);
+                int cap = _ringBuffer.Length;
+                _ringBuffer[_ringWriteIndex] = v;
+                _ringWriteIndex = (_ringWriteIndex + 1) % cap;
+                if (_ringCount < cap) _ringCount++;
+                InstantInputVal = v;
+                return v;
+            }
+            int lastIdx = (_ringWriteIndex - 1 + _ringBuffer.Length) % _ringBuffer.Length;
+            return _ringBuffer[lastIdx];
+        }
+    }
+
+    private double ParseRequestedDurationSec(string? parameter)
+    {
+        if (string.IsNullOrWhiteSpace(parameter)) return BufferSeconds;
+        var args = ArgParaHelper.ParseKeyValueArgs(parameter, out var posArgs);
+        if ((args.TryGetValue("Sec", out var sStr) || args.TryGetValue("Duration", out sStr)) &&
+            double.TryParse(sStr, NumberStyles.Any, CultureInfo.InvariantCulture, out double sKv) && sKv > 0)
+        {
+            return sKv;
+        }
+        // 正規化後格式為 "Daq0, 0.5, PressCurve" 或 "0.5"
+        if (posArgs.Count >= 2 && double.TryParse(posArgs[1], NumberStyles.Any, CultureInfo.InvariantCulture, out double sPos1) && sPos1 > 0)
+        {
+            return sPos1;
+        }
+        if (posArgs.Count == 1 && double.TryParse(posArgs[0], NumberStyles.Any, CultureInfo.InvariantCulture, out double sPos0) && sPos0 > 0)
+        {
+            return sPos0;
+        }
+        return BufferSeconds;
+    }
+
+    private double[] ExtractRecentWaveform(string? parameter)
+    {
+        double reqSec = ParseRequestedDurationSec(parameter);
+        int requested = Math.Clamp((int)Math.Round(reqSec * SampleRate), 1, RingCapacity);
+
+        if (IsSampling)
+        {
+            AcquireElapsedToRingBuffer();
+        }
+
+        double[] slice;
+        lock (_ringLock)
+        {
+            if (!IsSampling && _ringCount < requested)
+            {
+                int need = requested - _ringCount;
+                int cap = _ringBuffer.Length;
+                for (int i = 0; i < need; i++)
+                {
+                    double v = GenerateSingleSample(_totalSampleIndex++);
+                    _ringBuffer[_ringWriteIndex] = v;
+                    _ringWriteIndex = (_ringWriteIndex + 1) % cap;
+                    if (_ringCount < cap) _ringCount++;
+                }
+            }
+
+            int take = Math.Min(requested, _ringCount);
+            if (take <= 0)
+            {
+                double v = GenerateSingleSample(_totalSampleIndex++);
+                slice = new[] { v };
             }
             else
             {
-                // 循環三角波波型：最大值從 0 數到 1023 後再從 0 開始
-                yData[i] = (_counter + i) % 1024;
+                slice = new double[take];
+                int cap = _ringBuffer.Length;
+                int startIdx = (_ringWriteIndex - take + cap) % cap;
+                for (int i = 0; i < take; i++)
+                {
+                    slice[i] = _ringBuffer[(startIdx + i) % cap];
+                }
             }
+            InstantInputVal = slice[^1];
         }
 
-        _counter = (_counter + SampleCount) % 1024;
-        LatestWaveform = yData;
-        InstantInputVal = yData[^1];
-
+        LatestWaveform = slice;
+        double dt = 1.0 / SampleRate;
         if (_engines != null)
         {
-            _engines.Daq.SetWaveform(DeviceName, DateTime.Now, dt, yData);
+            _engines.Daq.SetWaveform(DeviceName, DateTime.Now, dt, slice);
             _engines.Io.SetPort($"{DeviceName}#OK?", true);
         }
-
-        DaqStateUpdated?.Invoke();
+        return slice;
     }
 
     public void Shutdown()

@@ -173,6 +173,12 @@ public class MultiStationEngine
     }
 
     /// <summary>
+    /// 依布林邏輯設定工位有料/無料（on=true 設為有料；on=false 設為無料，且 clearData=true 時清空 OK/NG 與隨行資料）
+    /// </summary>
+    public bool SetOn(string target, bool on, bool clearData = true)
+        => on ? SetOn(target) : SetOff(target, clearData);
+
+    /// <summary>
     /// 標記工位為無料/空位；clearData=true（預設）時一併清空 OK/NG 與該工位所有隨行 Variable 資料
     /// </summary>
     public bool SetOff(string target, bool clearData = true)
@@ -207,6 +213,12 @@ public class MultiStationEngine
             return true;
         }
     }
+
+    /// <summary>
+    /// 依布林邏輯設定工位品質判定（isOk=true 設為 OK；isOk=false 設為 NG）
+    /// </summary>
+    public bool SetOk(string target, bool isOk)
+        => isOk ? SetOk(target) : SetNg(target);
 
     public bool SetNg(string target)
     {
@@ -349,8 +361,15 @@ public class MultiStationEngine
     /// 尋找指定工站/料盤第一個可取料 OK 工位（預設 IsOn &amp;&amp; OK；allowUnchecked=true 時亦接受 IsOn &amp;&amp; !NG），同步更新 $(station)#Found?
     /// </summary>
     public bool TryFindFirstOk(string stationName, bool allowUnchecked, out string slotKey, out MachinePoint? point)
+        => TryFindFirstOk(stationName, allowUnchecked, out slotKey, out _, out point);
+
+    /// <summary>
+    /// 尋找指定工站/料盤第一個可取料 OK 工位，回傳完整工位鍵與 0-based 索引（可直接供 Point&amp;Path@ResetPalletIndex 使用；未找到時 index=-1），同步更新 $(station)#Found?
+    /// </summary>
+    public bool TryFindFirstOk(string stationName, bool allowUnchecked, out string slotKey, out int slotIndex, out MachinePoint? point)
     {
         slotKey = string.Empty;
+        slotIndex = -1;
         point = null;
         if (string.IsNullOrWhiteSpace(stationName)) return false;
 
@@ -372,6 +391,7 @@ public class MultiStationEngine
                 if (match)
                 {
                     slotKey = group.GetSlotPrefix(slot);
+                    slotIndex = slot.Index;
                     point = TryGetBoundPointLocked(group, slot);
                     _io.SetPort($"{group.Name}#Found?", true);
                     return true;
@@ -387,8 +407,15 @@ public class MultiStationEngine
     /// 尋找指定工站/出料料盤第一個空位（!IsOn），同步更新 $(station)#Found?
     /// </summary>
     public bool TryFindEmpty(string stationName, out string slotKey, out MachinePoint? point)
+        => TryFindEmpty(stationName, out slotKey, out _, out point);
+
+    /// <summary>
+    /// 尋找指定工站/出料料盤第一個空位（!IsOn），回傳完整工位鍵與 0-based 索引（可直接供 Point&amp;Path@ResetPalletIndex 使用；未找到時 index=-1），同步更新 $(station)#Found?
+    /// </summary>
+    public bool TryFindEmpty(string stationName, out string slotKey, out int slotIndex, out MachinePoint? point)
     {
         slotKey = string.Empty;
+        slotIndex = -1;
         point = null;
         if (string.IsNullOrWhiteSpace(stationName)) return false;
 
@@ -406,6 +433,7 @@ public class MultiStationEngine
                 if (!slot.IsOn)
                 {
                     slotKey = group.GetSlotPrefix(slot);
+                    slotIndex = slot.Index;
                     point = TryGetBoundPointLocked(group, slot);
                     _io.SetPort($"{group.Name}#Found?", true);
                     return true;

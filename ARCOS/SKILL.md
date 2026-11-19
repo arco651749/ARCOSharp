@@ -51,7 +51,7 @@ description: >-
 
 ARCOS 系統由多個模組與輔助工具組成。在編寫特定模組腳本前，若不熟悉內部指令與參數細節，請使用 `view_file` 查閱 `Skills/ARCOS/references/` 資料夾中對應的手冊：
 
-- 🔥 **[`references/CommandsMaster.md`](references/CommandsMaster.md)** - **全模組語法速查第一站 (權威依據)**：涵蓋全 14 模組 251 條指令之 **ARCOS v2.0 語法簽名**（`::` 必填 / `{}` 選填 / `->` 輸出 / `[[]]` 錯誤攔截，完整向下相容 v1.0 位置語法）、硬體語意鍵名（`card`/`mot`/`cam`/`daq`）與防呆邊界。詳細參數 Schema 契約請見 [`docs/COMMAND_SYNTAX_AND_SCHEMA_SPEC.md`](../docs/COMMAND_SYNTAX_AND_SCHEMA_SPEC.md)。
+- 🔥 **[`references/CommandsMaster.md`](references/CommandsMaster.md)** - **全模組語法速查第一站 (權威依據)**：涵蓋全 14 模組 246 條指令之 **ARCOS v2.0 語法簽名**（`::` 必填 / `{}` 選填 / `->` 輸出 / `[[]]` 錯誤攔截，完整向下相容 v1.0 位置語法）、硬體語意鍵名（`card`/`mot`/`cam`/`daq`）與防呆邊界。詳細參數 Schema 契約請見 [`docs/COMMAND_SYNTAX_AND_SCHEMA_SPEC.md`](../docs/COMMAND_SYNTAX_AND_SCHEMA_SPEC.md)。
 
 ### 1. 核心控制與流程模組 (Core & Flow)
 

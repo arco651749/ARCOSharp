@@ -36,15 +36,16 @@ public static partial class ArgParaHelper
             return result;
         }
 
-        // 2. 依逗號切分參數（考慮括號或引號內的逗號可日後擴展，此處標準逗號分割）
-        var tokens = workStr.Split(',', StringSplitOptions.TrimEntries);
+        // 2. 依頂層逗號切分參數（保護 (...)、[...]、{...} 與 "..." 內之逗號，完整支援 (100,200,300,90,180,90) 立即值座標）
+        var tokens = SplitTopLevelCsv(workStr);
         int posIdx = 0;
 
-        foreach (var token in tokens)
+        foreach (var rawToken in tokens)
         {
+            string token = rawToken.Trim();
             if (string.IsNullOrEmpty(token)) continue;
 
-            int eqIdx = token.IndexOf('=');
+            int eqIdx = FindTopLevelEquals(token);
             if (eqIdx > 0)
             {
                 string key = token.Substring(0, eqIdx).Trim();
@@ -60,5 +61,73 @@ public static partial class ArgParaHelper
         }
 
         return result;
+    }
+
+    private static List<string> SplitTopLevelCsv(string input)
+    {
+        var items = new List<string>();
+        var sb = new System.Text.StringBuilder();
+        bool inQuote = false;
+        int parenDepth = 0, bracketDepth = 0, braceDepth = 0;
+
+        for (int i = 0; i < input.Length; i++)
+        {
+            char c = input[i];
+            if (inQuote)
+            {
+                sb.Append(c);
+                if (c == '\\' && i + 1 < input.Length) { sb.Append(input[++i]); continue; }
+                if (c == '"') inQuote = false;
+                continue;
+            }
+
+            if (c == '"') { inQuote = true; sb.Append(c); continue; }
+            if (c == '(') { parenDepth++; sb.Append(c); continue; }
+            if (c == ')' && parenDepth > 0) { parenDepth--; sb.Append(c); continue; }
+            if (c == '[') { bracketDepth++; sb.Append(c); continue; }
+            if (c == ']' && bracketDepth > 0) { bracketDepth--; sb.Append(c); continue; }
+            if (c == '{') { braceDepth++; sb.Append(c); continue; }
+            if (c == '}' && braceDepth > 0) { braceDepth--; sb.Append(c); continue; }
+
+            if (c == ',' && parenDepth == 0 && bracketDepth == 0 && braceDepth == 0)
+            {
+                items.Add(sb.ToString());
+                sb.Clear();
+                continue;
+            }
+            sb.Append(c);
+        }
+
+        if (sb.Length > 0) items.Add(sb.ToString());
+        return items;
+    }
+
+    private static int FindTopLevelEquals(string token)
+    {
+        bool inQuote = false;
+        int parenDepth = 0, bracketDepth = 0, braceDepth = 0;
+        for (int i = 0; i < token.Length; i++)
+        {
+            char c = token[i];
+            if (inQuote)
+            {
+                if (c == '\\' && i + 1 < token.Length) { i++; continue; }
+                if (c == '"') inQuote = false;
+                continue;
+            }
+            if (c == '"') { inQuote = true; continue; }
+            if (c == '(') { parenDepth++; continue; }
+            if (c == ')' && parenDepth > 0) { parenDepth--; continue; }
+            if (c == '[') { bracketDepth++; continue; }
+            if (c == ']' && bracketDepth > 0) { bracketDepth--; continue; }
+            if (c == '{') { braceDepth++; continue; }
+            if (c == '}' && braceDepth > 0) { braceDepth--; continue; }
+
+            if (c == '=' && parenDepth == 0 && bracketDepth == 0 && braceDepth == 0)
+            {
+                return i;
+            }
+        }
+        return -1;
     }
 }

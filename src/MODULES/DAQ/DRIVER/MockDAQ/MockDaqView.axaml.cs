@@ -27,7 +27,7 @@ public partial class MockDaqView : UserControl
         var txtInfo = this.FindControl<TextBlock>("TxtDeviceInfo");
         if (txtInfo != null)
         {
-            txtInfo.Text = $"{_driver.DeviceName} ({_driver.DriverType}) | 採樣率: {_driver.SampleRate}Hz | 點數: {_driver.SampleCount} | 循環三角波 (0~1023)";
+            txtInfo.Text = $"{_driver.DeviceName} ({_driver.DriverType}) | 採樣率: {_driver.SampleRate}Hz | 環形緩衝: {_driver.BufferSeconds:G}s ({_driver.SampleCount}點) | 循環三角波 (0~1023)";
         }
 
         var btnSample = this.FindControl<Button>("BtnSample");

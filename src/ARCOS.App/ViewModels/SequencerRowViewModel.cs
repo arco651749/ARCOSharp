@@ -178,7 +178,7 @@ public sealed class SequencerRowViewModel : INotifyPropertyChanged
 
             string canonical = string.IsNullOrWhiteSpace(_parameter)
                 ? "(無參數)"
-                : CommandDisplayProjector.ProjectParameter(_parameter, schema, CommandDisplayLevel.Canonical, false);
+                : CommandDisplayProjector.ProjectParameter(_parameter, schema, CommandDisplayLevel.Canonical, multiLineLayout: true);
             sb.AppendLine().Append("Canonical: ").Append(canonical);
 
             if (!string.IsNullOrWhiteSpace(_parameter) &&

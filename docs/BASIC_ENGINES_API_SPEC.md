@@ -308,33 +308,34 @@ engines.Timer.TimerReset("&GlueCuring", 60.0);
 ---
 
 ### 7. `MultiStationEngine` — 統一多工站與料盤狀態機引擎
-- **主要職責**：統一管理轉盤、直線移載與進/出料 Tray 盤之有序工位集合（`StationGroup`），以 `工站.工位` 定址並自動聯動 `IoEngine`（`#On?`/`#Run?`/`#OK?`/`#NG?`/`#Busy?`）、`VariableEngine`（`{prefix}#{field}` 隨行履歷資料）與 `PointEngine`（選填 1-to-1 座標陣列綁定）。
+- **主要職責**：統一管理轉盤、直線移載與進/出料 Tray 盤之有序工位集合（`StationGroup`），以 `工站.工位` 定址並自動聯動 `IoEngine`（`#On?`/`#Run?`/`#OK?`/`#NG?`/`#Busy?`）與 `VariableEngine`（`{prefix}#{field}` 隨行履歷資料），與 `PointEngine` 完全解耦（透過 `TryFindFirstOk`/`TryFindEmpty` 回傳 0-based `slotIndex` 串接 `PointEngine.ResetPalletIndex`）。
 - **執行緒安全**：所有狀態操作、環形位移與跨站交接皆受單一鎖保護，保證 IO 與 Variable 同步一致。
 
 #### 核心 API 簽章
 ```csharp
-// 1. 建立命名工位或 1-based 料盤工站（可選綁定 Point&Path 點位陣列）
-StationGroup AddStation(string stationName, IReadOnlyList<string>? itemNames = null, int slotCount = 0, string? boundPointName = null);
+// 1. 建立命名工位或 1-based 料盤工站
+StationGroup AddStation(string stationName, IReadOnlyList<string>? items = null, int? slotCount = null, string? boundPointName = null);
 
-// 2. 工位有料/無料/OK/NG/Busy 狀態操作（SetStationOff 預設清空 OK/NG 與隨行資料）
-bool SetStationOn(string target);
-bool SetStationOff(string target, bool clearData = true);
-bool SetStationOk(string target);
-bool SetStationNg(string target);
+// 2. 工位有料/無料/OK/NG/Busy 狀態操作（SetOn(..., false) 預設清空 OK/NG 與隨行資料）
+bool SetOn(string target, bool on, bool clearData = true);
+bool SetOk(string target, bool isOk);
+bool SetOn(string target);
+bool SetOff(string target, bool clearData = true);
+bool SetOk(string target);
+bool SetNg(string target);
 bool CheckRunState(string target, out bool isBusy);
 
-// 3. 工位隨行資料與實體點位查詢
+// 3. 工位隨行資料
 bool SetData(string target, string value, string field = "Data");
 string GetData(string target, string field = "Data");
-bool TryGetSlotPoint(string target, out MachinePoint point);
 
 // 4. 環形緩衝區狀態轉移（正數向前、負數向後）與跨站整包交接
 void StateShift(string? stationName, int shift);
 bool Transfer(string fromTarget, string toTarget, bool clearSource = true);
 
-// 5. 料盤/工站掃描定位（自動更新 $(station)#Found?）
-bool TryFindFirstOk(string stationName, out string slotKey, out MachinePoint? point, bool allowUnchecked = false);
-bool TryFindEmpty(string stationName, out string slotKey, out MachinePoint? point);
+// 5. 料盤/工站掃描定位（回傳 0-based slotIndex 供 PointEngine.ResetPalletIndex 使用，自動更新 $(station)#Found?）
+bool TryFindFirstOk(string stationName, bool allowUnchecked, out string slotKey, out int slotIndex, out MachinePoint? point);
+bool TryFindEmpty(string stationName, out string slotKey, out int slotIndex, out MachinePoint? point);
 
 // 6. 重置與指標同步
 void ResetDefault(string? stationName = null);

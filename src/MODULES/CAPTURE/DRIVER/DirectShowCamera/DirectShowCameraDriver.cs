@@ -151,6 +151,17 @@ public sealed class DirectShowCameraDriver : IDriver
         string oldFourCC = FourCC;
 
         var args = ArgParaHelper.ParseKeyValueArgs(param ?? string.Empty, out var posArgs);
+        if (!isInitialInit)
+        {
+            if (posArgs.Count >= 3 && string.Equals(posArgs[0], DeviceName, StringComparison.OrdinalIgnoreCase))
+            {
+                args[posArgs[1]] = posArgs[2].Trim().Trim('"');
+            }
+            else if (posArgs.Count == 2 && !string.Equals(posArgs[0], DeviceName, StringComparison.OrdinalIgnoreCase))
+            {
+                args[posArgs[0]] = posArgs[1].Trim().Trim('"');
+            }
+        }
         var devices = DirectShowDeviceEnumerator.EnumerateVideoInputDevices();
 
         if (args.TryGetValue("AutoConnect", out var acStr) && bool.TryParse(acStr, out bool ac))
@@ -362,20 +373,8 @@ public sealed class DirectShowCameraDriver : IDriver
                     if (_engines != null)
                     {
                         var frameMeta = BuildCaptureMetadata(frame.Width, frame.Height, isLiveFrame);
-                        ArgParaHelper.ParseKeyValueArgs(ticket.Parameter, out var posArgs);
-                        bool hasTargetArrayArg = cmd.Equals("Trigger", StringComparison.OrdinalIgnoreCase) &&
-                                                 posArgs.Count > 1 &&
-                                                 !string.IsNullOrWhiteSpace(posArgs[1]);
-
-                        if (cmd.Equals("Trigger", StringComparison.OrdinalIgnoreCase) && !hasTargetArrayArg)
-                        {
-                            _engines.Image.AppendImage(DeviceName, frame, frameMeta);
-                        }
-                        else
-                        {
-                            // Snap 或帶目標陣列參數的 Trigger (Capture@Trigger Cam, Arr) 寫入 Cam 單張槽位，再由 Trigger.csvi Append 至 Arr
-                            _engines.Image.SetSingleImage(DeviceName, frame, frameMeta);
-                        }
+                        // Snap 與 Trigger 皆一律覆寫相機同名影像槽 $(cam)；若指令帶 -> imaqs=... 則由 Snap/Trigger.csvi 同步 Append 至目標陣列
+                        _engines.Image.SetSingleImage(DeviceName, frame, frameMeta);
                         _engines.Io.SetPort($"{DeviceName}#OK?", isLiveFrame);
                     }
 

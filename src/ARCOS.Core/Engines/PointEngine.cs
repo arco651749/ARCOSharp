@@ -556,33 +556,184 @@ public class PointEngine
     }
 
     /// <summary>
-    /// 檢查點位是否在矩形範圍內，寫入 $(pointName)#InRange?
-    /// 若 range 具有 [0] 與 [1] 兩點，判斷是否落在 [0]~(1) 構成的邊界矩形內；若僅 1 點則判斷 |X|<=|r.X| & |Y|<=|r.Y|
+    /// 檢查點位是否位於安全範圍內，更新 $(pointName)#InRange?：
+    /// - axes（預設 null/XY）：可指定任意軸向組合（如 XY、XYZ、XZ、YZ、Z、XYZU）
+    /// - 1 點：若 Radius &gt; 0 則判定圓形/球體內；否則依啟用軸向判定 |Axis| &lt;= |r.Axis|
+    /// - 2 點：依啟用軸向構成之軸對齊長方形（XY/XZ/YZ）、單軸區間（Z）或 3D 長方體（XYZ）
+    /// - 3 點：若 Z 有落差且啟用 Z（或未顯式限定僅 XY）則為 3D 長方體；共面或僅 XY 則為 2D 三角形
+    /// - 4 點以上：主平面 2D 多邊形（含邊界），若同時啟用 Z（如 XYZ）則額外檢查全頂點 Z 上下限（3D 稜柱體）
     /// </summary>
-    public bool CheckInRangeXY(string pointName, string rangePtName)
+    public bool CheckInRangeXY(string pointName, string rangePtName, string? axes = null)
     {
         var pt = GetPoint(pointName);
+        bool explicitAxes = !string.IsNullOrWhiteSpace(axes);
+        string ax = explicitAxes ? axes!.Trim().ToUpperInvariant() : "XY";
+        bool hasX = ax.Contains('X');
+        bool hasY = ax.Contains('Y');
+        bool hasZ = ax.Contains('Z');
+        bool hasU = ax.Contains('U');
+        bool hasV = ax.Contains('V');
+        bool hasW = ax.Contains('W');
+        if (!hasX && !hasY && !hasZ && !hasU && !hasV && !hasW)
+        {
+            hasX = true;
+            hasY = true;
+        }
+
         bool inRange;
 
         if (_points.TryGetValue(rangePtName, out var rangeEntry) && rangeEntry.Points.Count >= 2)
         {
-            var r0 = rangeEntry.Points[0];
-            var r1 = rangeEntry.Points[1];
-            double minX = Math.Min(r0.X, r1.X);
-            double maxX = Math.Max(r0.X, r1.X);
-            double minY = Math.Min(r0.Y, r1.Y);
-            double maxY = Math.Max(r0.Y, r1.Y);
-            inRange = pt.X >= minX && pt.X <= maxX && pt.Y >= minY && pt.Y <= maxY;
+            var pts = rangeEntry.Points;
+            if (pts.Count == 2)
+            {
+                inRange = CheckBoundsAxes(pt, pts, hasX, hasY, hasZ, hasU, hasV, hasW);
+            }
+            else if (pts.Count == 3)
+            {
+                double minZ = Math.Min(pts[0].Z, Math.Min(pts[1].Z, pts[2].Z));
+                double maxZ = Math.Max(pts[0].Z, Math.Max(pts[1].Z, pts[2].Z));
+                bool hasZSpan = (maxZ - minZ) > 1e-6;
+
+                if (hasZSpan && (hasZ || !explicitAxes))
+                {
+                    // 3 點異 Z 長方體：前兩點決定 XY，三點決定 Z 上下限
+                    var r0 = pts[0];
+                    var r1 = pts[1];
+                    inRange = true;
+                    if (hasX) inRange &= pt.X >= Math.Min(r0.X, r1.X) && pt.X <= Math.Max(r0.X, r1.X);
+                    if (hasY) inRange &= pt.Y >= Math.Min(r0.Y, r1.Y) && pt.Y <= Math.Max(r0.Y, r1.Y);
+                    inRange &= pt.Z >= minZ && pt.Z <= maxZ;
+                    if (hasU) inRange &= CheckAxisBound(pt.U, pts, p => p.U);
+                    if (hasV) inRange &= CheckAxisBound(pt.V, pts, p => p.V);
+                    if (hasW) inRange &= CheckAxisBound(pt.W, pts, p => p.W);
+                }
+                else
+                {
+                    // 共面 3 點（或顯式限定 2D 平面）-> 2D 三角形多邊形
+                    inRange = CheckPolygonWithOptionalAxes(pt, pts, hasX, hasY, hasZ, hasU, hasV, hasW);
+                }
+            }
+            else
+            {
+                inRange = CheckPolygonWithOptionalAxes(pt, pts, hasX, hasY, hasZ, hasU, hasV, hasW);
+            }
         }
         else
         {
             var rangePt = GetPoint(rangePtName);
-            inRange = Math.Abs(pt.X) <= Math.Abs(rangePt.X) && Math.Abs(pt.Y) <= Math.Abs(rangePt.Y);
+            if (rangePt.Radius > 0)
+            {
+                double distSq = 0;
+                if (hasX) { double dx = pt.X - rangePt.X; distSq += dx * dx; }
+                if (hasY) { double dy = pt.Y - rangePt.Y; distSq += dy * dy; }
+                if (hasZ) { double dz = pt.Z - rangePt.Z; distSq += dz * dz; }
+                inRange = distSq <= rangePt.Radius * rangePt.Radius + 1e-9;
+                if (hasU) inRange &= Math.Abs(pt.U) <= Math.Abs(rangePt.U);
+                if (hasV) inRange &= Math.Abs(pt.V) <= Math.Abs(rangePt.V);
+                if (hasW) inRange &= Math.Abs(pt.W) <= Math.Abs(rangePt.W);
+            }
+            else
+            {
+                inRange = true;
+                if (hasX) inRange &= Math.Abs(pt.X) <= Math.Abs(rangePt.X);
+                if (hasY) inRange &= Math.Abs(pt.Y) <= Math.Abs(rangePt.Y);
+                if (hasZ) inRange &= Math.Abs(pt.Z) <= Math.Abs(rangePt.Z);
+                if (hasU) inRange &= Math.Abs(pt.U) <= Math.Abs(rangePt.U);
+                if (hasV) inRange &= Math.Abs(pt.V) <= Math.Abs(rangePt.V);
+                if (hasW) inRange &= Math.Abs(pt.W) <= Math.Abs(rangePt.W);
+            }
         }
 
         _ioEngine?.SetPort($"{pointName}#InRange?", inRange);
         _ioEngine?.SetPort($"{pointName}#InRangeXY?", !inRange);
         return inRange;
+    }
+
+    private static bool CheckAxisBound(double val, IReadOnlyList<MachinePoint> pts, Func<MachinePoint, double> sel)
+    {
+        double min = double.MaxValue, max = double.MinValue;
+        foreach (var p in pts)
+        {
+            double v = sel(p);
+            if (v < min) min = v;
+            if (v > max) max = v;
+        }
+        return val >= min && val <= max;
+    }
+
+    private static bool CheckBoundsAxes(MachinePoint pt, IReadOnlyList<MachinePoint> pts, bool hasX, bool hasY, bool hasZ, bool hasU, bool hasV, bool hasW)
+    {
+        bool ok = true;
+        if (hasX) ok &= CheckAxisBound(pt.X, pts, p => p.X);
+        if (hasY) ok &= CheckAxisBound(pt.Y, pts, p => p.Y);
+        if (hasZ) ok &= CheckAxisBound(pt.Z, pts, p => p.Z);
+        if (hasU) ok &= CheckAxisBound(pt.U, pts, p => p.U);
+        if (hasV) ok &= CheckAxisBound(pt.V, pts, p => p.V);
+        if (hasW) ok &= CheckAxisBound(pt.W, pts, p => p.W);
+        return ok;
+    }
+
+    private static bool CheckPolygonWithOptionalAxes(MachinePoint pt, IReadOnlyList<MachinePoint> pts, bool hasX, bool hasY, bool hasZ, bool hasU, bool hasV, bool hasW)
+    {
+        bool ok;
+        if (hasX && hasY)
+        {
+            ok = IsPointInPolygon2D(pt.X, pt.Y, pts, p => p.X, p => p.Y);
+            if (hasZ) ok &= CheckAxisBound(pt.Z, pts, p => p.Z);
+        }
+        else if (hasX && hasZ)
+        {
+            ok = IsPointInPolygon2D(pt.X, pt.Z, pts, p => p.X, p => p.Z);
+        }
+        else if (hasY && hasZ)
+        {
+            ok = IsPointInPolygon2D(pt.Y, pt.Z, pts, p => p.Y, p => p.Z);
+        }
+        else
+        {
+            ok = CheckBoundsAxes(pt, pts, hasX, hasY, hasZ, false, false, false);
+        }
+
+        if (hasU) ok &= CheckAxisBound(pt.U, pts, p => p.U);
+        if (hasV) ok &= CheckAxisBound(pt.V, pts, p => p.V);
+        if (hasW) ok &= CheckAxisBound(pt.W, pts, p => p.W);
+        return ok;
+    }
+
+    private static bool IsPointInPolygon2D(
+        double px, double py,
+        IReadOnlyList<MachinePoint> polygon,
+        Func<MachinePoint, double> getX,
+        Func<MachinePoint, double> getY)
+    {
+        const double eps = 1e-9;
+        int n = polygon.Count;
+        bool inside = false;
+
+        for (int i = 0, j = n - 1; i < n; j = i++)
+        {
+            double xi = getX(polygon[i]), yi = getY(polygon[i]);
+            double xj = getX(polygon[j]), yj = getY(polygon[j]);
+
+            // 邊界包含判定：點落於線段 (i, j) 上即視為在範圍內
+            double cross = (py - yi) * (xj - xi) - (px - xi) * (yj - yi);
+            if (Math.Abs(cross) <= eps &&
+                px >= Math.Min(xi, xj) - eps && px <= Math.Max(xi, xj) + eps &&
+                py >= Math.Min(yi, yj) - eps && py <= Math.Max(yi, yj) + eps)
+            {
+                return true;
+            }
+
+            bool intersects = ((yi > py) != (yj > py)) &&
+                              (px < (xj - xi) * (py - yi) / (yj - yi) + xi);
+            if (intersects)
+            {
+                inside = !inside;
+            }
+        }
+
+        return inside;
     }
 
     public IReadOnlyList<string> GetAllNames()

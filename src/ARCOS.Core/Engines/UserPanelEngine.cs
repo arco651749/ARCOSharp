@@ -627,6 +627,30 @@ public class UserPanelEngine
                s.Equals("HIGH", StringComparison.OrdinalIgnoreCase);
     }
 
+    /// <summary>
+    /// 評估 User 模組開關型指令之 $logic 參數（支援 True/False/ON/OFF/1/0 以及完整 LogicEvaluator 布林表達式，例如 Alarm? 或 Ready? &amp; !Stop?）
+    /// </summary>
+    public static bool EvaluateLogicOn(string? raw, IoEngine? io, VariableEngine? variable, string currentSection = "Global")
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return false;
+        string s = raw.Trim();
+        if (s.Equals("1", StringComparison.OrdinalIgnoreCase) ||
+            s.Equals("ON", StringComparison.OrdinalIgnoreCase) ||
+            s.Equals("TRUE", StringComparison.OrdinalIgnoreCase) ||
+            s.Equals("HIGH", StringComparison.OrdinalIgnoreCase))
+            return true;
+        if (s.Equals("0", StringComparison.OrdinalIgnoreCase) ||
+            s.Equals("OFF", StringComparison.OrdinalIgnoreCase) ||
+            s.Equals("FALSE", StringComparison.OrdinalIgnoreCase) ||
+            s.Equals("LOW", StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        if (io != null && variable != null)
+            return ARCOS.Core.Common.LogicEvaluator.EvaluateLogic(s, io, variable, currentSection);
+
+        return ParseLogicOn(s);
+    }
+
     private PanelSlot GetOrCreateSlotLocked(string panelName)
     {
         var existing = ResolveSlotLocked(panelName);

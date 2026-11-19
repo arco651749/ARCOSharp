@@ -31,6 +31,7 @@ public static class StandardCommandSchemas
         string prefix = moduleName.Trim() + "@";
         return _schemas.Values
             .Where(s => s.CommandKey.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            .Distinct()
             .ToList();
     }
 
@@ -110,7 +111,7 @@ public static class StandardCommandSchemas
         };
 
         // =========================================================================
-        // 1. IO 模組（14 條指令）— 點位一律採 io / ios，裝置採 dev
+        // 1. IO 模組（14 條指令）— 點位一律採 io / ios，控制卡採 card
         // =========================================================================
 
         Reg(new CommandSchema
@@ -121,7 +122,7 @@ public static class StandardCommandSchemas
             {
                 Req("card", ParamValueType.DriverName, 0, "IO 卡裝置代號 (如 IO1)", "name", "deviceName"),
                 Req("driver", ParamValueType.String, 1, "驅動型號 (如 MockIO)", "driverType"),
-                Opt("port", ParamValueType.String, "", null, "通訊介面/埠位 (如 COM1)", ParamDisplayTier.Secondary, false, "DEVICE", "device"),
+                Opt("device", ParamValueType.String, "", null, "實體裝置/連線位址 (COM 埠、IP、OPC-UA、卡號等)", ParamDisplayTier.Secondary, false, "DEVICE"),
                 Opt("outStart", ParamValueType.PortName, "P0.0", null, "實體輸出起始點位", ParamDisplayTier.Secondary, false, "OUTSTART"),
                 Opt("outPorts", ParamValueType.Integer, "8", null, "實體輸出點數", ParamDisplayTier.Secondary, false, "OUTPORTS"),
                 Opt("inStart", ParamValueType.PortName, "P1.0", null, "實體輸入起始點位", ParamDisplayTier.Secondary, false, "INSTART"),
@@ -242,7 +243,7 @@ public static class StandardCommandSchemas
             Parameters =
             {
                 Req("io", ParamValueType.PortName, 0, "監控 IO 點位名稱", "port"),
-                Opt("timeoutSec", ParamValueType.Number, "0", 1, "逾時秒數（0 表示無限等待）", ParamDisplayTier.Critical, false, "timeout")
+                Opt("timeout", ParamValueType.Number, "0", 1, "逾時秒數（0 表示無限等待）", ParamDisplayTier.Critical, false, "TimeOut")
             },
             ImplicitEffects = { "wait $(io)==ON" }
         });
@@ -255,7 +256,7 @@ public static class StandardCommandSchemas
             Parameters =
             {
                 Req("io", ParamValueType.PortName, 0, "監控 IO 點位名稱", "port"),
-                Opt("timeoutSec", ParamValueType.Number, "0", 1, "逾時秒數（0 表示無限等待）", ParamDisplayTier.Critical, false, "timeout")
+                Opt("timeout", ParamValueType.Number, "0", 1, "逾時秒數（0 表示無限等待）", ParamDisplayTier.Critical, false, "TimeOut")
             },
             ImplicitEffects = { "wait $(io)==OFF" }
         });
@@ -268,7 +269,7 @@ public static class StandardCommandSchemas
             Parameters =
             {
                 Req("logic", ParamValueType.LogicExpr, 0, "$logic 布林邏輯運算式 (支援 & | !)", "expr", "condition"),
-                Opt("timeoutSec", ParamValueType.Number, "0", 1, "逾時秒數（0 表示無限等待）", ParamDisplayTier.Critical, false, "timeout")
+                Opt("timeout", ParamValueType.Number, "0", 1, "逾時秒數（0 表示無限等待）", ParamDisplayTier.Critical, false, "TimeOut")
             },
             ImplicitEffects = { "wait $(logic)==true" }
         });
@@ -281,7 +282,7 @@ public static class StandardCommandSchemas
             Parameters =
             {
                 Req("logic", ParamValueType.LogicExpr, 0, "$logic 布林邏輯運算式 (支援 & | !)", "expr", "condition"),
-                Opt("timeoutSec", ParamValueType.Number, "0", 1, "逾時秒數（0 表示無限等待）", ParamDisplayTier.Critical, false, "timeout")
+                Opt("timeout", ParamValueType.Number, "0", 1, "逾時秒數（0 表示無限等待）", ParamDisplayTier.Critical, false, "TimeOut")
             },
             ImplicitEffects = { "wait $(logic)==false" }
         });
@@ -386,7 +387,7 @@ public static class StandardCommandSchemas
             Parameters =
             {
                 Req("timer", ParamValueType.String, 0, "計時器名稱（尾綴 & 可豁免系統暫停）", "name", "timerName"),
-                Opt("timeoutSec", ParamValueType.Number, "0", 1, "逾時門檻秒數", ParamDisplayTier.Secondary, false, "timeout")
+                Opt("target", ParamValueType.Number, "0", 1, "逾時門檻秒數", ParamDisplayTier.Secondary, false, "timeout", "timeoutSec")
             },
             ImplicitEffects = { "reset $(timer)#Timeout?" }
         });
@@ -448,7 +449,7 @@ public static class StandardCommandSchemas
         {
             CommandKey = "System@ProgramLoad",
             Summary = "動態載入 .prog/.pro 專案檔或 .init 單段腳本",
-            Parameters = { Req("path", ParamValueType.FilePath, 0, "程式檔案路徑或檔名", "file") },
+            Parameters = { Req("file", ParamValueType.FilePath, 0, "程式檔案路徑或檔名", "file") },
             ImplicitEffects = { "reload prog slot(s)" }
         });
 
@@ -580,7 +581,11 @@ public static class StandardCommandSchemas
         Reg(new CommandSchema
         {
             CommandKey = "Thread@Return",
-            Summary = "從 Call 子程序返回原呼叫點下一行",
+            Summary = "條件成立時從 Call 子程序返回原呼叫點下一行（省略 logic 表示無條件返回）",
+            Parameters =
+            {
+                Opt("logic", ParamValueType.LogicExpr, "True", 0, "返回條件（留空無條件返回）", ParamDisplayTier.Secondary, false, "condition")
+            },
             ImplicitEffects = { "pop call stack" }
         });
 
@@ -592,7 +597,7 @@ public static class StandardCommandSchemas
             {
                 Req("prog", ParamValueType.ProgramTarget, 0, "目標程式槽編號或名稱", "program"),
                 Req("thread", ParamValueType.Integer, 1, "目標執行緒編號 (0~12)", "threadNo"),
-                Opt("startLine", ParamValueType.Integer, "1", 2, "起始執行行號"),
+                Opt("startLine", ParamValueType.String, "1", 2, "起始執行行號或 Label 名稱", ParamDisplayTier.Secondary, false, "start", "label"),
                 Opt("logic", ParamValueType.LogicExpr, "True", 3, "啟動條件", ParamDisplayTier.Secondary, false, "condition")
             },
             ImplicitEffects = { "start Thread$(thread)#Run?" }
@@ -702,7 +707,7 @@ public static class StandardCommandSchemas
             Parameters =
             {
                 Req("lock", ParamValueType.String, 0, "互斥鎖名稱", "name", "lockName"),
-                Opt("timeoutSec", ParamValueType.Number, "5.0", 1, "取得鎖逾時秒數", ParamDisplayTier.Critical, false, "timeout"),
+                Opt("timeout", ParamValueType.Number, "5.0", 1, "取得鎖逾時秒數", ParamDisplayTier.Critical, false, "timeout"),
                 Opt("msg", ParamValueType.String, "", 2, "逾時錯誤訊息", ParamDisplayTier.Secondary, false, "message")
             },
             ImplicitEffects = { "acquire mutex $(lock)" }
@@ -719,9 +724,13 @@ public static class StandardCommandSchemas
         Reg(new CommandSchema
         {
             CommandKey = "Thread@GoOn",
-            Summary = "條件不成立時觸發系統暫停並等待，成立時繼續執行",
-            Parameters = { Opt("logic", ParamValueType.LogicExpr, "True", 0, "允許放行條件", ParamDisplayTier.Secondary, false, "condition") },
-            ImplicitEffects = { "SystemPause if !$(logic)" }
+            Summary = "Thread@Stop 的反相指令：條件成立時繼續執行，條件不成立時立即停止當前執行緒（可選記錄終止原因）",
+            Parameters =
+            {
+                Opt("logic", ParamValueType.LogicExpr, "True", 0, "允許繼續條件（False 時停止當前執行緒）", ParamDisplayTier.Secondary, false, "condition"),
+                Opt("msg", ParamValueType.String, "", 1, "條件不成立時之終止說明訊息", ParamDisplayTier.Secondary, false, "message")
+            },
+            ImplicitEffects = { "halt current thread if !$(logic)" }
         });
 
         Reg(new CommandSchema
@@ -1010,7 +1019,7 @@ public static class StandardCommandSchemas
             {
                 Req("var", ParamValueType.VariableName, 0, "目標陣列變數", "key"),
                 Req("val", ParamValueType.String, 1, "待插入元素值", "value"),
-                Req("condition", ParamValueType.String, 2, "插入條件/排序基準"),
+                Req("logic", ParamValueType.LogicExpr, 2, "插入條件/排序基準（如 >0、Before[B]、After[B]）", "condition"),
                 Opt("section", ParamValueType.String, "", 3, "目標分區")
             },
             ImplicitEffects = { "linsert $(var)" }
@@ -1218,8 +1227,8 @@ public static class StandardCommandSchemas
         {
             CommandKey = "Variable@VariableLoad",
             Summary = "從檔案載入變數資料至 VariableEngine",
-            Parameters = { Req("path", ParamValueType.FilePath, 0, "變數檔案路徑", "file") },
-            ImplicitEffects = { "load vars from $(path)" }
+            Parameters = { Req("file", ParamValueType.FilePath, 0, "變數檔案路徑", "file") },
+            ImplicitEffects = { "load vars from $(file)" }
         });
 
         Reg(new CommandSchema
@@ -1228,10 +1237,10 @@ public static class StandardCommandSchemas
             Summary = "將符合篩選樣式之變數持久化儲存至檔案",
             Parameters =
             {
-                Req("path", ParamValueType.FilePath, 0, "目標儲存路徑", "file"),
+                Req("file", ParamValueType.FilePath, 0, "目標儲存路徑", "file"),
                 Opt("patterns", ParamValueType.String, "", 1, "可選變數名稱/正則篩選清單 [P1;P2]")
             },
-            ImplicitEffects = { "save vars to $(path)" }
+            ImplicitEffects = { "save vars to $(file)" }
         });
 
         // =========================================================================
@@ -1362,9 +1371,9 @@ public static class StandardCommandSchemas
             Parameters =
             {
                 Req("pt", ParamValueType.String, 0, "目標點位名稱", "point"),
-                Req("axes", ParamValueType.String, 1, "啟用軸向字元組合 (如 XYZ, XY, Z)")
+                Req("axis", ParamValueType.String, 1, "啟用軸向字元組合 (如 XYZ, XY, Z)", "axes")
             },
-            ImplicitEffects = { "mask $(pt) axes=$(axes)" }
+            ImplicitEffects = { "mask $(pt) axis=$(axis)" }
         });
 
         Reg(new CommandSchema
@@ -1485,12 +1494,13 @@ public static class StandardCommandSchemas
         Reg(new CommandSchema
         {
             CommandKey = "Point&Path@ChkInRangeXY",
-            Summary = "檢查點位 XY 是否位於矩形安全範圍內，更新 $(pt)#InRange?",
+            Summary = "檢查點位是否位於安全範圍內（支援 axis 軸向組合：1點圓/球、2點長方形/長方體、3點異Z長方體/共面三角形、多點平面多邊形/稜柱體），更新 $(pt)#InRange? 與可選輸出 IO",
             Parameters =
             {
                 Req("pt", ParamValueType.String, 0, "受測點位名稱", "point"),
-                Req("rangePt", ParamValueType.String, 1, "定義矩形範圍之點位陣列"),
-                Out("var", ParamValueType.VariableName, "可選：將判定結果 (1/0) 存入指定變數", "dest")
+                Req("rangePt", ParamValueType.String, 1, "定義範圍之點位陣列（1點圓/2點矩形/3點立體或三角/多點多邊形）"),
+                Opt("axis", ParamValueType.String, "XY", null, "檢查軸向組合（預設 XY；如 XYZ、XZ、YZ、Z、XYZU）", ParamDisplayTier.Secondary, false, "axes"),
+                Out("io", ParamValueType.PortName, "可選：將判定結果 (ON/OFF) 寫入指定 IO", "dest")
             },
             ImplicitEffects = { "sets $(pt)#InRange?" }
         });
@@ -1501,14 +1511,14 @@ public static class StandardCommandSchemas
             Summary = "將影像像素座標透過校正矩陣轉換為機構點位",
             Parameters =
             {
-                Req("imaq", ParamValueType.String, 0, "來源影像校正名稱"),
+                Req("imaqs", ParamValueType.String, 0, "來源影像校正名稱", "imaq"),
                 Req("pt", ParamValueType.String, 1, "待轉換之點位名稱", "point")
             },
-            ImplicitEffects = { "transform $(pt) via $(imaq)" }
+            ImplicitEffects = { "transform $(pt) via $(imaqs)" }
         });
 
         // =====================================================================
-        // 6. MOTION 模組 (21 條指令) — mot / pt / speed* / timeoutSec*
+        // 6. MOTION 模組 (21 條指令) — mot / pt / speed* / timeout*
         // =====================================================================
 
         Reg(new CommandSchema
@@ -1519,7 +1529,8 @@ public static class StandardCommandSchemas
             {
                 Req("mot", ParamValueType.DriverName, 0, "運動控制器名稱（如 Motor1）", "motor", "motion", "name"),
                 Req("driver", ParamValueType.DriverName, 1, "驅動程式名稱（如 MockMotion）", "driverType"),
-                Opt("axes", ParamValueType.Integer, "", null, "控制軸數（選填）", ParamDisplayTier.Secondary, false, "Axes"),
+                Opt("device", ParamValueType.String, "", null, "實體裝置/連線位址 (COM 埠、IP、OPC-UA、卡號等)", ParamDisplayTier.Secondary, false, "DEVICE"),
+                Opt("axis", ParamValueType.Integer, "", null, "控制軸數（選填）", ParamDisplayTier.Secondary, false, "Axes", "axes"),
                 Opt("speed", ParamValueType.Number, "", null, "預設速度 mm/s（選填）", ParamDisplayTier.Secondary, false, "Speed"),
                 Opt("acc", ParamValueType.Number, "", null, "預設加速度 mm/s^2（選填）", ParamDisplayTier.Secondary, false, "Acc"),
                 Opt("dec", ParamValueType.Number, "", null, "預設減速度 mm/s^2（選填）", ParamDisplayTier.Secondary, false, "Dec"),
@@ -1531,14 +1542,26 @@ public static class StandardCommandSchemas
         Reg(new CommandSchema
         {
             CommandKey = "Motion@Home",
-            Summary = "執行軸控回原點復位，完成後建立 $(mot) 點位與 #Homed? 旗標",
+            Summary = "重置錯誤、啟用 Servo ON 並執行回原點（不於 Home 當下跳錯，異常由 Motion@GetState / WaitMotion 檢出）",
             Parameters =
             {
                 Req("mot", ParamValueType.DriverName, 0, "運動控制器名稱", "motor", "motion"),
-                Opt("axes", ParamValueType.String, "", 1, "指定回原點軸向（留空為全軸）", ParamDisplayTier.Secondary, false, "axis"),
-                Opt("mode", ParamValueType.String, "", 2, "原點復歸模式（選填）")
+                Opt("axis", ParamValueType.String, "", 1, "指定回原點軸向（如 Z、XY；Robot 或全軸可省略）", ParamDisplayTier.Secondary, false, "axes"),
+                new ParamSpec
+                {
+                    Name = "mode",
+                    Aliases = new[] { "homeMode" },
+                    LegacyIndex = 2,
+                    Direction = ParamDirection.Input,
+                    Required = false,
+                    DefaultValue = "",
+                    ValueType = ParamValueType.String,
+                    AllowedValues = new[] { "ResetCounter", "Positive", "Negative" },
+                    DisplayTier = ParamDisplayTier.Secondary,
+                    Description = "原點復歸模式（標準值：ResetCounter 歸零計數、Positive 正向復歸、Negative 反向復歸，亦可填驅動自訂模式）"
+                }
             },
-            ImplicitEffects = { "sets $(mot)#Homed? & $(mot)#Done?" }
+            ImplicitEffects = { "reset error & Servo ON, home $(mot) -> sets #Homed?" }
         });
 
         Reg(new CommandSchema
@@ -1559,7 +1582,7 @@ public static class StandardCommandSchemas
             Parameters =
             {
                 Req("mot", ParamValueType.DriverName, 0, "運動控制器名稱", "motor", "motion"),
-                Req("axes", ParamValueType.String, 1, "目標軸向組合（如 XY、XYZ）", "axis"),
+                Req("axis", ParamValueType.String, 1, "目標軸向組合（如 XY、XYZ）", "axes"),
                 ReqCrit("speed", ParamValueType.Number, 2, "移動速度（mm/s 或 %）"),
                 Req("coords", ParamValueType.String, 3, "依序對應軸向之座標值清單", "pos", "val")
             },
@@ -1573,7 +1596,7 @@ public static class StandardCommandSchemas
             Parameters =
             {
                 Req("mot", ParamValueType.DriverName, 0, "運動控制器名稱", "motor", "motion"),
-                Req("axes", ParamValueType.String, 1, "單軸軸向（如 X、Y、Z）", "axis"),
+                Req("axis", ParamValueType.String, 1, "單軸軸向（如 X、Y、Z）", "axes"),
                 ReqCrit("speed", ParamValueType.Number, 2, "移動速度"),
                 Req("coords", ParamValueType.String, 3, "目標座標值", "pos", "val")
             },
@@ -1629,10 +1652,10 @@ public static class StandardCommandSchemas
                 Req("mot", ParamValueType.DriverName, 0, "運動控制器名稱", "motor", "motion"),
                 ReqCrit("speed", ParamValueType.Number, 1, "移動速度"),
                 Req("pt", ParamValueType.String, 2, "目標點位名稱或座標", "point", "target"),
-                Opt("safeAxis", ParamValueType.Enum, "Z", null, "先退避之安全軸（Z / X / Y）", ParamDisplayTier.Critical, false, "axis"),
+                new ParamSpec { Name = "axis", Aliases = new[] { "safeAxis" }, Direction = ParamDirection.Input, Required = false, DefaultValue = "Z", ValueType = ParamValueType.Enum, AllowedValues = new[] { "Z", "X", "Y" }, DisplayTier = ParamDisplayTier.Critical, Description = "先退避之安全軸（Z / X / Y）" },
                 Opt("safePos", ParamValueType.Number, "0", null, "安全軸退避位置", ParamDisplayTier.Critical, false, "Z", "X", "Y")
             },
-            ImplicitEffects = { "retreat $(safeAxis)=$(safePos) & sets $(mot)#Busy?" }
+            ImplicitEffects = { "retreat $(axis)=$(safePos) & sets $(mot)#Busy?" }
         });
 
         Reg(new CommandSchema
@@ -1645,10 +1668,10 @@ public static class StandardCommandSchemas
                 Req("mot", ParamValueType.DriverName, 0, "運動控制器名稱", "motor", "motion"),
                 ReqCrit("speed", ParamValueType.Number, 1, "移動速度"),
                 Req("pt", ParamValueType.String, 2, "料盤點位名稱", "pallet", "point"),
-                Opt("safeAxis", ParamValueType.Enum, "Z", null, "先退避之安全軸（Z / X / Y）", ParamDisplayTier.Critical, false, "axis"),
+                new ParamSpec { Name = "axis", Aliases = new[] { "safeAxis" }, Direction = ParamDirection.Input, Required = false, DefaultValue = "Z", ValueType = ParamValueType.Enum, AllowedValues = new[] { "Z", "X", "Y" }, DisplayTier = ParamDisplayTier.Critical, Description = "先退避之安全軸（Z / X / Y）" },
                 Opt("safePos", ParamValueType.Number, "0", null, "安全軸退避位置", ParamDisplayTier.Critical, false, "Z", "X", "Y")
             },
-            ImplicitEffects = { "retreat $(safeAxis)=$(safePos), advances $(pt).index & sets $(mot)#Busy?" }
+            ImplicitEffects = { "retreat $(axis)=$(safePos), advances $(pt).index & sets $(mot)#Busy?" }
         });
 
         Reg(new CommandSchema
@@ -1718,7 +1741,7 @@ public static class StandardCommandSchemas
             Parameters =
             {
                 Req("mot", ParamValueType.DriverName, 0, "運動控制器名稱", "motor", "motion"),
-                Opt("timeoutSec", ParamValueType.Number, "30", null, "等待逾時秒數（預設 30s）", ParamDisplayTier.Critical, false, "TimeOut", "timeout")
+                Opt("timeout", ParamValueType.Number, "30", null, "等待逾時秒數（預設 30s）", ParamDisplayTier.Critical, false, "TimeOut")
             },
             ImplicitEffects = { "waits !$(mot)#Busy? & updates Motion#ErrorCode" }
         });
@@ -1731,7 +1754,7 @@ public static class StandardCommandSchemas
             Parameters =
             {
                 Req("mot", ParamValueType.DriverName, 0, "運動控制器名稱", "motor", "motion"),
-                Opt("timeoutSec", ParamValueType.Number, "30", null, "等待逾時秒數（預設 30s）", ParamDisplayTier.Critical, false, "TimeOut", "timeout")
+                Opt("timeout", ParamValueType.Number, "30", null, "等待逾時秒數（預設 30s）", ParamDisplayTier.Critical, false, "TimeOut")
             },
             ImplicitEffects = { "waits !$(mot)#Busy? & !$(mot)#Alarm? & updates Motion#ErrorCode" }
         });
@@ -1784,13 +1807,13 @@ public static class StandardCommandSchemas
             Parameters =
             {
                 Req("mot", ParamValueType.DriverName, 0, "運動控制器名稱", "motor", "motion"),
-                Req("cmd", ParamValueType.String, 1, "原生控制器指令字串", "command")
+                Req("cmd", ParamValueType.MultiLineText, 1, "原生控制器指令字串（支援多行腳本）", "command")
             },
             ImplicitEffects = { "runs native $(cmd) on $(mot)" }
         });
 
         // =====================================================================
-        // 7. CAPTURE 模組 (28 條指令) — cam / imaq / imaqs / pt / var
+        // 7. CAPTURE 模組 (28 條指令) — cam / imaqs / pt / var
         // =====================================================================
 
         Reg(new CommandSchema
@@ -1801,6 +1824,7 @@ public static class StandardCommandSchemas
             {
                 Req("cam", ParamValueType.DriverName, 0, "相機名稱（如 Cam0）", "imaq", "name"),
                 Req("driver", ParamValueType.DriverName, 1, "相機驅動名稱（如 MockCamera）", "driverType"),
+                Opt("device", ParamValueType.String, "", null, "實體相機索引/連線位址 (索引號、IP、序號等)", ParamDisplayTier.Secondary, false, "DEVICE"),
                 Opt("width", ParamValueType.Integer, "", null, "影像寬度 px（選填）", ParamDisplayTier.Secondary, false, "Width"),
                 Opt("height", ParamValueType.Integer, "", null, "影像高度 px（選填）", ParamDisplayTier.Secondary, false, "Height"),
                 Opt("exposure", ParamValueType.Number, "", null, "曝光時間 ms（選填）", ParamDisplayTier.Secondary, false, "Exposure"),
@@ -1827,27 +1851,27 @@ public static class StandardCommandSchemas
         Reg(new CommandSchema
         {
             CommandKey = "Capture@Snap",
-            Summary = "單次觸發相機取像至影像緩衝區，可選附加至 IMAQ 陣列",
+            Summary = "單次觸發相機取像並覆寫同名影像槽 $(cam)，可選同步 Append 至指定 IMAQ 陣列",
             SupportsErrorTrap = true,
             Parameters =
             {
-                Req("cam", ParamValueType.DriverName, 0, "相機名稱", "imaq"),
-                OutPos("imaqs", ParamValueType.String, 1, "可選：同步附加至指定 IMAQ 影像陣列", false, "array", "imaq")
+                Req("cam", ParamValueType.DriverName, 0, "相機名稱（預設取像覆寫同名影像槽 $(cam)）", "imaq"),
+                Opt("imaqs", ParamValueType.String, "", 1, "可選：覆寫 $(cam) 後同步 Append 至指定 IMAQ 影像陣列", ParamDisplayTier.Secondary, false, "array", "imaq")
             },
-            ImplicitEffects = { "sets $(cam)#OK?" }
+            ImplicitEffects = { "overwrites imaq $(cam) & sets $(cam)#OK?" }
         });
 
         Reg(new CommandSchema
         {
             CommandKey = "Capture@Trigger",
-            Summary = "執行飛拍觸發取像，可選連同 Metadata 附加至 IMAQ 陣列",
+            Summary = "執行飛拍觸發取像並覆寫同名影像槽 $(cam)，可選連同 Metadata 同步 Append 至指定 IMAQ 陣列",
             SupportsErrorTrap = true,
             Parameters =
             {
-                Req("cam", ParamValueType.DriverName, 0, "相機名稱", "imaq"),
-                OutPos("imaqs", ParamValueType.String, 1, "可選：同步附加至指定 IMAQ 影像陣列", false, "array", "imaq")
+                Req("cam", ParamValueType.DriverName, 0, "相機名稱（預設取像覆寫同名影像槽 $(cam)）", "imaq"),
+                Opt("imaqs", ParamValueType.String, "", 1, "可選：覆寫 $(cam) 後同步 Append 至指定 IMAQ 影像陣列", ParamDisplayTier.Secondary, false, "array", "imaq")
             },
-            ImplicitEffects = { "sets $(cam)#OK?" }
+            ImplicitEffects = { "overwrites imaq $(cam) & sets $(cam)#OK?" }
         });
 
         Reg(new CommandSchema
@@ -1867,10 +1891,10 @@ public static class StandardCommandSchemas
             Summary = "自檔案載入單張影像至指定 ImageEngine 槽位",
             Parameters =
             {
-                Req("imaq", ParamValueType.String, 0, "目標影像槽位名稱", "cam"),
-                Req("path", ParamValueType.FilePath, 1, "來源圖檔路徑", "file")
+                Req("imaqs", ParamValueType.String, 0, "目標影像槽位名稱", "cam", "imaq"),
+                Req("file", ParamValueType.FilePath, 1, "來源圖檔路徑", "file")
             },
-            ImplicitEffects = { "loads $(path) into imaq $(imaq)" }
+            ImplicitEffects = { "loads $(file) into imaq $(imaqs)" }
         });
 
         Reg(new CommandSchema
@@ -1879,22 +1903,22 @@ public static class StandardCommandSchemas
             Summary = "將影像連同校正與中繼資料儲存為圖檔",
             Parameters =
             {
-                Req("imaq", ParamValueType.String, 0, "來源影像槽位名稱", "cam"),
-                Req("path", ParamValueType.FilePath, 1, "輸出圖檔路徑", "file"),
+                Req("imaqs", ParamValueType.String, 0, "來源影像槽位名稱", "cam", "imaq"),
+                Req("file", ParamValueType.FilePath, 1, "輸出圖檔路徑", "file"),
                 Opt("burnOverlays", ParamValueType.Boolean, "false", null, "是否將視覺疊加層燒錄進圖檔", ParamDisplayTier.Secondary, false, "BurnOverlays", "IncludeOverlays")
             },
-            ImplicitEffects = { "saves imaq $(imaq) to $(path)" }
+            ImplicitEffects = { "saves imaq $(imaqs) to $(file)" }
         });
 
         Reg(new CommandSchema
         {
             CommandKey = "Capture@ClearImaq",
-            Summary = "清除指定或全部 IMAQ 影像緩衝陣列",
+            Summary = "清除指定 IMAQ 影像槽位或影像陣列",
             Parameters =
             {
-                Opt("imaq", ParamValueType.String, "", 0, "影像陣列名稱（留空代表清除全部）", ParamDisplayTier.Primary, false, "imaqs", "cam")
+                Req("imaqs", ParamValueType.String, 0, "目標影像陣列名稱", "imaq", "cam")
             },
-            ImplicitEffects = { "clears imaq $(imaq)" }
+            ImplicitEffects = { "clears imaq $(imaqs)" }
         });
 
         Reg(new CommandSchema
@@ -1904,21 +1928,21 @@ public static class StandardCommandSchemas
             Parameters =
             {
                 Req("imaqs", ParamValueType.String, 0, "目標 IMAQ 影像陣列名稱", "imaq", "array"),
-                Req("path", ParamValueType.FilePath, 1, "來源圖檔或資料夾路徑", "file")
+                Req("file", ParamValueType.FilePath, 1, "來源圖檔路徑或正規表示式（如 PICTURE/CAM0/img_\\d+\\.png）", "pattern", "path")
             },
-            ImplicitEffects = { "appends $(path) into imaqs $(imaqs)" }
+            ImplicitEffects = { "appends $(file) into imaqs $(imaqs)" }
         });
 
         Reg(new CommandSchema
         {
             CommandKey = "Capture@LoadNextImaq",
-            Summary = "從 IMAQ 影像陣列取出下一張影像至單張目標槽位",
+            Summary = "從 IMAQ 影像陣列取出下一張影像載入至指定 Capture UI 影像槽位",
             Parameters =
             {
-                Req("imaqs", ParamValueType.String, 0, "來源 IMAQ 影像陣列名稱", "src"),
-                Req("imaq", ParamValueType.String, 1, "目標單張影像槽位名稱", "dst", "cam")
+                Req("cam", ParamValueType.DriverName, 0, "目標 Capture UI 影像槽位/相機名稱", "to", "dst", "imaq"),
+                Req("imaqs", ParamValueType.String, 1, "來源 IMAQ 影像陣列名稱", "src", "array")
             },
-            ImplicitEffects = { "advances $(imaqs).index -> $(imaq)" }
+            ImplicitEffects = { "advances $(imaqs).index -> $(cam)" }
         });
 
         Reg(new CommandSchema
@@ -1939,10 +1963,10 @@ public static class StandardCommandSchemas
             Summary = "將指定影像槽位畫面顯示至人機面板控制項",
             Parameters =
             {
-                Req("imaq", ParamValueType.String, 0, "來源影像槽位名稱", "cam"),
-                Req("ctrl", ParamValueType.String, 1, "目標人機影像控制項名稱", "control", "target")
+                Req("cam", ParamValueType.DriverName, 0, "Capture UI 影像槽位/相機名稱", "imaqs", "imaq"),
+                Req("ui", ParamValueType.String, 1, "目標人機影像控制項名稱", "ctrl", "control", "target")
             },
-            ImplicitEffects = { "renders imaq $(imaq) -> UI $(ctrl)" }
+            ImplicitEffects = { "renders imaq $(cam) -> UI $(ui)" }
         });
 
         Reg(new CommandSchema
@@ -1951,10 +1975,10 @@ public static class StandardCommandSchemas
             Summary = "設定指定影像之感興趣檢測區域 (ROI: X,Y,W,H)",
             Parameters =
             {
-                Req("imaq", ParamValueType.String, 0, "目標影像槽位名稱", "cam"),
+                Req("cam", ParamValueType.DriverName, 0, "Capture UI 影像槽位/相機名稱", "imaqs", "imaq"),
                 Req("roi", ParamValueType.String, 1, "ROI 區域定義（如 \"10,20,300,200\"）")
             },
-            ImplicitEffects = { "sets ROI on $(imaq)" }
+            ImplicitEffects = { "sets ROI on $(cam)" }
         });
 
         Reg(new CommandSchema
@@ -1963,10 +1987,10 @@ public static class StandardCommandSchemas
             Summary = "將目前影像 ROI 區域存檔",
             Parameters =
             {
-                Req("imaq", ParamValueType.String, 0, "來源影像槽位名稱", "cam"),
-                Req("path", ParamValueType.FilePath, 1, "儲存路徑", "file")
+                Req("cam", ParamValueType.DriverName, 0, "Capture UI 影像槽位/相機名稱", "imaqs", "imaq"),
+                Req("file", ParamValueType.FilePath, 1, "儲存路徑", "file")
             },
-            ImplicitEffects = { "saves ROI of $(imaq) to $(path)" }
+            ImplicitEffects = { "saves ROI of $(cam) to $(file)" }
         });
 
         Reg(new CommandSchema
@@ -1975,11 +1999,11 @@ public static class StandardCommandSchemas
             Summary = "依基準點位與新點位平移補償影像 ROI 位置",
             Parameters =
             {
-                Req("imaq", ParamValueType.String, 0, "目標影像槽位名稱", "cam"),
+                Req("cam", ParamValueType.DriverName, 0, "Capture UI 影像槽位/相機名稱", "imaqs", "imaq"),
                 Req("basePt", ParamValueType.String, 1, "原始基準點位"),
                 Req("newPt", ParamValueType.String, 2, "新量測基準點位")
             },
-            ImplicitEffects = { "translates ROI on $(imaq)" }
+            ImplicitEffects = { "translates ROI on $(cam)" }
         });
 
         Reg(new CommandSchema
@@ -1988,10 +2012,10 @@ public static class StandardCommandSchemas
             Summary = "自校正圖檔載入像素至實體座標轉換矩陣",
             Parameters =
             {
-                Req("imaq", ParamValueType.String, 0, "目標影像槽位名稱", "cam"),
-                Req("path", ParamValueType.FilePath, 1, "校正圖檔路徑", "file")
+                Req("cam", ParamValueType.DriverName, 0, "Capture UI 影像槽位/相機名稱", "imaqs", "imaq"),
+                Req("file", ParamValueType.FilePath, 1, "校正圖檔路徑", "file")
             },
-            ImplicitEffects = { "loads calibration onto $(imaq)" }
+            ImplicitEffects = { "loads calibration onto $(cam)" }
         });
 
         Reg(new CommandSchema
@@ -2000,13 +2024,13 @@ public static class StandardCommandSchemas
             Summary = "手動設定影像之比例尺 (mm/px)、原點與旋轉角校正",
             Parameters =
             {
-                Req("imaq", ParamValueType.String, 0, "目標影像槽位名稱", "cam"),
+                Req("cam", ParamValueType.DriverName, 0, "Capture UI 影像槽位/相機名稱", "imaqs", "imaq"),
                 Opt("scale", ParamValueType.Number, "0.05", 1, "像素比例尺 (mm/px)", ParamDisplayTier.Primary, false, "Scale"),
                 Opt("originX", ParamValueType.Number, "0", null, "原點 X 座標", ParamDisplayTier.Secondary, false, "OriginX"),
                 Opt("originY", ParamValueType.Number, "0", null, "原點 Y 座標", ParamDisplayTier.Secondary, false, "OriginY"),
                 Opt("angle", ParamValueType.Number, "0", null, "旋轉角度 (deg)", ParamDisplayTier.Secondary, false, "Angle")
             },
-            ImplicitEffects = { "applies manual calibration to $(imaq)" }
+            ImplicitEffects = { "applies manual calibration to $(cam)" }
         });
 
         Reg(new CommandSchema
@@ -2015,10 +2039,10 @@ public static class StandardCommandSchemas
             Summary = "依點位陣列建立視覺影像座標系",
             Parameters =
             {
-                Req("imaq", ParamValueType.String, 0, "目標影像槽位名稱", "cam"),
+                Req("cam", ParamValueType.DriverName, 0, "Capture UI 影像槽位/相機名稱", "imaqs", "imaq"),
                 Req("pt", ParamValueType.String, 1, "定義座標系之點位陣列名稱", "point")
             },
-            ImplicitEffects = { "sets vision coord on $(imaq)" }
+            ImplicitEffects = { "sets vision coord on $(cam)" }
         });
 
         Reg(new CommandSchema
@@ -2027,11 +2051,11 @@ public static class StandardCommandSchemas
             Summary = "以 X/Y 雙邊端點建立視覺影像座標系",
             Parameters =
             {
-                Req("imaq", ParamValueType.String, 0, "目標影像槽位名稱", "cam"),
+                Req("cam", ParamValueType.DriverName, 0, "Capture UI 影像槽位/相機名稱", "imaqs", "imaq"),
                 Req("xPt", ParamValueType.String, 1, "X 軸點位名稱", "xEnd"),
                 Req("yPt", ParamValueType.String, 2, "Y 軸點位名稱", "yEnd")
             },
-            ImplicitEffects = { "sets 2-edge coord on $(imaq)" }
+            ImplicitEffects = { "sets 2-edge coord on $(cam)" }
         });
 
         Reg(new CommandSchema
@@ -2040,12 +2064,12 @@ public static class StandardCommandSchemas
             Summary = "以原點與 X/Y 雙邊建立視覺影像座標系",
             Parameters =
             {
-                Req("imaq", ParamValueType.String, 0, "目標影像槽位名稱", "cam"),
+                Req("cam", ParamValueType.DriverName, 0, "Capture UI 影像槽位/相機名稱", "imaqs", "imaq"),
                 Req("orgPt", ParamValueType.String, 1, "原點點位名稱", "org"),
                 Req("xPt", ParamValueType.String, 2, "X 軸點位名稱", "xEnd"),
                 Req("yPt", ParamValueType.String, 3, "Y 軸點位名稱", "yEnd")
             },
-            ImplicitEffects = { "sets org+2-edge coord on $(imaq)" }
+            ImplicitEffects = { "sets org+2-edge coord on $(cam)" }
         });
 
         foreach (var (findKey, findDesc) in new[]
@@ -2063,7 +2087,7 @@ public static class StandardCommandSchemas
                 Summary = findDesc,
                 Parameters =
                 {
-                    Req("imaq", ParamValueType.String, 0, "來源影像槽位名稱", "cam"),
+                    Req("cam", ParamValueType.DriverName, 0, "Capture UI 影像槽位/相機名稱", "imaqs", "imaq"),
                     OutPos("pt", ParamValueType.String, 1, "量測結果輸出點位名稱", false, "point", "dest")
                 },
                 ImplicitEffects = { "sets $(pt)#Find?" }
@@ -2083,8 +2107,8 @@ public static class StandardCommandSchemas
                 Summary = matchDesc,
                 Parameters =
                 {
-                    Req("imaq", ParamValueType.String, 0, "來源影像槽位名稱", "cam"),
-                    Req("template", ParamValueType.FilePath, 1, "樣板圖檔或模型檔路徑", "file", "path"),
+                    Req("cam", ParamValueType.DriverName, 0, "Capture UI 影像槽位/相機名稱", "imaqs", "imaq"),
+                    Req("file", ParamValueType.FilePath, 1, "樣板圖檔或模型檔路徑", "template", "path"),
                     Opt("angle", ParamValueType.Number, "", 4, "允許旋轉角度容差範圍 (deg)"),
                     OutPos("var", ParamValueType.VariableName, 2, "輸出比對分數之變數名稱", false, "score", "scoreVar"),
                     OutPos("pt", ParamValueType.String, 3, "輸出比對結果座標之點位名稱", false, "point", "dest")
@@ -2094,7 +2118,7 @@ public static class StandardCommandSchemas
         }
 
         // =====================================================================
-        // 8. DAQ 模組 (18 條指令) — daq / wav / wavs / timeoutSec*
+        // 8. DAQ 模組 (18 條指令) — daq / wav / wavs / timeout*
         // =====================================================================
 
         Reg(new CommandSchema
@@ -2105,36 +2129,37 @@ public static class StandardCommandSchemas
             {
                 Req("daq", ParamValueType.DriverName, 0, "DAQ 裝置名稱（如 Daq0）", "name"),
                 Req("driver", ParamValueType.DriverName, 1, "DAQ 驅動名稱（如 MockDAQ）", "driverType"),
-                Opt("rate", ParamValueType.Number, "", null, "取樣頻率 Hz（選填）", ParamDisplayTier.Secondary, false, "Rate"),
-                Opt("count", ParamValueType.Integer, "", null, "緩衝樣本點數（選填）", ParamDisplayTier.Secondary, false, "Count"),
+                Opt("device", ParamValueType.String, "", null, "實體裝置/連線位址 (如 Dev1、COM 埠、IP、OPC-UA 等)", ParamDisplayTier.Secondary, false, "DEVICE"),
+                Opt("rate", ParamValueType.Number, "", null, "取樣頻率 Hz（與 sec 決定環形緩衝容量 = rate * sec）", ParamDisplayTier.Secondary, false, "Rate"),
+                Opt("sec", ParamValueType.Number, "", null, "驅動環形緩衝區時間長度（秒，容量 = rate * sec）", ParamDisplayTier.Secondary, false, "Sec", "Duration", "BufferSec", "count", "Count"),
                 Opt("wave", ParamValueType.String, "", null, "模擬波形類型（選填）", ParamDisplayTier.Secondary, false, "Wave"),
                 Opt("options", ParamValueType.String, "", 2, "其他驅動擴充鍵值參數", ParamDisplayTier.Secondary, false, "extra")
             },
-            ImplicitEffects = { "reg DAQ driver $(daq)" }
+            ImplicitEffects = { "reg DAQ driver $(daq) with ring buffer (rate*sec)" }
         });
 
         Reg(new CommandSchema
         {
             CommandKey = "DAQ@Start",
-            Summary = "啟動 DAQ 裝置連續資料採樣",
+            Summary = "啟動 DAQ 驅動連續採樣並以環形緩衝區持續寫入資料",
             SupportsErrorTrap = true,
             Parameters =
             {
                 Req("daq", ParamValueType.DriverName, 0, "DAQ 裝置名稱")
             },
-            ImplicitEffects = { "starts sampling on $(daq)" }
+            ImplicitEffects = { "starts ring-buffer acquisition on $(daq)" }
         });
 
         Reg(new CommandSchema
         {
             CommandKey = "DAQ@Stop",
-            Summary = "停止 DAQ 裝置連續資料採樣",
+            Summary = "停止 DAQ 驅動連續採樣（保留環形緩衝區內既有資料）",
             SupportsErrorTrap = true,
             Parameters =
             {
                 Req("daq", ParamValueType.DriverName, 0, "DAQ 裝置名稱")
             },
-            ImplicitEffects = { "stops sampling on $(daq)" }
+            ImplicitEffects = { "stops ring-buffer acquisition on $(daq)" }
         });
 
         Reg(new CommandSchema
@@ -2145,7 +2170,7 @@ public static class StandardCommandSchemas
             Parameters =
             {
                 Req("daq", ParamValueType.DriverName, 0, "DAQ 裝置名稱"),
-                Opt("timeoutSec", ParamValueType.Number, "5", null, "等待逾時秒數（預設 5s）", ParamDisplayTier.Critical, false, "TimeOut", "timeout")
+                Opt("timeout", ParamValueType.Number, "5", null, "等待逾時秒數（預設 5s）", ParamDisplayTier.Critical, false, "TimeOut")
             },
             ImplicitEffects = { "waits $(daq)#OK?" }
         });
@@ -2153,28 +2178,28 @@ public static class StandardCommandSchemas
         Reg(new CommandSchema
         {
             CommandKey = "DAQ@AnalogIn",
-            Summary = "讀取 DAQ 單點類比輸入，可選附加寫入目標波形",
+            Summary = "自 DAQ 驅動環形緩衝區取出最新一筆單點數值並寫入指定變數（供 Variable 條件比對）",
             SupportsErrorTrap = true,
             Parameters =
             {
                 Req("daq", ParamValueType.DriverName, 0, "DAQ 裝置名稱"),
-                OutPos("wav", ParamValueType.String, 1, "可選：將單點樣本附加至目標波形緩衝", false, "waveform", "wf")
+                OutPos("var", ParamValueType.VariableName, 1, "寫入最新單點類比數值之目標變數名稱", true, "target", "val", "wav")
             },
-            ImplicitEffects = { "sets $(daq)#OK?" }
+            ImplicitEffects = { "reads latest sample -> $(var) & sets $(daq)#OK?" }
         });
 
         Reg(new CommandSchema
         {
             CommandKey = "DAQ@AnalogInWaveForm",
-            Summary = "採集一段連續類比波形，可選複製輸出至指定波形名稱",
+            Summary = "自 DAQ 驅動環形緩衝區擷取最近指定時間長度 (sec) 之波形並輸出至目標波形",
             SupportsErrorTrap = true,
             Parameters =
             {
                 Req("daq", ParamValueType.DriverName, 0, "DAQ 裝置名稱"),
-                Opt("sec", ParamValueType.Number, "", 1, "採樣時間長度（秒，選填）", ParamDisplayTier.Secondary, false, "duration"),
-                OutPos("wav", ParamValueType.String, 2, "可選：將採集結果複製存至指定波形名稱", false, "waveform", "wf")
+                Opt("sec", ParamValueType.Number, "", 1, "擷取最近波形之時間長度（秒；留空取整段環形緩衝）", ParamDisplayTier.Secondary, false, "duration"),
+                OutPos("wav", ParamValueType.String, 2, "可選：將擷取之最近波形寫入指定波形名稱", false, "waveform", "wf")
             },
-            ImplicitEffects = { "sets $(daq)#OK?" }
+            ImplicitEffects = { "slices recent $(sec)s waveform from $(daq) ring buffer & sets $(daq)#OK?" }
         });
 
         Reg(new CommandSchema
@@ -2212,35 +2237,35 @@ public static class StandardCommandSchemas
                 Req("wav", ParamValueType.String, 0, "目標波形名稱", "waveform", "wf"),
                 Opt("type", ParamValueType.Enum, "Sine", 1, "波形類型（Sine/Square/Triangle/Press）", ParamDisplayTier.Primary, false, "Type"),
                 Opt("rate", ParamValueType.Number, "1000", null, "取樣率 Hz", ParamDisplayTier.Secondary, false, "Rate"),
-                Opt("count", ParamValueType.Integer, "200", null, "樣本點數", ParamDisplayTier.Secondary, false, "Count"),
+                Opt("sec", ParamValueType.Number, "1", null, "波形時間長度（秒；樣本點數 = rate * sec）", ParamDisplayTier.Secondary, false, "Sec", "duration"),
                 Opt("amp", ParamValueType.Number, "5", null, "振幅大小", ParamDisplayTier.Secondary, false, "Amp"),
                 Opt("offset", ParamValueType.Number, "0", null, "直流偏置", ParamDisplayTier.Secondary, false, "Offset")
             },
-            ImplicitEffects = { "generates wav $(wav)" }
+            ImplicitEffects = { "generates wav $(wav) (rate*sec)" }
         });
 
         Reg(new CommandSchema
         {
             CommandKey = "DAQ@WaveFormLoad",
-            Summary = "自檔案載入波形資料至 DaqEngine",
+            Summary = "自指定檔案載入波形資料至 DaqEngine",
             Parameters =
             {
                 Req("wav", ParamValueType.String, 0, "目標波形名稱", "waveform", "wf"),
-                Opt("path", ParamValueType.FilePath, "", 1, "來源檔案路徑（留空依波形名預設路徑）", ParamDisplayTier.Secondary, false, "file")
+                Req("file", ParamValueType.FilePath, 1, "來源波形檔案路徑", "path")
             },
-            ImplicitEffects = { "loads wav $(wav)" }
+            ImplicitEffects = { "loads $(file) into wav $(wav)" }
         });
 
         Reg(new CommandSchema
         {
             CommandKey = "DAQ@WaveFormSave",
-            Summary = "將指定波形資料儲存至檔案",
+            Summary = "將指定波形資料儲存至目標檔案",
             Parameters =
             {
                 Req("wav", ParamValueType.String, 0, "來源波形名稱", "waveform", "wf"),
-                Opt("path", ParamValueType.FilePath, "", 1, "輸出檔案路徑（留空依波形名預設路徑）", ParamDisplayTier.Secondary, false, "file")
+                Req("file", ParamValueType.FilePath, 1, "輸出波形檔案路徑", "path")
             },
-            ImplicitEffects = { "saves wav $(wav)" }
+            ImplicitEffects = { "saves wav $(wav) to $(file)" }
         });
 
         Reg(new CommandSchema
@@ -2283,14 +2308,14 @@ public static class StandardCommandSchemas
         Reg(new CommandSchema
         {
             CommandKey = "DAQ@CompareAvgInRange",
-            Summary = "檢查波形區間平均值是否落於 [min, max] 範圍並更新 $(wav)#OK?",
+            Summary = "檢查波形指定時間區間（秒）平均值是否落於 [min, max] 範圍並更新 $(wav)#OK?",
             Parameters =
             {
                 Req("wav", ParamValueType.String, 0, "受測波形名稱", "waveform", "wf"),
                 Req("max", ParamValueType.Number, 1, "上限門檻值"),
                 Req("min", ParamValueType.Number, 2, "下限門檻值"),
-                Opt("start", ParamValueType.Integer, "0", 3, "起始樣本索引", ParamDisplayTier.Secondary, false, "startIdx"),
-                Opt("end", ParamValueType.Integer, "-1", 4, "結束樣本索引（-1 代表結尾）", ParamDisplayTier.Secondary, false, "endIdx")
+                Opt("start", ParamValueType.Number, "0", 3, "起始時間（秒）", ParamDisplayTier.Secondary, false, "startSec"),
+                Opt("end", ParamValueType.Number, "-1", 4, "結束時間（秒；-1 代表結尾）", ParamDisplayTier.Secondary, false, "endSec")
             },
             ImplicitEffects = { "sets $(wav)#OK?" }
         });
@@ -2298,14 +2323,14 @@ public static class StandardCommandSchemas
         Reg(new CommandSchema
         {
             CommandKey = "DAQ@CompareMaxMinInRange",
-            Summary = "檢查波形區間最大與最小值是否皆落於 [min, max] 並更新 $(wav)#OK?",
+            Summary = "檢查波形指定時間區間（秒）最大與最小值是否皆落於 [min, max] 並更新 $(wav)#OK?",
             Parameters =
             {
                 Req("wav", ParamValueType.String, 0, "受測波形名稱", "waveform", "wf"),
                 Req("max", ParamValueType.Number, 1, "上限門檻值"),
                 Req("min", ParamValueType.Number, 2, "下限門檻值"),
-                Opt("start", ParamValueType.Integer, "0", 3, "起始樣本索引", ParamDisplayTier.Secondary, false, "startIdx"),
-                Opt("end", ParamValueType.Integer, "-1", 4, "結束樣本索引（-1 代表結尾）", ParamDisplayTier.Secondary, false, "endIdx")
+                Opt("start", ParamValueType.Number, "0", 3, "起始時間（秒）", ParamDisplayTier.Secondary, false, "startSec"),
+                Opt("end", ParamValueType.Number, "-1", 4, "結束時間（秒；-1 代表結尾）", ParamDisplayTier.Secondary, false, "endSec")
             },
             ImplicitEffects = { "sets $(wav)#OK?" }
         });
@@ -2330,13 +2355,13 @@ public static class StandardCommandSchemas
             Parameters =
             {
                 Req("wav", ParamValueType.String, 0, "來源波形名稱", "waveform", "wf"),
-                Req("ctrl", ParamValueType.String, 1, "人機波形控制項名稱或 .svg/.html 檔名", "control", "target")
+                Req("ui", ParamValueType.String, 1, "人機波形控制項名稱或 .svg/.html 檔名", "ctrl", "control", "target")
             },
-            ImplicitEffects = { "renders wav $(wav) -> $(ctrl)" }
+            ImplicitEffects = { "renders wav $(wav) -> $(ui)" }
         });
 
         // =====================================================================
-        // 9. USER 模組 (21 條指令) — panel / ctrl / ctrls / var
+        // 9. USER 模組 (21 條指令) — panel / ui / var
         // =====================================================================
 
         Reg(new CommandSchema
@@ -2360,10 +2385,10 @@ public static class StandardCommandSchemas
 
         foreach (var (visKey, visDesc, visEff) in new[]
         {
-            ("User@ShowControl", "顯示一個或多個人機控制項", "shows $(ctrls)"),
-            ("User@HideControl", "隱藏一個或多個人機控制項", "hides $(ctrls)"),
-            ("User@EnableControl", "啟用一個或多個可互動人機控制項", "enables $(ctrls)"),
-            ("User@DisableControl", "停用（灰化鎖定）一個或多個控制項", "disables $(ctrls)")
+            ("User@ShowControl", "顯示一個或多個人機控制項", "shows $(ui)"),
+            ("User@HideControl", "隱藏一個或多個人機控制項", "hides $(ui)"),
+            ("User@EnableControl", "啟用一個或多個可互動人機控制項", "enables $(ui)"),
+            ("User@DisableControl", "停用（灰化鎖定）一個或多個控制項", "disables $(ui)")
         })
         {
             Reg(new CommandSchema
@@ -2372,7 +2397,7 @@ public static class StandardCommandSchemas
                 Summary = visDesc,
                 Parameters =
                 {
-                    Req("ctrls", ParamValueType.PortList, 0, "控制項名稱或清單（如 Btn1 或 [Btn1;Btn2]）", "ctrl", "control")
+                    Req("ui", ParamValueType.PortList, 0, "控制項名稱或清單（如 Btn1 或 [Btn1;Btn2]）", "ctrls", "ctrl", "control")
                 },
                 ImplicitEffects = { visEff }
             });
@@ -2381,13 +2406,13 @@ public static class StandardCommandSchemas
         Reg(new CommandSchema
         {
             CommandKey = "User@GetControlValue",
-            Summary = "讀取人機控制項目前數值並輸出至指定變數（未指定預設存至 $UserPanel_$(ctrl)）",
+            Summary = "讀取人機控制項目前數值並輸出至指定變數（未指定預設存至 $UserPanel_$(ui)）",
             Parameters =
             {
-                Req("ctrl", ParamValueType.String, 0, "來源控制項名稱", "control"),
+                Req("ui", ParamValueType.String, 0, "來源控制項名稱", "ctrl", "control"),
                 OutPos("var", ParamValueType.VariableName, 1, "可選：接收數值之目標變數名稱（裸名稱）", false, "dest")
             },
-            ImplicitEffects = { "reads UI $(ctrl) -> var (default $UserPanel_$(ctrl))" }
+            ImplicitEffects = { "reads UI $(ui) -> var (default $UserPanel_$(ui))" }
         });
 
         Reg(new CommandSchema
@@ -2396,10 +2421,10 @@ public static class StandardCommandSchemas
             Summary = "通用寫入人機控制項數值（不觸發使用者事件）",
             Parameters =
             {
-                Req("ctrl", ParamValueType.String, 0, "目標控制項名稱", "control"),
+                Req("ui", ParamValueType.String, 0, "目標控制項名稱", "ctrl", "control"),
                 Req("val", ParamValueType.String, 1, "寫入數值或文字", "value", "text")
             },
-            ImplicitEffects = { "sets UI $(ctrl)=$(val)" }
+            ImplicitEffects = { "sets UI $(ui)=$(val)" }
         });
 
         Reg(new CommandSchema
@@ -2419,25 +2444,25 @@ public static class StandardCommandSchemas
         Reg(new CommandSchema
         {
             CommandKey = "User@ButtonValue",
-            Summary = "設定按鈕開關狀態（不觸發點擊事件）",
+            Summary = "設定按鈕開關狀態（不觸發點擊事件；支援 $logic 邏輯運算式）",
             Parameters =
             {
-                Req("ctrl", ParamValueType.String, 0, "按鈕控制項名稱", "btn", "control"),
-                Opt("on", ParamValueType.Boolean, "true", 1, "開關狀態（true/false）", ParamDisplayTier.Primary, false, "logic", "val", "state")
+                Req("ui", ParamValueType.String, 0, "按鈕控制項名稱", "ctrl", "btn", "control"),
+                Req("logic", ParamValueType.LogicExpr, 1, "開關狀態或 $logic 邏輯運算式（如 True/False/AutoMode?）", "on", "val", "state")
             },
-            ImplicitEffects = { "sets button $(ctrl)=$(on)" }
+            ImplicitEffects = { "sets button $(ui)=eval($(logic))" }
         });
 
         Reg(new CommandSchema
         {
             CommandKey = "User@ButtonTrigger",
-            Summary = "程式觸發按鈕狀態並同步觸發事件與 UserPanel#$(ctrl)? 旗標",
+            Summary = "程式觸發按鈕 ON/OFF 狀態並同步觸發事件與 UserPanel#$(ui)? 旗標",
             Parameters =
             {
-                Req("ctrl", ParamValueType.String, 0, "按鈕控制項名稱", "btn", "control"),
-                Opt("on", ParamValueType.Boolean, "true", 1, "觸發狀態（預設 true）", ParamDisplayTier.Primary, false, "logic", "val", "state")
+                Req("ui", ParamValueType.String, 0, "按鈕控制項名稱", "ctrl", "btn", "control"),
+                Req("logic", ParamValueType.LogicExpr, 1, "觸發 ON/OFF 狀態或 $logic 邏輯運算式（如 True/False/Ready?）", "on", "val", "state")
             },
-            ImplicitEffects = { "fires button $(ctrl) & sets UserPanel#$(ctrl)?" }
+            ImplicitEffects = { "fires button $(ui)=eval($(logic)) & sets UserPanel#$(ui)?" }
         });
 
         Reg(new CommandSchema
@@ -2446,10 +2471,10 @@ public static class StandardCommandSchemas
             Summary = "更新按鈕顯示文字標題",
             Parameters =
             {
-                Req("ctrl", ParamValueType.String, 0, "按鈕控制項名稱", "btn", "control"),
+                Req("ui", ParamValueType.String, 0, "按鈕控制項名稱", "ctrl", "btn", "control"),
                 Req("text", ParamValueType.String, 1, "按鈕顯示文字", "val")
             },
-            ImplicitEffects = { "sets button $(ctrl).Text" }
+            ImplicitEffects = { "sets button $(ui).Text" }
         });
 
         foreach (var (blinkKey, blinkDesc) in new[]
@@ -2465,10 +2490,10 @@ public static class StandardCommandSchemas
                 Summary = blinkDesc,
                 Parameters =
                 {
-                    Req("ctrl", ParamValueType.String, 0, "控制項名稱", "btn", "box", "combo", "control"),
-                    Opt("on", ParamValueType.Boolean, "true", 1, "是否閃爍（true/false）", ParamDisplayTier.Primary, false, "logic", "val", "state")
+                    Req("ui", ParamValueType.String, 0, "控制項名稱", "ctrl", "btn", "box", "combo", "control"),
+                    Req("logic", ParamValueType.LogicExpr, 1, "閃爍開關狀態或 $logic 邏輯運算式（如 True/False/Alarm?）", "on", "val", "state")
                 },
-                ImplicitEffects = { "sets $(ctrl).Blinking=$(on)" }
+                ImplicitEffects = { "sets $(ui).Blinking=eval($(logic))" }
             });
         }
 
@@ -2478,10 +2503,10 @@ public static class StandardCommandSchemas
             Summary = "更新文字框顯示內容（不觸發變更事件）",
             Parameters =
             {
-                Req("ctrl", ParamValueType.String, 0, "文字框控制項名稱", "box", "control"),
+                Req("ui", ParamValueType.String, 0, "文字框控制項名稱", "ctrl", "box", "control"),
                 Req("text", ParamValueType.String, 1, "設定文字內容", "val")
             },
-            ImplicitEffects = { "sets TextBox $(ctrl)=$(text)" }
+            ImplicitEffects = { "sets TextBox $(ui)=$(text)" }
         });
 
         Reg(new CommandSchema
@@ -2490,10 +2515,10 @@ public static class StandardCommandSchemas
             Summary = "更新文字框內容並觸發事件與綁定變數同步",
             Parameters =
             {
-                Req("ctrl", ParamValueType.String, 0, "文字框控制項名稱", "box", "control"),
+                Req("ui", ParamValueType.String, 0, "文字框控制項名稱", "ctrl", "box", "control"),
                 Req("text", ParamValueType.String, 1, "設定文字內容", "val")
             },
-            ImplicitEffects = { "fires TextBox $(ctrl) & syncs VAR binding" }
+            ImplicitEffects = { "fires TextBox $(ui) & syncs VAR binding" }
         });
 
         Reg(new CommandSchema
@@ -2502,10 +2527,10 @@ public static class StandardCommandSchemas
             Summary = "切換下拉選單 (TextRing) 選項（不觸發變更事件）",
             Parameters =
             {
-                Req("ctrl", ParamValueType.String, 0, "下拉選單控制項名稱", "combo", "control"),
+                Req("ui", ParamValueType.String, 0, "下拉選單控制項名稱", "ctrl", "combo", "control"),
                 Req("val", ParamValueType.String, 1, "選項名稱或索引", "text")
             },
-            ImplicitEffects = { "sets TextRing $(ctrl)=$(val)" }
+            ImplicitEffects = { "sets TextRing $(ui)=$(val)" }
         });
 
         Reg(new CommandSchema
@@ -2514,10 +2539,10 @@ public static class StandardCommandSchemas
             Summary = "切換下拉選單選項並觸發事件與綁定變數同步",
             Parameters =
             {
-                Req("ctrl", ParamValueType.String, 0, "下拉選單控制項名稱", "combo", "control"),
+                Req("ui", ParamValueType.String, 0, "下拉選單控制項名稱", "ctrl", "combo", "control"),
                 Req("val", ParamValueType.String, 1, "選項名稱或索引", "text")
             },
-            ImplicitEffects = { "fires TextRing $(ctrl) & syncs VAR binding" }
+            ImplicitEffects = { "fires TextRing $(ui) & syncs VAR binding" }
         });
 
         Reg(new CommandSchema
@@ -2526,10 +2551,10 @@ public static class StandardCommandSchemas
             Summary = "切換分頁控制項 (TabControl) 作用頁籤（不觸發事件）",
             Parameters =
             {
-                Req("ctrl", ParamValueType.String, 0, "分頁控制項名稱", "tab", "control"),
+                Req("ui", ParamValueType.String, 0, "分頁控制項名稱", "ctrl", "tab", "control"),
                 Req("page", ParamValueType.String, 1, "頁籤索引或名稱", "val", "index")
             },
-            ImplicitEffects = { "selects Tab $(ctrl)=$(page)" }
+            ImplicitEffects = { "selects Tab $(ui)=$(page)" }
         });
 
         Reg(new CommandSchema
@@ -2538,14 +2563,14 @@ public static class StandardCommandSchemas
             Summary = "切換分頁控制項作用頁籤並觸發切換事件",
             Parameters =
             {
-                Req("ctrl", ParamValueType.String, 0, "分頁控制項名稱", "tab", "control"),
+                Req("ui", ParamValueType.String, 0, "分頁控制項名稱", "ctrl", "tab", "control"),
                 Req("page", ParamValueType.String, 1, "頁籤索引或名稱", "val", "index")
             },
-            ImplicitEffects = { "fires Tab $(ctrl)=$(page)" }
+            ImplicitEffects = { "fires Tab $(ui)=$(page)" }
         });
 
         // =====================================================================
-        // 10. PYTHON 模組 (12 條指令) — session / py / var / pt / imaq / code
+        // 10. PYTHON 模組 (10 條指令) — session / py / var / pt / cam / code
         // =====================================================================
 
         Reg(new CommandSchema
@@ -2562,21 +2587,13 @@ public static class StandardCommandSchemas
         Reg(new CommandSchema
         {
             CommandKey = "Python@Reset",
-            Summary = "重置所有 Python Session 命名空間狀態",
-            Parameters = { },
-            ImplicitEffects = { "resets all Python sessions" }
-        });
-
-        Reg(new CommandSchema
-        {
-            CommandKey = "Python@ResetSession",
-            Summary = "重置單一指定 Python Session 之變數與狀態",
+            Summary = "重置 Python Session 狀態（留空重置預設 Session，填名稱重置指定 Session，填 ALL/* 重置全部 Session）",
             Parameters =
             {
-                Opt("session", ParamValueType.String, "", 0, "目標 Session 名稱（留空重置當前執行緒 Session）", ParamDisplayTier.Primary, false, "Session")
+                Opt("session", ParamValueType.String, "", 0, "目標 Session 名稱（留空=預設 Session，ALL/*=全部重置）", ParamDisplayTier.Secondary, false, "Session")
             },
-            ImplicitEffects = { "resets Python session $(session)" }
-        });
+            ImplicitEffects = { "resets Python session $(session) (empty=default, ALL/*=all)" }
+        }, "Python@ResetSession");
 
         Reg(new CommandSchema
         {
@@ -2584,10 +2601,10 @@ public static class StandardCommandSchemas
             Summary = "於指定 Python Session 執行外部 .py 腳本檔案",
             Parameters =
             {
-                Req("path", ParamValueType.FilePath, 0, "Python 腳本檔案路徑", "file"),
+                Req("file", ParamValueType.FilePath, 0, "Python 腳本檔案路徑", "file"),
                 Opt("session", ParamValueType.String, "", null, "指定隔離 Session 名稱", ParamDisplayTier.Secondary, false, "Session")
             },
-            ImplicitEffects = { "executes $(path) in Python" }
+            ImplicitEffects = { "executes $(file) in Python" }
         });
 
         Reg(new CommandSchema
@@ -2662,55 +2679,41 @@ public static class StandardCommandSchemas
             Summary = "將 ARCOS ImageEngine 影像緩衝直接傳入 Python Session (numpy/Mat)",
             Parameters =
             {
-                Req("imaq", ParamValueType.String, 0, "來源 ARCOS 影像槽位名稱", "cam"),
-                Opt("py", ParamValueType.String, "", null, "Python 端目標變數名稱（留空與 imaq 同名）", ParamDisplayTier.Secondary, false, "PythonName", "pyName"),
+                Req("cam", ParamValueType.String, 0, "來源 ARCOS 影像槽位名稱", "imaqs", "imaq"),
+                Opt("py", ParamValueType.String, "", null, "Python 端目標變數名稱（留空與 cam 同名）", ParamDisplayTier.Secondary, false, "PythonName", "pyName"),
                 Opt("session", ParamValueType.String, "", null, "指定隔離 Session 名稱", ParamDisplayTier.Secondary, false, "Session")
             },
-            ImplicitEffects = { "pushes imaq $(imaq) -> Python $(py)" }
-        });
-
-        Reg(new CommandSchema
-        {
-            CommandKey = "Python@SetCaptureFile",
-            Summary = "將 ARCOS 影像存檔並交由 Python Session 自檔案載入綁定",
-            Parameters =
-            {
-                Req("imaq", ParamValueType.String, 0, "來源 ARCOS 影像槽位名稱", "cam"),
-                Req("path", ParamValueType.FilePath, 1, "中繼儲存圖檔路徑", "file"),
-                Req("py", ParamValueType.String, 2, "Python 端目標變數名稱", "pyName", "PythonName"),
-                Opt("session", ParamValueType.String, "", null, "指定隔離 Session 名稱", ParamDisplayTier.Secondary, false, "Session")
-            },
-            ImplicitEffects = { "saves $(imaq) to $(path) & binds Python $(py)" }
+            ImplicitEffects = { "pushes cam $(cam) -> Python $(py)" }
         });
 
         Reg(new CommandSchema
         {
             CommandKey = "Python@GetCapture",
-            Summary = "自 Python Session 取得處理後影像並回寫至 ARCOS ImageEngine",
+            Summary = "自 Python Session 取得處理後影像並顯式回寫至 ARCOS ImageEngine 指定影像槽",
             Parameters =
             {
                 Req("py", ParamValueType.String, 0, "來源 Python 影像物件名稱", "pyName"),
                 Opt("session", ParamValueType.String, "", null, "指定隔離 Session 名稱", ParamDisplayTier.Secondary, false, "Session"),
-                Out("imaq", ParamValueType.String, "可選：接收之 ARCOS 影像槽位名稱（留空與 py 同名）", "ARCOSName", "arcosName", "cam")
+                OutPos("cam", ParamValueType.String, null, "接收之 ARCOS 影像槽位名稱（顯式必填）", true, "ARCOSName", "arcosName", "imaqs", "imaq")
             },
-            ImplicitEffects = { "pulls Python $(py) -> ARCOS imaq" }
+            ImplicitEffects = { "pulls Python $(py) -> ARCOS cam $(cam)" }
         });
 
         // =====================================================================
         // 11. REDIS 模組 (9 條指令) — session / key / var
-        //     規則：首個 CreateSession 自動成為預設 Session，其餘指令皆可選填 {session=...}
+        //     規則：載入 REDIS 模組時自動啟動本機 127.0.0.1:6379 作為預設 Session；CreateSession 用於連線其他遠端 Redis 或獨立 DB
         // =====================================================================
 
         Reg(new CommandSchema
         {
             CommandKey = "Redis@CreateSession",
-            Summary = "建立並初始化 Redis 連線 Session（首個建立者自動成為預設 Session）",
+            Summary = "建立具名 Redis 連線 Session（用於連線其他 Redis 伺服器或獨立 DB，不覆蓋本機預設 Session）",
             Parameters =
             {
-                Req("session", ParamValueType.String, 0, "Redis Session 名稱（如 Line1）", "name"),
-                Opt("endpoint", ParamValueType.String, "127.0.0.1:6379", 1, "Redis 伺服器位址（host:port）", ParamDisplayTier.Secondary, false, "addr", "host")
+                Req("session", ParamValueType.String, 0, "Redis Session 名稱（如 MES、Line2）", "name"),
+                Opt("url", ParamValueType.String, "127.0.0.1:6379", 1, "Redis 伺服器位址（host:port、host:port/db 或 redis://...）", ParamDisplayTier.Secondary, false, "endpoint", "addr", "host")
             },
-            ImplicitEffects = { "sets RedisErr#$(session)=OK (first session becomes default)" }
+            ImplicitEffects = { "sets RedisErr#$(session)=OK (connects external/named Redis session)" }
         });
 
         Reg(new CommandSchema
@@ -2774,7 +2777,7 @@ public static class StandardCommandSchemas
             {
                 Req("key", ParamValueType.String, 0, "Redis 佇列鍵名稱", "queue"),
                 Opt("session", ParamValueType.String, "", null, "目標 Redis Session（留空使用預設 Session）", ParamDisplayTier.Secondary, false, "Session"),
-                Opt("timeoutSec", ParamValueType.Number, "5", null, "等待逾時秒數（預設 5s）", ParamDisplayTier.Critical, false, "TimeOut", "timeout"),
+                Opt("timeout", ParamValueType.Number, "5", null, "等待逾時秒數（預設 5s）", ParamDisplayTier.Critical, false, "TimeOut"),
                 Out("var", ParamValueType.VariableName, "可選：接收彈出值之變數名稱（預設同名 $(key)）", "out", "dest")
             },
             ImplicitEffects = { "blocks & pops RedisList[$(key)] -> var (default $(key))" }
@@ -2818,58 +2821,46 @@ public static class StandardCommandSchemas
         });
 
         // =====================================================================
-        // 12. MULTISTATION 模組 (12 條指令) — station (工站 或 工站.工位) / items / slots / pt / var
+        // 12. MULTISTATION 模組 (12 條指令) — station (工站 或 工站.工位) / items / slots / logic / var / index
         // =====================================================================
 
         Reg(new CommandSchema
         {
             CommandKey = "MultiStation@AddStation",
-            Summary = "建立多工站群組：支援命名工位清單 items、1-based 數量 slots 與綁定 Point&Path 點位陣列 pt",
+            Summary = "建立多工站群組：支援命名工位清單 items 或 1-based 工位數量 slots",
             Parameters =
             {
                 Req("station", ParamValueType.String, 0, "工站群組名稱（如 FeedInStation、TrayA）", "name"),
                 Opt("items", ParamValueType.PortList, "", null, "命名工位有序清單（如 [入料;加工;檢驗;出料]）", ParamDisplayTier.Primary, false, "slotsList"),
-                Opt("slots", ParamValueType.Integer, "0", 1, "1-based 工位數量（如 20，未填 items 且未填 slots 時自動取 pt 點數）", ParamDisplayTier.Primary, false, "count"),
-                Opt("pt", ParamValueType.String, "", 2, "可選：綁定對應之 Point&Path 點位陣列（如 Tray2D）", ParamDisplayTier.Secondary, false, "point")
+                Opt("slots", ParamValueType.Integer, "0", 1, "1-based 工位數量（如 20）", ParamDisplayTier.Primary, false, "count")
             },
             ImplicitEffects = { "registers MultiStation $(station) & initializes IO/Variable bindings" }
         });
 
         Reg(new CommandSchema
         {
-            CommandKey = "MultiStation@SetStationON",
-            Summary = "標記指定工位為有料/啟用狀態，同步 $(station)#On? 與 #Run?=ON",
-            Parameters = { Req("station", ParamValueType.String, 0, "目標工位（格式：工站.工位，如 FeedInStation.入料 或 TrayA.3；相容舊版整數）", "st", "stNo") },
-            ImplicitEffects = { "sets $(station)#On?=true & #Run?=true" }
-        });
-
-        Reg(new CommandSchema
-        {
-            CommandKey = "MultiStation@SetStationOFF",
-            Summary = "標記指定工位為無料/空位；預設一併清空 OK/NG 與該工位隨行 Variable 資料",
+            CommandKey = "MultiStation@SetOn",
+            Summary = "以 $logic 邏輯設定指定工位有料/無料（True=#On?=true；False=#On?=false 且預設清空 OK/NG 與隨行資料）",
             Parameters =
             {
-                Req("station", ParamValueType.String, 0, "目標工位（格式：工站.工位，如 FeedInStation.出料 或 TrayA.3）", "st", "stNo"),
-                Opt("clearData", ParamValueType.Boolean, "true", 1, "是否一併清空 OK/NG 與隨行 Variable 資料（預設 true）", ParamDisplayTier.Secondary)
+                Req("station", ParamValueType.String, 0, "目標工位（格式：工站.工位，如 FeedInStation.入料 或 TrayA.3；相容舊版整數）", "st", "stNo"),
+                Req("logic", ParamValueType.LogicExpr, 1, "有料/無料狀態或 $logic 運算式（如 True、False、InSensor?）", "on", "val"),
+                Opt("clearData", ParamValueType.Boolean, "true", 2, "當 logic 為 False（無料）時是否一併清空 OK/NG 與隨行資料（預設 true）", ParamDisplayTier.Secondary)
             },
-            ImplicitEffects = { "sets $(station)#On?=false & clears OK/NG + slot data when clearData=true" }
-        });
+            ImplicitEffects = { "sets $(station)#On?=eval($(logic)) (clears OK/NG+Data on false)" }
+        }, "MultiStation@SetStationON", "MultiStation@SetStationOFF");
 
         Reg(new CommandSchema
         {
-            CommandKey = "MultiStation@SetStationOK",
-            Summary = "標記指定工位產品品質為 OK，同步 $(station)#OK?=ON 與 #NG?=OFF",
-            Parameters = { Req("station", ParamValueType.String, 0, "目標工位（格式：工站.工位，如 FeedInStation.檢驗）", "st", "stNo") },
-            ImplicitEffects = { "sets $(station)#OK?=true, #NG?=false" }
-        });
-
-        Reg(new CommandSchema
-        {
-            CommandKey = "MultiStation@SetStationNG",
-            Summary = "標記指定工位產品品質為 NG，同步 $(station)#NG?=ON 與 #OK?=OFF",
-            Parameters = { Req("station", ParamValueType.String, 0, "目標工位（格式：工站.工位，如 FeedInStation.檢驗）", "st", "stNo") },
-            ImplicitEffects = { "sets $(station)#NG?=true, #OK?=false" }
-        });
+            CommandKey = "MultiStation@SetOK",
+            Summary = "以 $logic 邏輯設定指定工位品質判定（True=#OK?=true/#NG?=false；False=#NG?=true/#OK?=false）",
+            Parameters =
+            {
+                Req("station", ParamValueType.String, 0, "目標工位（格式：工站.工位，如 FeedInStation.檢驗 或 TrayA.3；相容舊版整數）", "st", "stNo"),
+                Req("logic", ParamValueType.LogicExpr, 1, "品質判定結果或 $logic 運算式（如 True、False、Cam0#OK? & PressCurve#OK?）", "ok", "val")
+            },
+            ImplicitEffects = { "sets $(station)#OK?=eval($(logic)), #NG?=!eval($(logic))" }
+        }, "MultiStation@SetStationOK", "MultiStation@SetStationNG");
 
         Reg(new CommandSchema
         {
@@ -2895,18 +2886,6 @@ public static class StandardCommandSchemas
                 OutPos("var", ParamValueType.VariableName, 2, "接收數值之目標變數名稱（裸名稱）", false, "dest")
             },
             ImplicitEffects = { "reads $(station)#$(field) -> var" }
-        });
-
-        Reg(new CommandSchema
-        {
-            CommandKey = "MultiStation@GetPoint",
-            Summary = "取出指定工位對應於綁定 Point&Path 點位陣列之實體座標",
-            Parameters =
-            {
-                Req("station", ParamValueType.String, 0, "來源工位（格式：工站.工位，如 TrayA.3 或 FeedInStation.加工）", "st"),
-                OutPos("pt", ParamValueType.String, 1, "接收點位座標之目標 Point 名稱", false, "point", "dest")
-            },
-            ImplicitEffects = { "maps $(station) -> pt" }
         });
 
         Reg(new CommandSchema
@@ -2945,13 +2924,13 @@ public static class StandardCommandSchemas
         Reg(new CommandSchema
         {
             CommandKey = "MultiStation@FindFirstOK",
-            Summary = "尋找入料/目標料盤第一個可取料 OK 工位，更新 $(station)#Found? 並輸出工位鍵與綁定點位",
+            Summary = "尋找入料/目標料盤第一個可取料 OK 工位，更新 $(station)#Found? 並輸出工位鍵與 0-based 索引（供 Point&Path@ResetPalletIndex 使用）",
             Parameters =
             {
                 Req("station", ParamValueType.String, 0, "目標工站/料盤名稱（如 InTray）", "st"),
                 Opt("allowUnchecked", ParamValueType.Boolean, "false", 1, "是否允許尚未標記 OK 之有料位（IsOn && !NG，預設 false）", ParamDisplayTier.Secondary),
                 OutPos("var", ParamValueType.VariableName, 2, "可選：輸出找到之完整工位鍵（如 InTray.3）", false, "slot", "dest"),
-                OutPos("pt", ParamValueType.String, 3, "可選：輸出該工位對應之綁定點位座標", false, "point")
+                OutPos("index", ParamValueType.VariableName, 3, "可選：輸出找到之 0-based 工位索引變數（供 Point&Path@ResetPalletIndex 使用；未找到為 -1）", false, "idx")
             },
             ImplicitEffects = { "sets $(station)#Found?" }
         });
@@ -2959,12 +2938,12 @@ public static class StandardCommandSchemas
         Reg(new CommandSchema
         {
             CommandKey = "MultiStation@FindEmpty",
-            Summary = "尋找出料料盤第一個空位（!On），更新 $(station)#Found? 並輸出工位鍵與綁定點位",
+            Summary = "尋找出料料盤第一個空位（!On），更新 $(station)#Found? 並輸出空位鍵與 0-based 索引（供 Point&Path@ResetPalletIndex 使用）",
             Parameters =
             {
                 Req("station", ParamValueType.String, 0, "目標工站/料盤名稱（如 OutTray）", "st"),
                 OutPos("var", ParamValueType.VariableName, 1, "可選：輸出找到之完整空位鍵（如 OutTray.5）", false, "slot", "dest"),
-                OutPos("pt", ParamValueType.String, 2, "可選：輸出該空位對應之綁定點位座標", false, "point")
+                OutPos("index", ParamValueType.VariableName, 2, "可選：輸出找到之 0-based 空位索引變數（供 Point&Path@ResetPalletIndex 使用；未找到為 -1）", false, "idx")
             },
             ImplicitEffects = { "sets $(station)#Found?" }
         });
