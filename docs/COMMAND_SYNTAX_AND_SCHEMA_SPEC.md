@@ -32,7 +32,7 @@ Module@Action [:: <RequiredArgs>] [{<OptionalOverrides>}] [-> <OutputBindings>] 
 | **1. 指令語義** | `Module@Action` | 指定領域模組與原子動作 | 必填（唯一動作識別鍵） |
 | **2. 必填輸入** | `::` | 缺少則指令無法成立的核心參數 | 必填全列（若指令無必填參數則省略 `::`） |
 | **3. 選填覆寫** | `{ ... }` | 僅列出**刻意覆寫預設值**的選填參數 | 未覆寫預設值者**不寫入檔案**（`AlwaysExplicit` 除外） |
-| **4. 附加/可選輸出** | `->` | 動作本體非賦值，但額外吐出/跨型別接收之回傳目標（如 `LogRecordCycleTime -> var=...`、`LPop -> out=...`、`ChkInRangeXY -> var=...`） | 有額外接收目標時才列；若指令本體即賦值/運算（如 `Set`、`Select`、`Calculate`），目標對象直接置於 `::` 第一欄 |
+| **4. 附加/可選輸出** | `->` | 動作本體非賦值，但額外吐出/跨型別接收之回傳目標（如 `LogRecordCycleTime -> var=...`、`LPop -> out=...`、`ChkInRangeXY -> io=...`） | 有額外接收目標時才列；若指令本體即賦值/運算（如 `Set`、`Select`、`Calculate`），目標對象直接置於 `::` 第一欄 |
 | **5. 錯誤攔截** | `[[Label]]Msg` | 既有的異常跳轉標籤與客製訊息（相容 ARCOS 自癒語法） | 可選，置於最尾端 |
 
 > **為何使用 `{...}` 而非 `[...]`？**  
@@ -126,13 +126,11 @@ System@LogRecordCycleTime :: rec=StationA {prefix="Cycle:"} -> var=CycleSec
 2. **何時必須加雙引號 `"`**：
    - 值包含結構分隔字元 `,`、`{`、`}`、`->`、`[[`、換行 `\n`、前導/尾隨空白，或值本身含 `"` 時必須加雙引號。
    - 一般文字字串參數（如 `msg="Production Started"`、`cmd="PWR ON"`、`code="res = x * 2"`）含空白或 `=` 時保留雙引號以明確界定文字邊界。
-   - **免引號規則**：純識別字、數字、點位名、布林值（`OUT1`、`P0.0`、`0.5`、`true`、`Start?`），以及 **`logic` 邏輯運算式與 `expr` 算式**（如 `logic=Start? & !Alarm?`、`logic=$(Total)==40`、`expr=$(A) + $(B)`、`expr=P1 + P2`）只要不含上述結構分隔字元，皆**不強制加雙引號**以維持清爽可讀。
+   - **免引號規則**：純識別字、數字、點位名、布林值（`OUT1`、`P0.0`、`0.5`、`true`、`Start?`）、**無引號座標 tuple / JSON 物件立即值**（`pt=(100,200,300,90,180,90)`、`h={"speed":80}`），以及 **`logic` 邏輯運算式與 `expr` 算式**（如 `logic=Start? & !Alarm?`、`logic=$(Total)==40`、`expr=$(A) + $(B)`、`expr=P1 + P2`）只要不含外層結構分隔字元，皆**不強制加雙引號**以維持清爽可讀。
 
-### 3.2 `.prog` INI 檔案序列化修正規範（修復外層引號碰撞）
+### 3.2 `.prog` INI 檔案序列化規範（避免外層引號碰撞）
 
-目前 [ScriptSerializer.cs](file:///d:/AntiGravity/ARCOSharp/src/ARCOS.Core/Serialization/ScriptSerializer.cs#L33-L37) 以 `1="<Command>\t<Param>"` 儲存每行指令，並於讀取時使用 `.Trim('\"')` 拆解。**當參數內部尾端出現雙引號（例如 `msg="Hello"`）時，`.Trim('\"')` 會誤刪參數內部的引號**。
-
-本規格強制修正 `.prog` 單行編解碼規則如下：
+舊版 [ScriptSerializer.cs](file:///d:/AntiGravity/ARCOSharp/src/ARCOS.Core/Serialization/ScriptSerializer.cs#L33-L37) 以 `1="<Command>\t<Param>"` 儲存每行指令並於讀取時使用 `.Trim('\"')` 拆解，當參數尾端出現雙引號（例如 `msg="Hello"`）時會誤刪參數內部的引號。本規格已於 `ScriptSerializer.cs` 實作以下編解碼規則：
 
 1. **寫入 `.prog` 時（Outer INI Escape）**：
    依序將 `Command\tRawParameter` 內部進行標準跳脫：
@@ -646,15 +644,14 @@ public sealed class CommandSchema
 
 ---
 
-## 七、分階段實作與驗證計畫
+## 七、實作狀態與下一階段規劃
 
-1. **Phase 1 — `ARCOS.Core` 基礎設施升級（不破壞任何現有測試）**：
-   - 新增 `CommandSchema` / `ParamSpec` 模型（`ARCOS.Core/Guidance/` 與 `CsviManifest.cs`）。
-   - 實作 `CommandParamParser`（單次詞法掃描 + 寬容合併 + Legacy 位置參數自動映射）與 `CommandFormatter` + `CommandDisplayProjector`（L1/L2/L3 顯示投影與防隱藏邏輯）。
-   - 修正 `ScriptSerializer.cs` 的外層 `""` 讀寫轉義（取代 `.Trim('\"')`），補齊單元測試。
-2. **Phase 2 — 先導三模組落地（`IO` → `SYSTEM` → `THREAD`）**：
-   - 依第六章契約表，為三模組 66 條 `.csvi` 補上 `GetSchema()` 宣告並切換使用 `CommandParamParser`。
-   - 升級 MVCON Guide UI，依據 Schema 區分「必填區 / 折疊選填覆寫區 / 輸出與錯誤攔截區」。
-3. **Phase 3 — 顯示整合與後續 `ARCOS.Repl` 接入**：
-   - 於 `SequencerEditorControl` 加入 L1 / L2 / L3 檢視切換與參數欄自動換行投影。
-   - 後續建置獨立 `ARCOS.Repl` 時，直接複用同一套 `CommandSchema`、`CommandParamParser`、`CommandFormatter` 與靜態驗證器。
+1. **✅ Phase 1 — `ARCOS.Core` 基礎設施升級（已完成）**：
+   - 建立 `CommandSchema` / `ParamSpec` / `StandardCommandSchemas`（`ARCOS.Core/Guidance/` 與 `CsviManifest.cs`）。
+   - 完成 `CommandParamParser`（單次詞法掃描 + 無引號座標/JSON 支援 + 寬容合併 + Legacy 位置參數映射）、`CommandFormatter`、`CommandSyntaxBridge` 與 `CommandDisplayProjector`（L1/L2/L3 投影、防隱藏鐵律與多行文字折疊/展開）。
+   - 修正 `ScriptSerializer.cs` 外層 `""` 讀寫轉義，補齊全套單元與 E2E 測試（234/234 通過）。
+2. **✅ Phase 2 — 全 14 模組 246 條指令落地與 UI 整合（已完成）**：
+   - 全 14 模組 246 條 `.csvi` 均已嵌入標準 `Schema` 並支援 v2.0 四段式語法與舊語法相容（含 `ModuleRegistry` 舊別名自動解析、DAQ 時間域與跨速率超取樣、本機 Redis 自動啟動與 RESP2 引擎、MultiStation 解耦）。
+   - `SequencerEditorControl` 已整合 L1 / L2 / L3 檢視切換、單行/多行顯示與一鍵升級 v2.0。
+3. **⏭ Phase 3 — 後續 `ARCOS.Repl` 獨立接入（下一階段）**：
+   - 建置獨立 `ARCOS.Repl` CLI / AI Agent 閉環環境時，直接複用本規格所定義之 `CommandSchema`、`CommandParamParser`、`CommandFormatter` 與靜態驗證器（`E001`–`E005` / `W001`–`W002`）。
