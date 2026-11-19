@@ -143,7 +143,11 @@ public class CsviCompilerService
         // 3. 準備 ManifestResources
         var resourceDescriptions = new List<ResourceDescription>();
 
-        // (a) Manifest JSON
+        // (a) Manifest JSON (若為標準指令且未顯式指定 Schema，自動附掛 StandardCommandSchemas)
+        if (manifest.Schema == null && !string.IsNullOrWhiteSpace(manifest.CommandKey))
+        {
+            manifest.Schema = ARCOS.Core.Guidance.StandardCommandSchemas.Get(manifest.CommandKey);
+        }
         manifest.LastCompiledUtc = DateTime.UtcNow.ToString("o");
         manifest.SourceSha256 = CsviSourceBundle.ComputeSha256(sourceFiles);
         string manifestJson = System.Text.Json.JsonSerializer.Serialize(manifest, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });

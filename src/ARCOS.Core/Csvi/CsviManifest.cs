@@ -68,4 +68,10 @@ public class CsviManifest
     public string LastAuthor { get; set; } = "IPC-STATION\\Engineer";
 
     public List<CsviRevisionEntry> RevisionHistory { get; set; } = new();
+
+    /// <summary>
+    /// CSVI 指令語法 v2.0 參數 Schema（可選，null 時省略輸出以相容舊版 Manifest）
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public ARCOS.Core.Guidance.CommandSchema? Schema { get; set; }
 }

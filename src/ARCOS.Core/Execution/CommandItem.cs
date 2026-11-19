@@ -56,8 +56,8 @@ public sealed class CommandItem
             return new CommandItem(lineNumber, rawLine, "", "", "", trimmed, true, false);
         }
 
-        // 移除尾端分號 ; (結尾分隔符)
-        if (trimmed.EndsWith(';'))
+        // 移除尾端分號 ; (僅限非引號內結尾分隔符)
+        if (trimmed.EndsWith(';') && !IsTrailingCharInsideQuotes(trimmed))
         {
             trimmed = trimmed.Substring(0, trimmed.Length - 1).TrimEnd();
         }
@@ -65,8 +65,8 @@ public sealed class CommandItem
         string cmdPart;
         string paramPart;
 
-        // 優先檢查 :: 分隔符
-        int doubleColonIdx = trimmed.IndexOf("::", StringComparison.Ordinal);
+        // 優先檢查頂層 :: 分隔符（排除雙引號內部）
+        int doubleColonIdx = FindTopLevelToken(trimmed, "::");
         if (doubleColonIdx >= 0)
         {
             cmdPart = trimmed.Substring(0, doubleColonIdx).Trim();
@@ -83,8 +83,24 @@ public sealed class CommandItem
             }
             else
             {
-                cmdPart = trimmed.Trim();
-                paramPart = "";
+                // 支援 v2.0 無必填區寫法：Module@Action {opt=val} 或 Module@Action -> out=$x
+                int braceIdx = FindTopLevelToken(trimmed, "{");
+                int arrowIdx = FindTopLevelToken(trimmed, "->");
+                int splitIdx = -1;
+                if (braceIdx > 0 && arrowIdx > 0) splitIdx = Math.Min(braceIdx, arrowIdx);
+                else if (braceIdx > 0) splitIdx = braceIdx;
+                else if (arrowIdx > 0) splitIdx = arrowIdx;
+
+                if (splitIdx > 0 && trimmed.IndexOf('@') >= 0 && trimmed.IndexOf('@') < splitIdx)
+                {
+                    cmdPart = trimmed.Substring(0, splitIdx).Trim();
+                    paramPart = trimmed.Substring(splitIdx).Trim();
+                }
+                else
+                {
+                    cmdPart = trimmed.Trim();
+                    paramPart = "";
+                }
             }
         }
 
@@ -105,6 +121,46 @@ public sealed class CommandItem
         }
 
         return new CommandItem(lineNumber, rawLine, cmdPart, module, action, paramPart, isComment, false);
+    }
+
+    private static int FindTopLevelToken(string text, string token)
+    {
+        bool inQuote = false;
+        for (int i = 0; i <= text.Length - token.Length; i++)
+        {
+            char c = text[i];
+            if (inQuote)
+            {
+                if (c == '\\' && i + 1 < text.Length) { i++; continue; }
+                if (c == '"') inQuote = false;
+                continue;
+            }
+            if (c == '"') { inQuote = true; continue; }
+            if (string.CompareOrdinal(text, i, token, 0, token.Length) == 0)
+            {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    private static bool IsTrailingCharInsideQuotes(string text)
+    {
+        bool inQuote = false;
+        for (int i = 0; i < text.Length - 1; i++)
+        {
+            char c = text[i];
+            if (inQuote)
+            {
+                if (c == '\\' && i + 1 < text.Length) { i++; continue; }
+                if (c == '"') inQuote = false;
+            }
+            else if (c == '"')
+            {
+                inQuote = true;
+            }
+        }
+        return inQuote;
     }
 
     public override string ToString() =>

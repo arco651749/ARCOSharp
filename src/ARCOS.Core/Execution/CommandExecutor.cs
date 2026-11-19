@@ -158,14 +158,14 @@ public sealed class CommandExecutor
         string? errorLabel = errorResult.ErrorLabel;
         string errorMsg = errorResult.ErrorMessage ?? "Unknown command error";
 
-        var parsed = ArgParaHelper.ParseKeyValueArgs(filteredParam, out _);
-        if (string.IsNullOrWhiteSpace(errorLabel) && parsed.TryGetValue("_ErrorLabel", out var tag))
+        var parsed = CommandParamParser.Parse(filteredParam);
+        if (string.IsNullOrWhiteSpace(errorLabel) && !string.IsNullOrWhiteSpace(parsed.ErrorLabel))
         {
-            errorLabel = tag;
+            errorLabel = parsed.ErrorLabel;
         }
-        if (parsed.TryGetValue("_ErrorMsg", out var customMsg) && !string.IsNullOrWhiteSpace(customMsg))
+        if (!string.IsNullOrWhiteSpace(parsed.ErrorMessage))
         {
-            errorMsg = customMsg;
+            errorMsg = parsed.ErrorMessage;
         }
 
         // 僅搜尋當前獨立 ProgramTable 中的 [[Label]] 或通用 ErrorHandler (不跨區段查看其他程式)

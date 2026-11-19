@@ -49,6 +49,14 @@ public interface IParameterGuidance
     }
 
     /// <summary>
+    /// 【支柱 4: 語法 v2.0 參數 Schema (Single Source of Truth)】
+    /// 宣告本指令的必填輸入、選填覆寫預設值、風險層級、顯式輸出與系統副作用。
+    /// 同時驅動 CommandParamParser、CommandFormatter、三層顯示投影、Guide UI 與 AI 靜態驗證。
+    /// 未覆寫時回傳 null（維持舊版完全相容）。
+    /// </summary>
+    CommandSchema? GetSchema() => null;
+
+    /// <summary>
     /// 【支柱 3: User Panel / 即時前面板】
     /// 取得該指令/模組的即時前面板控制項 (Avalonia Control)，供主程式動態掛載於 SubPanel 容器
     /// 既可用於主畫面即時監控，亦可用於獨立除錯器或作為驅動人機面板

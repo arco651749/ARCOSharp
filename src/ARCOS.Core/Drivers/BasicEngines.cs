@@ -19,6 +19,7 @@ public class BasicEngines
     public RecordEngine Record { get; }
     public UserPanelEngine UserPanel { get; }
     public ProgramEngine Program { get; }
+    public MultiStationEngine MultiStation { get; }
 
     /// <summary>
     /// 可選的驅動程式總管參考，供 Guide UI 即時查詢已註冊驅動清單與執行 GetPos 等即時讀取
@@ -94,5 +95,6 @@ public class BasicEngines
         Record = record ?? throw new ArgumentNullException(nameof(record));
         UserPanel = userPanel ?? throw new ArgumentNullException(nameof(userPanel));
         Program = program ?? new ProgramEngine();
+        MultiStation = new MultiStationEngine(Io, Variable, Point);
     }
 }

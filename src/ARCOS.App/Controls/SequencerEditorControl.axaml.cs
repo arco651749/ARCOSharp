@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Collections.Specialized;
 using System.IO;
 using System.Threading.Tasks;
 using Avalonia;
@@ -19,7 +20,9 @@ using ARCOS.App.Dialogs;
 using ARCOS.App.Guidance;
 using ARCOS.App.Services;
 using ARCOS.App.ViewModels;
+using ARCOS.Core.Common;
 using ARCOS.Core.Execution;
+using ARCOS.Core.Guidance;
 using ARCOS.Core.Model;
 using ARCOS.Core.Serialization;
 
@@ -36,6 +39,8 @@ public partial class SequencerEditorControl : UserControl, ISequencerEditorHost
     private readonly DispatcherTimer _pcDrainerTimer;
     private int _latestNoticedPC = -1;
     private int _currentRenderedPC = -1;
+    private CommandDisplayLevel _displayLevel = CommandDisplayLevel.Audit;
+    private bool _multiLineLayout = false;
 
     // =========================================================
     // 獨立程式區內部暫存歷程堆疊 (Per-Program-Section Undo/Redo)
@@ -63,10 +68,13 @@ public partial class SequencerEditorControl : UserControl, ISequencerEditorHost
             grid.ItemsSource = _rows;
         }
 
+        _rows.CollectionChanged += OnRowsCollectionChanged;
+
         RefreshProgSelector(0);
 
         BindToolbarButtons();
         BindSearchControls();
+        UpdateDisplayProjectionButtons();
         this.KeyDown += OnSequencerKeyDown;
         SequencerClipboardManager.Instance.SelectionChanged += OnGlobalSelectionChanged;
 
@@ -902,6 +910,136 @@ public partial class SequencerEditorControl : UserControl, ISequencerEditorHost
 
         var btnNext = this.FindControl<Button>("BtnProgNext");
         if (btnNext != null) btnNext.Click += (_, _) => ChangeProg(1);
+
+        // Syntax v2.0 三層檢視投影 + 多行視覺排版 + 一鍵升級 v2.0
+        var btnCompact = this.FindControl<Button>("BtnViewCompact");
+        if (btnCompact != null) btnCompact.Click += (_, _) => SetDisplayLevel(CommandDisplayLevel.Compact);
+
+        var btnAudit = this.FindControl<Button>("BtnViewAudit");
+        if (btnAudit != null) btnAudit.Click += (_, _) => SetDisplayLevel(CommandDisplayLevel.Audit);
+
+        var btnCanonical = this.FindControl<Button>("BtnViewCanonical");
+        if (btnCanonical != null) btnCanonical.Click += (_, _) => SetDisplayLevel(CommandDisplayLevel.Canonical);
+
+        var btnMulti = this.FindControl<Button>("BtnToggleMultiLine");
+        if (btnMulti != null) btnMulti.Click += (_, _) => ToggleMultiLineLayout();
+
+        var btnUpgradeV2 = this.FindControl<Button>("BtnUpgradeV2");
+        if (btnUpgradeV2 != null) btnUpgradeV2.Click += BtnUpgradeV2_Click;
+    }
+
+    private void OnRowsCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        if (e.NewItems == null) return;
+        foreach (var item in e.NewItems)
+        {
+            if (item is SequencerRowViewModel row)
+            {
+                row.DisplayLevel = _displayLevel;
+                row.MultiLineLayout = _multiLineLayout;
+            }
+        }
+    }
+
+    private void SetDisplayLevel(CommandDisplayLevel level)
+    {
+        if (_displayLevel == level) return;
+        _displayLevel = level;
+        foreach (var row in _rows)
+        {
+            row.DisplayLevel = _displayLevel;
+        }
+        UpdateDisplayProjectionButtons();
+    }
+
+    private void ToggleMultiLineLayout()
+    {
+        _multiLineLayout = !_multiLineLayout;
+        foreach (var row in _rows)
+        {
+            row.MultiLineLayout = _multiLineLayout;
+        }
+
+        var grid = this.FindControl<DataGrid>("GridCommands");
+        if (grid != null)
+        {
+            grid.RowHeight = _multiLineLayout ? double.NaN : 22;
+        }
+        UpdateDisplayProjectionButtons();
+    }
+
+    private void UpdateDisplayProjectionButtons()
+    {
+        void StylePill(string name, bool active)
+        {
+            var btn = this.FindControl<Button>(name);
+            if (btn == null) return;
+            btn.Background = active ? Brushes.White : Brushes.Transparent;
+            btn.BorderBrush = active ? Brush.Parse("#CBD5E1") : Brushes.Transparent;
+            btn.BorderThickness = active ? new Thickness(1) : new Thickness(0);
+            if (btn.Content is TextBlock tb)
+            {
+                tb.Foreground = Brush.Parse(active ? "#0284C7" : "#475569");
+                tb.FontWeight = active ? FontWeight.Bold : FontWeight.SemiBold;
+            }
+        }
+
+        StylePill("BtnViewCompact", _displayLevel == CommandDisplayLevel.Compact);
+        StylePill("BtnViewAudit", _displayLevel == CommandDisplayLevel.Audit);
+        StylePill("BtnViewCanonical", _displayLevel == CommandDisplayLevel.Canonical);
+
+        var btnMulti = this.FindControl<Button>("BtnToggleMultiLine");
+        var txtMulti = this.FindControl<TextBlock>("TxtMultiLineLabel");
+        if (btnMulti != null && txtMulti != null)
+        {
+            btnMulti.Background = Brush.Parse(_multiLineLayout ? "#E0F2FE" : "#FFFFFF");
+            btnMulti.BorderBrush = Brush.Parse(_multiLineLayout ? "#0284C7" : "#CBD5E1");
+            txtMulti.Text = _multiLineLayout ? "多行" : "單行";
+            txtMulti.Foreground = Brush.Parse(_multiLineLayout ? "#0284C7" : "#475569");
+        }
+    }
+
+    private void BtnUpgradeV2_Click(object? sender, RoutedEventArgs e)
+    {
+        if (_isLocked)
+        {
+            _vm?.Engines.Record.Record("SYSTEMLOG", "[Sequencer] 請先切換至 SUPERVISOR 模式並解鎖後，再執行一鍵升級 v2.0。");
+            return;
+        }
+
+        int effectiveCount = EffectiveRowCount;
+        if (effectiveCount <= 0) return;
+
+        int upgradedCount = 0;
+        var preview = new List<(int Index, string Upgraded)>();
+        for (int i = 0; i < effectiveCount; i++)
+        {
+            var row = _rows[i];
+            if (string.IsNullOrWhiteSpace(row.Command)) continue;
+            if (StandardCommandSchemas.Get(row.Command) == null) continue;
+            string v2 = CommandSyntaxBridge.FormatToV2(row.Command, row.Parameter);
+            if (!string.Equals(v2, row.Parameter, StringComparison.Ordinal))
+            {
+                preview.Add((i, v2));
+            }
+        }
+
+        if (preview.Count == 0)
+        {
+            _vm?.Engines.Record.Record("SYSTEMLOG", $"[Sequencer] Program {_currentProgNo} 所有指令皆已是標準 v2.0 格式，無須變更。");
+            return;
+        }
+
+        PushUndoSnapshot();
+        foreach (var (idx, v2) in preview)
+        {
+            _rows[idx].Parameter = v2;
+            upgradedCount++;
+        }
+
+        SyncUIToProgram();
+        SyncIoDefinitionsFromRows();
+        _vm?.Engines.Record.Record("SYSTEMLOG", $"[Sequencer] Program {_currentProgNo} 已無損升級 {upgradedCount} 條指令為 Syntax v2.0（可按 Undo 復原）。");
     }
 
     private void BindSearchControls()

@@ -53,7 +53,9 @@ public sealed class ProgramTable
                 item.Action.Equals("Thread Label", StringComparison.OrdinalIgnoreCase) ||
                 item.Action.Equals("ForeachStart", StringComparison.OrdinalIgnoreCase))
             {
-                string lbl = item.RawParameter.Trim();
+                var schema = ARCOS.Core.Guidance.StandardCommandSchemas.Get(item.Command);
+                var parsed = ARCOS.Core.Common.CommandParamParser.Parse(item.RawParameter, schema);
+                string lbl = parsed.Get("label", parsed.Get("name", item.RawParameter.Trim()));
                 if (!string.IsNullOrEmpty(lbl))
                 {
                     _labelIndex[lbl] = item.LineNumber;
@@ -72,6 +74,16 @@ public sealed class ProgramTable
                     if (_defaultErrorHandlerLine == -1)
                     {
                         _defaultErrorHandlerLine = item.LineNumber;
+                    }
+                }
+                else
+                {
+                    var schema = ARCOS.Core.Guidance.StandardCommandSchemas.Get("Thread@ErrorHandler");
+                    var parsed = ARCOS.Core.Common.CommandParamParser.Parse(param, schema);
+                    string errTag = parsed.Get("label", parsed.ErrorLabel ?? "").Trim().Trim('[', ']');
+                    if (!string.IsNullOrEmpty(errTag))
+                    {
+                        _errorHandlerIndex[errTag] = item.LineNumber;
                     }
                 }
             }
@@ -197,10 +209,23 @@ public sealed class ProgramTable
         int atIdx = t.IndexOf('@');
         if (atIdx > 0 && atIdx < t.Length - 1)
         {
+            // 驗證 @ 前方為合法模組名稱（僅含英數、_、&，不含空白或引號，避免誤判 Python/字串中的 @）
+            for (int i = 0; i < atIdx; i++)
+            {
+                char ch = t[i];
+                if (!char.IsLetterOrDigit(ch) && ch != '_' && ch != '&')
+                    return false;
+            }
+
             int colonIdx = t.IndexOf("::", atIdx, StringComparison.Ordinal);
             if (colonIdx > atIdx) return true;
             int tabIdx = t.IndexOf('\t', atIdx);
             if (tabIdx > atIdx) return true;
+
+            // 支援 v2.0 省略 :: 之指令（無參數如 Thread@Else / Thread@EndIf / System@Clear Error，或直接接 {...} / ->）
+            char actionStart = t[atIdx + 1];
+            if (char.IsLetter(actionStart) || actionStart == '#')
+                return true;
         }
         return false;
     }

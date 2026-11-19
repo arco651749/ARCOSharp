@@ -39,7 +39,12 @@ public static class PythonEngine
     /// <summary>解析 Session：顯式 Session=xxx 優先，否則以當前 Section / Thread 名稱隱式隔離</summary>
     public static string ResolveSession(Dictionary<string, string> parsed, string filteredParam, ExecutionContext ctx)
     {
-        if (parsed.TryGetValue("Session", out var s) && !string.IsNullOrWhiteSpace(s)) return s.Trim();
+        if (parsed.TryGetValue("Session", out var s) && !string.IsNullOrWhiteSpace(s))
+        {
+            int nl = s.IndexOfAny(new[] { '\r', '\n' });
+            string clean = (nl >= 0 ? s.Substring(0, nl) : s).Trim();
+            if (!string.IsNullOrEmpty(clean)) return clean;
+        }
         if (filteredParam.StartsWith("Session=", StringComparison.OrdinalIgnoreCase))
         {
             int commaIdx = filteredParam.IndexOfAny(new[] { ',', '\n', '\r' });
@@ -62,6 +67,15 @@ public static class PythonEngine
         {
             int commaIdx = script.IndexOfAny(new[] { ',', '\n', '\r' });
             if (commaIdx > 0) script = script.Substring(commaIdx + 1).Trim();
+        }
+        int errIdx = script.LastIndexOf("[[", StringComparison.Ordinal);
+        if (errIdx >= 0 && script.IndexOf("]]", errIdx + 2, StringComparison.Ordinal) > errIdx)
+        {
+            string beforeErr = script.Substring(0, errIdx).TrimEnd();
+            if (!string.IsNullOrEmpty(beforeErr))
+            {
+                script = beforeErr;
+            }
         }
         return script.TrimEnd(';');
     }

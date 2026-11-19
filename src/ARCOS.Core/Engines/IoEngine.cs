@@ -204,37 +204,38 @@ public class IoEngine
         if (!cmd.StartsWith("IO@", StringComparison.OrdinalIgnoreCase)) return;
 
         string action = cmd.Substring(3).Trim();
-        var parts = parameter.Split(',', StringSplitOptions.TrimEntries);
-        if (parts.Length == 0) return;
 
         if (action.Equals("AddDrvier", StringComparison.OrdinalIgnoreCase) ||
             action.Equals("AddDriver", StringComparison.OrdinalIgnoreCase) ||
             action.Equals("AddIODriver", StringComparison.OrdinalIgnoreCase))
         {
-            if (parts.Length > 0 && !string.IsNullOrEmpty(parts[0]))
+            var parsed = ARCOS.Core.Common.CommandParamParser.Parse(parameter, ARCOS.Core.Guidance.StandardCommandSchemas.Get("IO@AddIODriver"));
+            string drvName = parsed.Get("card");
+            if (!string.IsNullOrEmpty(drvName))
             {
-                RegisterDriver(parts[0], parameter);
+                RegisterDriver(drvName, parameter);
             }
         }
         else if (action.Equals("SetPortName", StringComparison.OrdinalIgnoreCase) ||
                  action.Equals("SETPORTNAME", StringComparison.OrdinalIgnoreCase))
         {
-            if (parts.Length >= 2 && !string.IsNullOrEmpty(parts[0]) && !string.IsNullOrEmpty(parts[1]))
+            var parsed = ARCOS.Core.Common.CommandParamParser.Parse(parameter, ARCOS.Core.Guidance.StandardCommandSchemas.Get("IO@SetPortName"));
+            string port = parsed.Get("io");
+            string alias = parsed.Get("alias");
+            if (!string.IsNullOrEmpty(port) && !string.IsNullOrEmpty(alias))
             {
-                SetPortName(parts[0], parts[1]);
+                SetPortName(port, alias);
             }
         }
         else if (action.Equals("VirtualIO", StringComparison.OrdinalIgnoreCase) ||
                  action.Equals("VIRTUALIO", StringComparison.OrdinalIgnoreCase) ||
                  action.Equals("AddVirtualIO", StringComparison.OrdinalIgnoreCase))
         {
-            if (parts.Length >= 2 && !string.IsNullOrEmpty(parts[0]))
+            var parsed = ARCOS.Core.Common.CommandParamParser.Parse(parameter, ARCOS.Core.Guidance.StandardCommandSchemas.Get("IO@AddVirtualIO"));
+            string p = parsed.Get("io");
+            if (!string.IsNullOrEmpty(p))
             {
-                string p = parts[0];
-                string v = parts[1];
-                bool bVal = v.Equals("1", StringComparison.OrdinalIgnoreCase) ||
-                            v.Equals("On", StringComparison.OrdinalIgnoreCase) ||
-                            v.Equals("True", StringComparison.OrdinalIgnoreCase);
+                bool bVal = parsed.GetBool("logic", false);
                 AddVirtualIO(p, bVal);
             }
         }

@@ -29,12 +29,11 @@ public static class ScriptSerializer
             for (int i = 1; i <= prog.Count; i++)
             {
                 var item = prog[i];
-                // 轉義換行符號以相容單行 INI
-                string escapedParam = item.RawParameter
-                    .Replace("\r\n", "\\n")
-                    .Replace("\n", "\\n");
+                // 標準轉義反斜線、雙引號與換行符號，確保 v2.0 內嵌引號參數與多行內容完整往返
+                string escapedCmd = EscapeIniContent(item.Command);
+                string escapedParam = EscapeIniContent(item.RawParameter);
 
-                sb.AppendLine($"{i}=\"{item.Command}\t{escapedParam}\"");
+                sb.AppendLine($"{i}=\"{escapedCmd}\t{escapedParam}\"");
             }
             sb.AppendLine();
         }
@@ -80,7 +79,8 @@ public static class ScriptSerializer
             if (eqIdx <= 0) continue;
 
             string key = line.Substring(0, eqIdx).Trim();
-            string val = line.Substring(eqIdx + 1).Trim().Trim('\"');
+            string rawVal = line.Substring(eqIdx + 1).Trim();
+            string val = UnwrapAndUnescapeIniValue(rawVal);
 
             if (key.Equals("Name", StringComparison.OrdinalIgnoreCase))
             {
@@ -88,8 +88,7 @@ public static class ScriptSerializer
             }
             else if (int.TryParse(key, out int lineNum))
             {
-                string unescaped = val.Replace("\\n", "\n");
-                currentProg.Add(CommandItem.Parse(unescaped, lineNum));
+                currentProg.Add(CommandItem.Parse(val, lineNum));
             }
         }
 
@@ -134,7 +133,8 @@ public static class ScriptSerializer
             if (eqIdx <= 0) continue;
 
             string key = line.Substring(0, eqIdx).Trim();
-            string val = line.Substring(eqIdx + 1).Trim().Trim('\"');
+            string rawVal = line.Substring(eqIdx + 1).Trim();
+            string val = UnwrapAndUnescapeIniValue(rawVal);
 
             if (key.Equals("Name", StringComparison.OrdinalIgnoreCase))
             {
@@ -142,8 +142,7 @@ public static class ScriptSerializer
             }
             else if (int.TryParse(key, out int lineNum))
             {
-                string unescaped = val.Replace("\\n", "\n");
-                currentProg.Add(CommandItem.Parse(unescaped, lineNum));
+                currentProg.Add(CommandItem.Parse(val, lineNum));
             }
         }
 
@@ -266,5 +265,71 @@ public static class ScriptSerializer
         }
 
         return prog;
+    }
+
+    /// <summary>
+    /// 單行 INI 內容轉義：將 \、&quot; 與換行轉為跳脫序列，保留真實 Tab 作為指令與參數分隔符
+    /// </summary>
+    public static string EscapeIniContent(string content)
+    {
+        if (string.IsNullOrEmpty(content)) return string.Empty;
+
+        var sb = new StringBuilder(content.Length + 8);
+        for (int i = 0; i < content.Length; i++)
+        {
+            char c = content[i];
+            switch (c)
+            {
+                case '\\': sb.Append(@"\\"); break;
+                case '"': sb.Append("\\\""); break;
+                case '\r':
+                    if (i + 1 < content.Length && content[i + 1] == '\n') i++;
+                    sb.Append(@"\n");
+                    break;
+                case '\n': sb.Append(@"\n"); break;
+                default: sb.Append(c); break;
+            }
+        }
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// 精準剝除單層外圍雙引號並還原 \\、\"、\n、\r（對舊版未轉義 Windows 路徑具向後相容性）
+    /// </summary>
+    public static string UnwrapAndUnescapeIniValue(string rawVal)
+    {
+        if (string.IsNullOrEmpty(rawVal)) return string.Empty;
+
+        string inner = rawVal;
+        if (inner.Length >= 2 && inner[0] == '"' && inner[^1] == '"')
+        {
+            inner = inner.Substring(1, inner.Length - 2);
+        }
+
+        var sb = new StringBuilder(inner.Length);
+        for (int i = 0; i < inner.Length; i++)
+        {
+            char c = inner[i];
+            if (c == '\\' && i + 1 < inner.Length)
+            {
+                char next = inner[i + 1];
+                switch (next)
+                {
+                    case 'n': sb.Append('\n'); i++; break;
+                    case 'r': sb.Append('\r'); i++; break;
+                    case '"': sb.Append('"'); i++; break;
+                    case '\\': sb.Append('\\'); i++; break;
+                    default:
+                        // 相容舊版未轉義路徑（如 C:\Data\Master.prog）
+                        sb.Append('\\');
+                        break;
+                }
+            }
+            else
+            {
+                sb.Append(c);
+            }
+        }
+        return sb.ToString();
     }
 }
