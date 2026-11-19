@@ -2,9 +2,9 @@
 
 ## 一、概述與核心架構
 
-ARCOSharp 採用 **Non-reentrant Core Data（非重入純資料核心）** 架構，將工控自動化運行所需的所有狀態、點位、變數、影像、波形與計時機制，解耦並封裝為 **6 大基礎引擎 (Basic Engines)**。
+ARCOSharp 採用 **Non-reentrant Core Data（非重入純資料核心）** 架構，將工控自動化運行所需的所有狀態、點位、變數、影像、波形、計時與多工站載具狀態，解耦並封裝為 **7 大基礎引擎 (Basic Engines)**。
 
-這 6 大引擎統整於依賴注入容器類別 [`BasicEngines`](file:///D:/AntiGravity/ARCOSharp/src/ARCOS.Core/Drivers/BasicEngines.cs) 中：
+這 7 大引擎統整於依賴注入容器類別 [`BasicEngines`](file:///D:/AntiGravity/ARCOSharp/src/ARCOS.Core/Drivers/BasicEngines.cs) 中：
 
 ```csharp
 namespace ARCOS.Core.Drivers;
@@ -18,6 +18,7 @@ public class BasicEngines
     public ImageEngine Imaq => Image;  // 相容別名
     public DaqEngine Daq { get; }
     public TimerEngine Timer { get; }
+    public MultiStationEngine MultiStation { get; }
 }
 ```
 
@@ -31,7 +32,7 @@ public class BasicEngines
 
 ---
 
-## 二、6 大 Basic Engine 詳細規格與 API
+## 二、7 大 Basic Engine 詳細規格與 API
 
 ### 1. `IoEngine` — 數位 IO 與狀態旗標池
 - **主要職責**：管理 512+ 實體點位（`P0.0` ~ `P63.7`）、語意別名（Alias）、虛擬點位（`Start?`、`System#Pause?`、`$(Motor)#Done?`）與硬體驅動掛載。
@@ -306,6 +307,42 @@ engines.Timer.TimerReset("&GlueCuring", 60.0);
 
 ---
 
+### 7. `MultiStationEngine` — 統一多工站與料盤狀態機引擎
+- **主要職責**：統一管理轉盤、直線移載與進/出料 Tray 盤之有序工位集合（`StationGroup`），以 `工站.工位` 定址並自動聯動 `IoEngine`（`#On?`/`#Run?`/`#OK?`/`#NG?`/`#Busy?`）、`VariableEngine`（`{prefix}#{field}` 隨行履歷資料）與 `PointEngine`（選填 1-to-1 座標陣列綁定）。
+- **執行緒安全**：所有狀態操作、環形位移與跨站交接皆受單一鎖保護，保證 IO 與 Variable 同步一致。
+
+#### 核心 API 簽章
+```csharp
+// 1. 建立命名工位或 1-based 料盤工站（可選綁定 Point&Path 點位陣列）
+StationGroup AddStation(string stationName, IReadOnlyList<string>? itemNames = null, int slotCount = 0, string? boundPointName = null);
+
+// 2. 工位有料/無料/OK/NG/Busy 狀態操作（SetStationOff 預設清空 OK/NG 與隨行資料）
+bool SetStationOn(string target);
+bool SetStationOff(string target, bool clearData = true);
+bool SetStationOk(string target);
+bool SetStationNg(string target);
+bool CheckRunState(string target, out bool isBusy);
+
+// 3. 工位隨行資料與實體點位查詢
+bool SetData(string target, string value, string field = "Data");
+string GetData(string target, string field = "Data");
+bool TryGetSlotPoint(string target, out MachinePoint point);
+
+// 4. 環形緩衝區狀態轉移（正數向前、負數向後）與跨站整包交接
+void StateShift(string? stationName, int shift);
+bool Transfer(string fromTarget, string toTarget, bool clearSource = true);
+
+// 5. 料盤/工站掃描定位（自動更新 $(station)#Found?）
+bool TryFindFirstOk(string stationName, out string slotKey, out MachinePoint? point, bool allowUnchecked = false);
+bool TryFindEmpty(string stationName, out string slotKey, out MachinePoint? point);
+
+// 6. 重置與指標同步
+void ResetDefault(string? stationName = null);
+void UpdateIndicator(string? stationName = null);
+```
+
+---
+
 ## 三、架構總覽對照表
 
 | 引擎名稱 | 容器屬性 | 主要資料結構 | 自動連動之虛擬 IO 旗標 | 典型應用場景 |
@@ -316,3 +353,4 @@ engines.Timer.TimerReset("&GlueCuring", 60.0);
 | **`ImageEngine`** | `engines.Image` / `Imaq` | OpenCvSharp `Mat`, `ImaqFrame` 佇列 | `$(Cam)#Snap?` | 相機取像、視覺比對、標記十字中心 |
 | **`DaqEngine`** | `engines.Daq` | `WaveformEntry` (時序雙精度浮點陣列) | `$(Daq)#Trigger?` | 示波器圖表、壓力曲線、公差包絡比對 |
 | **`TimerEngine`** | `engines.Timer` | `HighResolutionTimer`, `CounterItem` | `$(Timer)#Timeout?`, `$(Counter)#Over?` | 動作超時防護、工件計數、週期耗時量測 |
+| **`MultiStationEngine`** | `engines.MultiStation` | `StationGroup` / `StationSlotState` | `$(Slot)#On?`, `#OK?`, `#NG?`, `#Busy?`, `$(Station)#Found?` | 轉盤環形移位、輸送帶移載、進/出料 Tray 盤取放 |

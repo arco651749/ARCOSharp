@@ -51,7 +51,7 @@ description: >-
 
 ARCOS 系統由多個模組與輔助工具組成。在編寫特定模組腳本前，若不熟悉內部指令與參數細節，請使用 `view_file` 查閱 `Skills/ARCOS/references/` 資料夾中對應的手冊：
 
-- 🔥 **[`references/CommandsMaster.md`](references/CommandsMaster.md)** - **全模組語法速查第一站 (權威依據)**：涵蓋全模組完整語法簽名 (Signature)、參數順序、`~$Prompt` 旁路開關、旗標副作用與 8 大零猜測最高防呆法則。**生成腳本前第一優先查閱**。
+- 🔥 **[`references/CommandsMaster.md`](references/CommandsMaster.md)** - **全模組語法速查第一站 (權威依據)**：涵蓋全 14 模組 251 條指令之 **ARCOS v2.0 語法簽名**（`::` 必填 / `{}` 選填 / `->` 輸出 / `[[]]` 錯誤攔截，完整向下相容 v1.0 位置語法）、硬體語意鍵名（`card`/`mot`/`cam`/`daq`）與防呆邊界。詳細參數 Schema 契約請見 [`docs/COMMAND_SYNTAX_AND_SCHEMA_SPEC.md`](../docs/COMMAND_SYNTAX_AND_SCHEMA_SPEC.md)。
 
 ### 1. 核心控制與流程模組 (Core & Flow)
 
@@ -72,7 +72,8 @@ ARCOS 系統由多個模組與輔助工具組成。在編寫特定模組腳本�
 ### 3. 進階擴充與整合模組 (Advanced Extensions)
 
 - [`references/Cron&EventTab.md`](references/Cron&EventTab.md) - Cron 定時任務、Global 變數變更事件 (Event)、Redis Key 事件觸發
-- [`references/Redis.md`](references/Redis.md) - Redis 連線管理、鍵值快取、List 阻塞式操作、Pub/Sub 廣播
+- [`references/Redis.md`](references/Redis.md) - Redis 多 Session 隔離連線、鍵值快取、List 佇列、Pub/Sub（統一使用 `key` / `val` 與 `{session=...}`）
+- [`references/MultiStation.md`](references/MultiStation.md) - 統一多工站狀態機（`工站.工位` 雙模定址、環形 `StateShift`、跨站 `Transfer`、`FindFirstOK` / `FindEmpty` 與 IO/Variable/Point 三引擎綁定）
 - [`references/Python.md`](references/Python.md) - 內嵌 Python 3.10 運算模組、NumPy 座標與 OpenCV 影像數據交換
 - [`references/Call.md`](references/Call.md) - 外部獨立 CSVI 虛擬儀表程式呼叫 (兩階段參數導引、Debug / Runtime / Reentrant 模式)
 - [`references/AIAgent.md`](references/AIAgent.md) - AI 視覺監督、AOI 瑕疵輔助排查與異常後備處置模組

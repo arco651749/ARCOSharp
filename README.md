@@ -27,6 +27,7 @@
 
 | 文件名稱 | 內容說明 |
 | :--- | :--- |
+| **[`docs/COMMAND_SYNTAX_AND_SCHEMA_SPEC.md`](docs/COMMAND_SYNTAX_AND_SCHEMA_SPEC.md)** | **ARCOS 指令語法 v2.0 與全系統 14 模組 251 條指令參數 Schema 權威規範** |
 | **[docs/OPERATIONAL_TEST_PROCEDURE.md](docs/OPERATIONAL_TEST_PROCEDURE.md)** | **ARCOSharp 端到端全操作流測試規範與自動化回歸指南（ADC + JSON-RPC 七階段驗證）** |
 | **[ExternalModules/README.md](ExternalModules/README.md)** | **Call@ 模組獨立 CSVI 開發與兩階段導引規範（四位一體規格與 AI Agent 規範）** |
 | **[`docs/CSVI_STUDIO_AND_PORTABLE_SPEC.md`](docs/CSVI_STUDIO_AND_PORTABLE_SPEC.md)** | **CSVI 3.0 可攜式自包含格式（內嵌 CS+AXAML）與獨立 `CSVI Studio` 工具鏈規格書** |
@@ -45,7 +46,7 @@
 git clone https://github.com/arco651749/ARCOSharp.git
 cd ARCOSharp
 
-# 2. 執行全套單元測試 (119 項測試：Core 109 + Drivers 10)
+# 2. 執行全套單元與端到端測試 (218 項測試：Core 197 + Drivers 21)
 dotnet test ARCOS.sln
 
 # 3. 打包完整 Runtime 與所有 CSVI 虛擬儀表至 dist/ARCOS_Runtime

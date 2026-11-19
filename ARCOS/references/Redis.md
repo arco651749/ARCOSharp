@@ -1,47 +1,53 @@
-# ARCOS Redis 模組參考手冊
+# ARCOS Redis 模組參考手冊 (v2.0)
 
-這是專為 **Redis** 所設計的 Agent Skill 指令手冊。身為 ARCOS 專家，當遇到需要使用`Redis`功能時，請參照以下語法規則與指令。
-
-## 🎯 啟動條件與職責
-當使用者的請求、任務或討論內容中明確提到`Redis`，請自動套用本技能。
+本手冊涵蓋 **Redis** 模組全 9 條指令的 **ARCOS Command Syntax v2.0** 規範（同時 100% 向下相容舊版位置參數語法）。
 
 > [!IMPORTANT]
-> 本模組為外部擴充模組，使用前須先執行 `System@IncludeModule::Redis` 載入，才可呼叫以下所有模組指令。
-> 本模組會自動啟動本地的 `redis-server.exe` 並使用 `redis.conf` 作為組態檔啟動。請依照 `Redis Configure File` 內容設定 Redis 的功能。
+> 本模組為外部擴充模組，使用前須先執行 `System@IncludeModule :: module=Redis` 載入。
 
-## 🛠️ 基本語法與格式規範
-1. **指令句型**：所有的 Redis 指令都必須以 `Redis@` 開頭，後接指令名稱，再以 `::` 區隔參數。
-2. **參數分隔**：多個參數之間必須使用逗號 `,` 隔開。
-3. **Redis 狀態**：`Redis Session 的 Server 狀態`會存在區域變數 `RedisErr#$sessionName` 中。
-4. **Redis Session 的 Key 名稱**：
-    - 預設以 `CreateSession` 的第一個參數 `$sessionName` 作為 Redis 中的 `Key` 名稱（區分大小寫）。
-    - 也可透過 `$key@$host:$port` 語法，指定以 `$key` 作為 Redis 中的 `Key` 名稱（區分大小寫）。
-5. **Redis 讀取值**：
-    - 預設存入名為 `$sessionName` 的區域變數。（注意：`$key` 僅為 Redis 伺服器端的 Key 名稱，不影響本地變數的命名。）
-    - 可使用 `$var@$section` 指定存入區域變數 `$var`。
-    - 讀取值都是以文字型態存入（因為 ARCOS 的區域變數都是以文字型態存入）。
-6. **Redis 通用參數**：
-    - `TimeOut=$second`：(選填) 設定取得資料的超時時間（秒）。
-    - `Message=[[$label]]$message`：(選填) 超時則顯示 `$message` 並跳轉至 `[[$label]]`。 
+## 🛠️ 核心規範 (v2.0)
+
+1. **多 Session 隔離與自動預設 Session**：
+   - 第一次執行 `Redis@CreateSession :: session=<Name> {endpoint=<host:port>}` 所建立的 Session，會自動成為**預設 Session**。
+   - 其餘所有指令（`Set`、`Get`、`LPush`、`LPop`、`BLPop`、`Publish`、`Subscribe`、`CMD`）皆支援選填 `{session=<Name>}`；省略時自動套用預設 Session。
+   - 不同 Session 之間的 KV 與 List 命名空間完全隔離；連線狀態寫入全域變數 `RedisErr#$(session)`（成功為 `OK`）。
+2. **統一參數命名**：
+   - 資料鍵與 Pub/Sub 頻道統一使用 **`key`**（不再使用 `channel`）。
+   - 寫入內容與 Pub/Sub 訊息統一使用 **`val`**（不再使用 `msg`）。
+   - 讀出結果統一置於 **`-> var=<目標變數>`**（留空時預設寫入與 `key` 同名之變數）。
+
 ---
 
-## 📜 常用指令對照表
+## 📜 全 9 條指令對照表
 
-### 1. Redis Session 指令
-| 指令 | 參數 | 說明 |
-| :--- | :--- | :--- |
-| **CreateSession** | `$sessionName, $host:$port(, $user:$password)` | 建立 Redis Session。預設以 `$sessionName` 作為 Redis 中的 `Key` 名稱（區分大小寫）。 |
-| | `$sessionName, $key@$host:$port(, $user:$password)` | 建立 Redis Session。指定以 `$key` 作為 Redis 中的 `Key` 名稱（區分大小寫）。 |
-| **CMD** | `$sessionName, $cmd` | 直接傳送原始 Redis 語法指令（`$cmd`）至指定的 Redis Session 執行。 |
-| **Set** | `$sessionName, $value` | 設定指定 Redis Session 的 `Key` 值。 |
-| **Get** | `$sessionName` | 從 Redis 取得值並存入區域變數 `$sessionName`。 |
-| **Get** | `$sessionName, $var@$section` | 從 Redis 取得值並存入 `$section` 的區域變數 `$var`。 |
-| **Publish** | `$sessionName, $value` | 發布訊息至指定的 Redis Session。可用於多執行緒或多台機器的訊息傳遞。 |
-| **Subscribe** | `$sessionName` | 訂閱指定的 Redis Session。可用於多執行緒或多台機器的訊息接收。 |
+| 指令 (`Redis@Action`) | 必填輸入 (`::`) | 選填覆寫 (`{...}`) | 輸出 (`->`) / 系統副作用 | v2.0 標準範例 |
+| :--- | :--- | :--- | :--- | :--- |
+| **`CreateSession`** | `session` | `endpoint`("127.0.0.1:6379") | `[effect: sets RedisErr#$(session)=OK]` | `Redis@CreateSession :: session=Line1 {endpoint=192.168.1.10:6379}` |
+| **`Set`** | `key`, `val` | `session`("") | `[effect: sets RedisKV[$(key)]]` | `Redis@Set :: key=LotId, val=LOT2026 {session=MES}` |
+| **`Get`** | `key` | `session`("") | `-> [opt] var` / `[effect: default $(key)]` | `Redis@Get :: key=LotId {session=MES} -> var=CurLot` |
+| **`LPush`** | `key`, `val` | `session`("") | `[effect: pushes to RedisList[$(key)]]` | `Redis@LPush :: key=JobQ, val=Part001 {session=Line1}` |
+| **`LPop`** | `key` | `session`("") | `-> [opt] var` / `[effect: default $(key)]` | `Redis@LPop :: key=JobQ {session=Line1} -> var=NextJob` |
+| **`BLPop`** `[err]` | `key` | `session`(""), `timeoutSec`*(5) | `-> [opt] var` / `[effect: blocks & pops]` | `Redis@BLPop :: key=JobQ {session=Line1, timeoutSec=3} -> var=NextJob [[ErrQ]]佇列逾時` |
+| **`Publish`** | `key`, `val` | `session`("") | `[effect: publishes to $(key)]` | `Redis@Publish :: key=LineEvt, val=CycleDone {session=Line1}` |
+| **`Subscribe`** | `key` | `session`("") | `[effect: subscribes $(key)]` | `Redis@Subscribe :: key=LineEvt {session=Line1}` |
+| **`CMD`** | `cmd` | `session`("") | `[effect: runs raw Redis $(cmd)]` | `Redis@CMD :: cmd=PING {session=Line1}` |
 
-### 2. Redis List 指令
-| 指令 | 參數 | 說明 |
-| :--- | :--- | :--- |
-| **LPush** | `$sessionName, $value(, Dir={Start,End})` | Dir=Start 將 `$value` 加入 List 頭部，Dir=End 將 `$value` 加入 List 尾部。預設為 End。 |
-| **LPop** | `$sessionName(, Dir={Start,End})` | Dir=Start 從 List 頭部移除並取得值，Dir=End 從 List 尾部移除並取得值。預設為 End。 |
-| **BLPop** | `$sessionName(, Dir={Start,End})` | Dir=Start 阻塞式移除 List 頭部元素並取得值，Dir=End 阻塞式移除 List 尾部元素並取得值。預設為 End。 |
+---
+
+## 💡 多 Session 實戰範例
+
+```arcos
+// 建立預設 Session (Line1) 與第二個隔離 Session (MES)
+Redis@CreateSession :: session=Line1 {endpoint=127.0.0.1:6379}
+Redis@CreateSession :: session=MES {endpoint=192.168.1.20:6379}
+
+// 寫入與讀取（預設 Session 可省略 {session=...}）
+Redis@Set :: key=LotId, val=LOT_LINE1
+Redis@Set :: key=LotId, val=LOT_MES {session=MES}
+Redis@Get :: key=LotId -> var=CurLineLot
+Redis@Get :: key=LotId {session=MES} -> var=CurMesLot
+
+// Pub/Sub 跨站通知
+Redis@Publish :: key=LineEvt, val=CycleDone
+Redis@Subscribe :: key=LineEvt {session=MES}
+```
