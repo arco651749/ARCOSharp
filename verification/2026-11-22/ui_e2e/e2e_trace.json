@@ -1,0 +1,195 @@
+{
+  "trace": [
+    {
+      "step": "A1. Double-click Row 1 Parameters -> Re-open Guide UI",
+      "status": "WARN",
+      "elapsed_ms": 1458,
+      "detail": "Fast double-click did not open Parameter Guidance",
+      "shot": "d:\\AntiGravity\\ARCOSharp\\verification\\2026-11-22\\ui_e2e\\screenshots\\09_roundtrip_failed.jpg"
+    },
+    {
+      "step": "B1. Add Row 2 Variable@Set via Guide UI",
+      "status": "PASS",
+      "elapsed_ms": 5589,
+      "detail": "Filled 3 fields (TotalCount=42) & applied",
+      "shot": "d:\\AntiGravity\\ARCOSharp\\verification\\2026-11-22\\ui_e2e\\screenshots\\10_var_set_guide.jpg"
+    },
+    {
+      "step": "B2. Add Row 3 IO@AddVirtualIO via Guide UI",
+      "status": "PASS",
+      "elapsed_ms": 5553,
+      "detail": "Filled CycleReady?/True (2 edits) & applied",
+      "shot": "d:\\AntiGravity\\ARCOSharp\\verification\\2026-11-22\\ui_e2e\\screenshots\\11_io_virtual_guide.jpg"
+    },
+    {
+      "step": "B3a. Chaos Bad Input ('abc') in System@Delay Guide UI",
+      "status": "CHECKED",
+      "elapsed_ms": 5551,
+      "detail": "ParamOut after 'abc': val=\"abc\"",
+      "shot": "d:\\AntiGravity\\ARCOSharp\\verification\\2026-11-22\\ui_e2e\\screenshots\\12_chaos_delay_bad_input.jpg"
+    },
+    {
+      "step": "B3b. Apply valid Delay=0.2 -> 5-line Golden Sequence ready",
+      "status": "PASS",
+      "elapsed_ms": 9994,
+      "detail": "5 lines authored purely via UI",
+      "shot": "d:\\AntiGravity\\ARCOSharp\\verification\\2026-11-22\\ui_e2e\\screenshots\\13_golden_sequence_authored.jpg"
+    },
+    {
+      "step": "B4. Chaos click removed 'HELLO >' in Command Selector",
+      "status": "FOUND_BUG",
+      "elapsed_ms": 4371,
+      "detail": "Shown buttons: ['\"Minimize\" [Invoke]', '\"Maximize\" [Invoke]', '\"Close\" [Invoke]', '\"HelloWorld\" [Invoke,ScrollItem]', '\"Init\" [Invoke,ScrollItem]']",
+      "shot": "d:\\AntiGravity\\ARCOSharp\\verification\\2026-11-22\\ui_e2e\\screenshots\\14_chaos_hello_module.jpg"
+    },
+    {
+      "step": "C1. Toggle Sequencer View 'L1 精簡'",
+      "status": "PASS",
+      "elapsed_ms": 813,
+      "detail": "Clicked @23",
+      "shot": "d:\\AntiGravity\\ARCOSharp\\verification\\2026-11-22\\ui_e2e\\screenshots\\15_view_L1.jpg"
+    },
+    {
+      "step": "C2. Toggle Sequencer View 'L3 完整'",
+      "status": "PASS",
+      "elapsed_ms": 819,
+      "detail": "Clicked @25",
+      "shot": ""
+    },
+    {
+      "step": "C3. Toggle Sequencer View '單行'",
+      "status": "PASS",
+      "elapsed_ms": 821,
+      "detail": "Clicked @26",
+      "shot": "d:\\AntiGravity\\ARCOSharp\\verification\\2026-11-22\\ui_e2e\\screenshots\\17_view_wrap.jpg"
+    },
+    {
+      "step": "C4. Toggle Sequencer View 'L2 審查'",
+      "status": "PASS",
+      "elapsed_ms": 834,
+      "detail": "Clicked @24",
+      "shot": ""
+    },
+    {
+      "step": "D1. Click Real UI 'Run' button -> Execute 5-line Golden Sequence",
+      "status": "PASS",
+      "elapsed_ms": 2769,
+      "detail": "Oracle state keys: ['jsonrpc', 'id', 'result']",
+      "shot": "d:\\AntiGravity\\ARCOSharp\\verification\\2026-11-22\\ui_e2e\\screenshots\\19_after_ui_run.jpg"
+    },
+    {
+      "step": "D2. Inspect UI Log Box & Internal Oracle",
+      "status": "CHECKED",
+      "elapsed_ms": 0,
+      "detail": "TxtUserLogs=val=\"[18:59:26.412] [Thr",
+      "shot": ""
+    },
+    {
+      "step": "E. Patrol Tab 'Capture'",
+      "status": "PASS",
+      "elapsed_ms": 1907,
+      "detail": "Switched via @7",
+      "shot": "d:\\AntiGravity\\ARCOSharp\\verification\\2026-11-22\\ui_e2e\\screenshots\\20_tab_capture.jpg"
+    },
+    {
+      "step": "E. Patrol Tab 'Modules Info'",
+      "status": "PASS",
+      "elapsed_ms": 2239,
+      "detail": "Switched via @8",
+      "shot": "d:\\AntiGravity\\ARCOSharp\\verification\\2026-11-22\\ui_e2e\\screenshots\\21_tab_modules_info.jpg"
+    },
+    {
+      "step": "E. Patrol Tab 'Panel CMD'",
+      "status": "PASS",
+      "elapsed_ms": 1703,
+      "detail": "Switched via @9",
+      "shot": "d:\\AntiGravity\\ARCOSharp\\verification\\2026-11-22\\ui_e2e\\screenshots\\22_tab_panel_cmd.jpg"
+    },
+    {
+      "step": "E. Patrol Tab 'Remote'",
+      "status": "PASS",
+      "elapsed_ms": 1569,
+      "detail": "Switched via @10",
+      "shot": "d:\\AntiGravity\\ARCOSharp\\verification\\2026-11-22\\ui_e2e\\screenshots\\23_tab_remote.jpg"
+    },
+    {
+      "step": "E. Patrol Tab 'CSVI STUDIO'",
+      "status": "PASS",
+      "elapsed_ms": 1568,
+      "detail": "Switched via @11",
+      "shot": "d:\\AntiGravity\\ARCOSharp\\verification\\2026-11-22\\ui_e2e\\screenshots\\24_tab_csvi_studio.jpg"
+    },
+    {
+      "step": "E. Patrol Tab 'User Tab'",
+      "status": "PASS",
+      "elapsed_ms": 1684,
+      "detail": "Switched via @6",
+      "shot": "d:\\AntiGravity\\ARCOSharp\\verification\\2026-11-22\\ui_e2e\\screenshots\\25_tab_user_return.jpg"
+    },
+    {
+      "step": "F. Graceful WM_CLOSE Shutdown",
+      "status": "PASS",
+      "elapsed_ms": 1822,
+      "detail": "Exited cleanly on WM_CLOSE",
+      "shot": ""
+    }
+  ],
+  "findings": [
+    {
+      "severity": "P2",
+      "category": "UX",
+      "title": "Parameter cell double-click did not trigger Guide UI reliably via synthetic rapid click",
+      "evidence": "Verify DoubleTapped threshold or add explicit Edit icon/context menu on Sequencer rows."
+    },
+    {
+      "severity": "P2",
+      "category": "UX / Validation",
+      "title": "System@Delay Guide UI accepts non-numeric 'abc' without inline validation error",
+      "evidence": "ParameterOut accepted val=\"abc\" instead of warning/blocking non-numeric delay."
+    },
+    {
+      "severity": "P1",
+      "category": "Packaging / UI Drift",
+      "title": "Removed 'HELLO >' module is still listed in ARCOS Command Selector",
+      "evidence": "Clicking 'HELLO >' in Runtime displays: ['\"Minimize\" [Invoke]', '\"Maximize\" [Invoke]', '\"Close\" [Invoke]', '\"HelloWorld\" [Invoke,ScrollItem]', '\"Init\" [Invoke,ScrollItem]']"
+    }
+  ],
+  "oracle": {
+    "state": {
+      "jsonrpc": "2.0",
+      "id": 1,
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "{\r\n  \"mainTabIndex\": 0,\r\n  \"mainTabHeader\": \"User Tab\",\r\n  \"subPanelIndex\": 0,\r\n  \"subPanelContentType\": \"Avalonia.Controls.UserControl\",\r\n  \"activeUserPanel\": \"UserPanel\",\r\n  \"loadedUserPanels\": [\r\n    {\r\n      \"panelName\": \"UserPanel\",\r\n      \"filePath\": \"d:\\\\AntiGravity\\\\ARCOSharp\\\\PANELS\\\\UserPanel.csvi\",\r\n      \"isActive\": true,\r\n      \"controlCount\": 10\r\n    }\r\n  ],\r\n  \"machineStatus\": \"IDLE\",\r\n  \"isSupervisorMode\": true,\r\n  \"isLocked\": false,\r\n  \"hasAdminCredentials\": false,\r\n  \"currentProgram\": 0,\r\n  \"effectiveRowCount\": 5,\r\n  \"currentPC\": 6,\r\n  \"isThreadRunning\": false,\r\n  \"isSystemPaused\": false,\r\n  \"isTestThreadVisible\": false,\r\n  \"activeDialog\": {\r\n    \"isOpen\": false,\r\n    \"title\": \"\",\r\n    \"type\": \"\"\r\n  },\r\n  \"port0States\": {\r\n    \"P0.0\": false,\r\n    \"P0.1\": false,\r\n    \"P0.2\": false,\r\n    \"P0.3\": false,\r\n    \"P0.4\": false,\r\n    \"P0.5\": false,\r\n    \"P0.6\": false,\r\n    \"P0.7\": false\r\n  },\r\n  \"activePorts\": [\r\n    {\r\n      \"Port\": \"CycleReady?\",\r\n      \"Alias\": \"\",\r\n      \"Value\": true\r\n    }\r\n  ],\r\n  \"sequencerRows\": [\r\n    {\r\n      \"line\": 0,\r\n      \"command\": \"System@UserPanelOpen\",\r\n      \"parameter\": \"panel=UserPanel.csvi\",\r\n      \"isCurrentPC\": false,\r\n      \"isRangeSelected\": false,\r\n      \"isTrailingPlaceholder\": false\r\n    },\r\n    {\r\n      \"line\": 1,\r\n      \"command\": \"System@Log Message\",\r\n      \"parameter\": \"msg=\\u0022Status = READY (\\u6E2C\\u8A66)\\u0022\",\r\n      \"isCurrentPC\": false,\r\n      \"isRangeSelected\": false,\r\n      \"isTrailingPlaceholder\": false\r\n    },\r\n    {\r\n      \"line\": 2,\r\n      \"command\": \"Variable@LFindIndexSet\",\r\n      \"parameter\": \"var=TotalCount, val=42 {linked=DataArray}\",\r\n      \"isCurrentPC\": false,\r\n      \"isRangeSelected\": false,\r\n      \"isTrailingPlaceholder\": false\r\n    },\r\n    {\r\n      \"line\": 3,\r\n      \"command\": \"IO@AddVirtualIO\",\r\n      \"parameter\": \"io=CycleReady? {logic=True}\",\r\n      \"isCurrentPC\": false,\r\n      \"isRangeSelected\": false,\r\n      \"isTrailingPlaceholder\": false\r\n    },\r\n    {\r\n      \"line\": 4,\r\n      \"command\": \"System@Delay\",\r\n      \"parameter\": \"sec=0.2\",\r\n      \"isCurrentPC\": false,\r\n      \"isRangeSelected\": false,\r\n      \"isTrailingPlaceholder\": false\r\n    },\r\n    {\r\n      \"line\": 5,\r\n      \"command\": \"\",\r\n      \"parameter\": \"\",\r\n      \"isCurrentPC\": true,\r\n      \"isRangeSelected\": false,\r\n      \"isTrailingPlaceholder\": true\r\n    }\r\n  ],\r\n  \"recentLogs\": [\r\n    \"[18:59:26.412] [Thread 0:ThreadMain] [INFO] ARCOSharp System Ready. Awaiting script load via READ .PRO or SYSTEM@ProgramLoad.\",\r\n    \"[19:06:44.281] [Thread 0:ThreadMain] [UserPanelOpen] Requested panel \\u0027UserPanel.csvi\\u0027\",\r\n    \"[19:06:44.284] [Thread 0:ThreadMain] Status = READY (\\u6E2C\\u8A66)\",\r\n    \"[19:06:44.707] [Thread 0:ThreadMain] [UserPanelOpen] Mounted User Panel \\u0027UserPanel\\u0027 (UserPanel.csvi) [Total=1, Active=UserPanel]\"\r\n  ]\r\n}"
+          }
+        ]
+      }
+    },
+    "variable": {
+      "jsonrpc": "2.0",
+      "id": 1,
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "{\"success\":true,\"engine\":\"VARIABLE\",\"sections\":[\"Global\"],\"section\":\"Global\",\"variables\":{}}"
+          }
+        ]
+      }
+    },
+    "io": {
+      "jsonrpc": "2.0",
+      "id": 1,
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "{\"success\":true,\"engine\":\"IO\",\"drivers\":[],\"activeOrNamedPorts\":[{\"Port\":\"TRUE\",\"Alias\":\"Logic HIGH (1)\",\"Value\":true,\"IsVirtual\":true},{\"Port\":\"FALSE\",\"Alias\":\"Logic LOW (0)\",\"Value\":false,\"IsVirtual\":true},{\"Port\":\"Thread11#Run?\",\"Alias\":\"\",\"Value\":false,\"IsVirtual\":true},{\"Port\":\"Thread12#Pause?\",\"Alias\":\"\",\"Value\":false,\"IsVirtual\":true},{\"Port\":\"Thread7#Pause?\",\"Alias\":\"\",\"Value\":false,\"IsVirtual\":true},{\"Port\":\"System#Pause?\",\"Alias\":\"\",\"Value\":false,\"IsVirtual\":true},{\"Port\":\"Thread7#Error?\",\"Alias\":\"\",\"Value\":false,\"IsVirtual\":true},{\"Port\":\"Thread3#Pause?\",\"Alias\":\"\",\"Value\":false,\"IsVirtual\":true},{\"Port\":\"Thread5#Pause?\",\"Alias\":\"\",\"Value\":false,\"IsVirtual\":true},{\"Port\":\"Thread7#Run?\",\"Alias\":\"\",\"Value\":false,\"IsVirtual\":true},{\"Port\":\"Thread9#Run?\",\"Alias\":\"\",\"Value\":false,\"IsVirtual\":true},{\"Port\":\"Thread4#Pause?\",\"Alias\":\"\",\"Value\":false,\"IsVirtual\":true},{\"Port\":\"Thread10#Error?\",\"Alias\":\"\",\"Value\":false,\"IsVirtual\":true},{\"Port\":\"Thread9#Error?\",\"Alias\":\"\",\"Value\":false,\"IsVirtual\":true},{\"Port\":\"Thread3#Error?\",\"Alias\":\"\",\"Value\":false,\"IsVirtual\":true},{\"Port\":\"Thread11#Error?\",\"Alias\":\"\",\"Value\":false,\"IsVirtual\":true},{\"Port\":\"Thread6#Pause?\",\"Alias\":\"\",\"Value\":false,\"IsVirtual\":true},{\"Port\":\"System#Run?\",\"Alias\":\"\",\"Value\":false,\"IsVirtual\":true},{\"Port\":\"Thread6#Run?\",\"Alias\":\"\",\"Value\":false,\"IsVirtual\":true},{\"Port\":\"ThreadMain#Error?\",\"Alias\":\"\",\"Value\":false,\"IsVirtual\":true},{\"Port\":\"Thread5#Error?\",\"Alias\":\"\",\"Value\":false,\"IsVirtual\":true},{\"Port\":\"Thread10#Pause?\",\"Alias\":\"\",\"Value\":false,\"IsVirtual\":true},{\"Port\":\"Thread8#Pause?\",\"Alias\":\"\",\"Value\":false,\"IsVirtual\":true},{\"Port\":\"Thread9#Pause?\",\"Alias\":\"\",\"Value\":false,\"IsVirtual\":true},{\"Port\":\"Thread4#Error?\",\"Alias\":\"\",\"Value\":false,\"IsVirtual\":true},{\"Port\":\"Thread5#Run?\",\"Alias\":\"\",\"Value\":false,\"IsVirtual\":true},{\"Port\":\"Thread2#Pause?\",\"Alias\":\"\",\"Value\":false,\"IsVirtual\":true},{\"Port\":\"ThreadMain#Pause?\",\"Alias\":\"\",\"Value\":false,\"IsVirtual\":true},{\"Port\":\"Thread1#Pause?\",\"Alias\":\"\",\"Value\":false,\"IsVirtual\":true},{\"Port\":\"Thread2#Run?\",\"Alias\":\"\",\"Value\":false,\"IsVirtual\":true},{\"Port\":\"Thread2#Error?\",\"Alias\":\"\",\"Value\":false,\"IsVirtual\":true},{\"Port\":\"Thread11#Pause?\",\"Alias\":\"\",\"Value\":false,\"IsVirtual\":true},{\"Port\":\"Thread4#Run?\",\"Alias\":\"\",\"Value\":false,\"IsVirtual\":true},{\"Port\":\"Thread6#Error?\",\"Alias\":\"\",\"Value\":false,\"IsVirtual\":true},{\"Port\":\"Thread8#Error?\",\"Alias\":\"\",\"Value\":false,\"IsVirtual\":true},{\"Port\":\"ThreadMain#Run?\",\"Alias\":\"\",\"Value\":false,\"IsVirtual\":true},{\"Port\":\"Thread1#Error?\",\"Alias\":\"\",\"Value\":false,\"IsVirtual\":true},{\"Port\":\"Thread10#Run?\",\"Alias\":\"\",\"Value\":false,\"IsVirtual\":true},{\"Port\":\"Thread8#Run?\",\"Alias\":\"\",\"Value\":false,\"IsVirtual\":true},{\"Port\":\"CycleReady?\",\"Alias\":\"\",\"Value\":true,\"IsVirtual\":true},{\"Port\":\"Thread12#Error?\",\"Alias\":\"\",\"Value\":false,\"IsVirtual\":true},{\"Port\":\"Thread12#Run?\",\"Alias\":\"\",\"Value\":false,\"IsVirtual\":true},{\"Port\":\"Thread3#Run?\",\"Alias\":\"\",\"Value\":false,\"IsVirtual\":true},{\"Port\":\"Thread1#Run?\",\"Alias\":\"\",\"Value\":false,\"IsVirtual\":true}]}"
+          }
+        ]
+      }
+    }
+  }
+}

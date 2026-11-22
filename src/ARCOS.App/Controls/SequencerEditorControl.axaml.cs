@@ -197,16 +197,31 @@ public partial class SequencerEditorControl : UserControl, ISequencerEditorHost
         if (pnlOp != null) pnlOp.IsVisible = !supervisor;
         if (pnlSup != null) pnlSup.IsVisible = supervisor;
 
+        var activeBg = SolidColorBrush.Parse("#0284C7");
+        var activeBorder = SolidColorBrush.Parse("#0369A1");
+        var inactiveFg = SolidColorBrush.Parse("#475569");
+        var iconOp = this.FindControl<Avalonia.Controls.Shapes.Path>("IconTabOp");
+        var txtOp = this.FindControl<TextBlock>("TxtTabOp");
+        var iconSup = this.FindControl<Avalonia.Controls.Shapes.Path>("IconTabSup");
+        var txtSup = this.FindControl<TextBlock>("TxtTabSup");
+
         if (btnOp != null)
         {
-            btnOp.Background = supervisor ? Brushes.Transparent : Brushes.White;
+            btnOp.Background = supervisor ? Brushes.Transparent : activeBg;
+            btnOp.BorderBrush = supervisor ? Brushes.Transparent : activeBorder;
             btnOp.BorderThickness = new Avalonia.Thickness(supervisor ? 0 : 1);
         }
+        if (iconOp != null) iconOp.Fill = supervisor ? inactiveFg : Brushes.White;
+        if (txtOp != null) txtOp.Foreground = supervisor ? inactiveFg : Brushes.White;
+
         if (btnSup != null)
         {
-            btnSup.Background = supervisor ? Brushes.White : Brushes.Transparent;
+            btnSup.Background = supervisor ? activeBg : Brushes.Transparent;
+            btnSup.BorderBrush = supervisor ? activeBorder : Brushes.Transparent;
             btnSup.BorderThickness = new Avalonia.Thickness(supervisor ? 1 : 0);
         }
+        if (iconSup != null) iconSup.Fill = supervisor ? Brushes.White : inactiveFg;
+        if (txtSup != null) txtSup.Foreground = supervisor ? Brushes.White : inactiveFg;
 
         var grid = this.FindControl<DataGrid>("GridCommands");
         if (grid != null) grid.IsReadOnly = _isLocked;

@@ -3892,19 +3892,30 @@ public partial class MainWindow : Window
                 panel = dev?.CreateDriverView();
             }
 
+            // 優先直接從目標 CSVI 組件本身實例化 FrontPanel（避免誤落回 ParameterGuidanceManager 的模組預設 System.csvi）
+            if (panel == null && pkg.LoadedAssembly != null)
+            {
+                var guidanceType = pkg.LoadedAssembly.GetTypes().FirstOrDefault(t =>
+                    typeof(ARCOS.Core.Guidance.IParameterGuidance).IsAssignableFrom(t) && !t.IsAbstract && !t.IsInterface);
+                if (guidanceType != null && Activator.CreateInstance(guidanceType) is ARCOS.Core.Guidance.IParameterGuidance g)
+                {
+                    panel = g.GetFrontPanelControl();
+                }
+
+                if (panel == null)
+                {
+                    var ctrlType = pkg.LoadedAssembly.GetTypes().FirstOrDefault(t => typeof(Control).IsAssignableFrom(t) && !t.IsAbstract);
+                    if (ctrlType != null)
+                    {
+                        panel = Activator.CreateInstance(ctrlType);
+                    }
+                }
+            }
+
             if (panel == null)
             {
                 panel = ARCOS.App.Guidance.ParameterGuidanceManager.Instance.GetFrontPanel(cmdKey)
                      ?? ARCOS.App.Guidance.ParameterGuidanceManager.Instance.GetFrontPanel($"{pkg.Manifest.Module}@{cmdKey}");
-            }
-
-            if (panel == null && pkg.LoadedAssembly != null)
-            {
-                var ctrlType = pkg.LoadedAssembly.GetTypes().FirstOrDefault(t => typeof(Control).IsAssignableFrom(t) && !t.IsAbstract);
-                if (ctrlType != null)
-                {
-                    panel = Activator.CreateInstance(ctrlType);
-                }
             }
 
             if (panel is not Control ctrl)

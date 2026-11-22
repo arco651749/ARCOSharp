@@ -1,0 +1,239 @@
+{
+  "checks": [
+    {
+      "id": "P2-1_UIA_Names",
+      "passed": true,
+      "detail": "Key buttons exposed cleanly in UIA (total @Ref=33)"
+    },
+    {
+      "id": "UI-02a_No_Ghost_HELLO",
+      "passed": true,
+      "detail": "HELLO > absent from Runtime Command Selector"
+    },
+    {
+      "id": "UI-02b_Runtime_Panel_Isolation",
+      "passed": true,
+      "detail": "filePath=d:\\AntiGravity\\ARCOSharp\\dist\\ARCOS_Runtime\\PANELS\\UserPanel.csvi"
+    },
+    {
+      "id": "E2E_Variable_TotalCount",
+      "passed": true,
+      "detail": "VariableEngine.TotalCount=42"
+    },
+    {
+      "id": "E2E_Log_With_Equals",
+      "passed": true,
+      "detail": "Verbatim log with '=' found in recentLogs"
+    },
+    {
+      "id": "UI-03_Real_UserPanelView_Mounted",
+      "passed": true,
+      "detail": "activeUserPanel=UserPanel, controlCount=28"
+    },
+    {
+      "id": "UI-01_CsviStudio_Not_AppDll",
+      "passed": true,
+      "detail": "CSVI STUDIO did NOT open ARCOS.App.dll"
+    }
+  ],
+  "trace": [
+    {
+      "step": "0. Launch ARCOS.App on DISPLAY9",
+      "status": "PASS",
+      "elapsed_ms": 6366,
+      "detail": "HWND=0x5108D4",
+      "shot": "d:\\AntiGravity\\ARCOSharp\\verification\\2026-11-22\\ui_e2e\\screenshots_after_fix\\01_startup_after_fix.jpg"
+    },
+    {
+      "step": "1. Switch to SUPERVISOR via UIA Name",
+      "status": "PASS",
+      "elapsed_ms": 600,
+      "detail": "Clicked @29 (\"SUPERVISOR\" [Invoke,ScrollItem])",
+      "shot": "d:\\AntiGravity\\ARCOSharp\\verification\\2026-11-22\\ui_e2e\\screenshots_after_fix\\02_supervisor_highlight.jpg"
+    },
+    {
+      "step": "2. Row 0: System@UserPanelOpen",
+      "status": "PASS",
+      "elapsed_ms": 1300,
+      "detail": "Applied UserPanel.csvi",
+      "shot": ""
+    },
+    {
+      "step": "3. Row 1: System@Log Message (with '=')",
+      "status": "PASS",
+      "elapsed_ms": 1200,
+      "detail": "Applied msg='Status = READY (測試)'",
+      "shot": ""
+    },
+    {
+      "step": "4. Row 2: Variable@Set (TotalCount=42)",
+      "status": "PASS",
+      "elapsed_ms": 1200,
+      "detail": "Filled 3 fields",
+      "shot": ""
+    },
+    {
+      "step": "5. Row 3: IO@AddVirtualIO (CycleReady?=True)",
+      "status": "PASS",
+      "elapsed_ms": 1200,
+      "detail": "Applied",
+      "shot": ""
+    },
+    {
+      "step": "6. Row 4: System@Delay (0.2s)",
+      "status": "PASS",
+      "elapsed_ms": 1200,
+      "detail": "Applied",
+      "shot": ""
+    },
+    {
+      "step": "7. Tab 'Capture'",
+      "status": "PASS",
+      "elapsed_ms": 800,
+      "detail": "Captured 05_tab_capture_after_fix",
+      "shot": "d:\\AntiGravity\\ARCOSharp\\verification\\2026-11-22\\ui_e2e\\screenshots_after_fix\\05_tab_capture_after_fix.jpg"
+    },
+    {
+      "step": "7. Tab 'Modules Info'",
+      "status": "PASS",
+      "elapsed_ms": 800,
+      "detail": "Captured 06_tab_modules_info_after_fix",
+      "shot": "d:\\AntiGravity\\ARCOSharp\\verification\\2026-11-22\\ui_e2e\\screenshots_after_fix\\06_tab_modules_info_after_fix.jpg"
+    },
+    {
+      "step": "7. Tab 'Panel CMD'",
+      "status": "PASS",
+      "elapsed_ms": 800,
+      "detail": "Captured 07_tab_panel_cmd_after_fix",
+      "shot": "d:\\AntiGravity\\ARCOSharp\\verification\\2026-11-22\\ui_e2e\\screenshots_after_fix\\07_tab_panel_cmd_after_fix.jpg"
+    },
+    {
+      "step": "7. Tab 'Remote'",
+      "status": "PASS",
+      "elapsed_ms": 800,
+      "detail": "Captured 08_tab_remote_after_fix",
+      "shot": "d:\\AntiGravity\\ARCOSharp\\verification\\2026-11-22\\ui_e2e\\screenshots_after_fix\\08_tab_remote_after_fix.jpg"
+    },
+    {
+      "step": "7. Tab 'CSVI STUDIO'",
+      "status": "PASS",
+      "elapsed_ms": 800,
+      "detail": "Captured 09_tab_csvi_studio_after_fix",
+      "shot": "d:\\AntiGravity\\ARCOSharp\\verification\\2026-11-22\\ui_e2e\\screenshots_after_fix\\09_tab_csvi_studio_after_fix.jpg"
+    }
+  ],
+  "state": {
+    "mainTabIndex": 0,
+    "mainTabHeader": "User Tab",
+    "subPanelIndex": 0,
+    "subPanelContentType": "ARCOS.Panels.UserPanel.UserPanelView",
+    "activeUserPanel": "UserPanel",
+    "loadedUserPanels": [
+      {
+        "panelName": "UserPanel",
+        "filePath": "d:\\AntiGravity\\ARCOSharp\\dist\\ARCOS_Runtime\\PANELS\\UserPanel.csvi",
+        "isActive": true,
+        "controlCount": 28
+      }
+    ],
+    "machineStatus": "IDLE",
+    "isSupervisorMode": true,
+    "isLocked": false,
+    "hasAdminCredentials": false,
+    "currentProgram": 0,
+    "effectiveRowCount": 5,
+    "currentPC": 6,
+    "isThreadRunning": false,
+    "isSystemPaused": false,
+    "isTestThreadVisible": false,
+    "activeDialog": {
+      "isOpen": false,
+      "title": "",
+      "type": ""
+    },
+    "port0States": {
+      "P0.0": false,
+      "P0.1": false,
+      "P0.2": false,
+      "P0.3": false,
+      "P0.4": false,
+      "P0.5": false,
+      "P0.6": false,
+      "P0.7": false
+    },
+    "activePorts": [
+      {
+        "Port": "CycleReady?",
+        "Alias": "",
+        "Value": true
+      }
+    ],
+    "sequencerRows": [
+      {
+        "line": 0,
+        "command": "System@UserPanelOpen",
+        "parameter": "panel=UserPanel.csvi",
+        "isCurrentPC": false,
+        "isRangeSelected": false,
+        "isTrailingPlaceholder": false
+      },
+      {
+        "line": 1,
+        "command": "System@Log Message",
+        "parameter": "msg=\"Status = READY (測試)\"",
+        "isCurrentPC": false,
+        "isRangeSelected": false,
+        "isTrailingPlaceholder": false
+      },
+      {
+        "line": 2,
+        "command": "Variable@Set",
+        "parameter": "var=TotalCount, val=42",
+        "isCurrentPC": false,
+        "isRangeSelected": false,
+        "isTrailingPlaceholder": false
+      },
+      {
+        "line": 3,
+        "command": "IO@AddVirtualIO",
+        "parameter": "io=CycleReady? {logic=True}",
+        "isCurrentPC": false,
+        "isRangeSelected": false,
+        "isTrailingPlaceholder": false
+      },
+      {
+        "line": 4,
+        "command": "System@Delay",
+        "parameter": "sec=0.2",
+        "isCurrentPC": false,
+        "isRangeSelected": false,
+        "isTrailingPlaceholder": false
+      },
+      {
+        "line": 5,
+        "command": "",
+        "parameter": "",
+        "isCurrentPC": true,
+        "isRangeSelected": false,
+        "isTrailingPlaceholder": true
+      }
+    ],
+    "recentLogs": [
+      "[19:20:33.846] [Thread 0:ThreadMain] [INFO] ARCOSharp System Ready. Awaiting script load via READ .PRO or SYSTEM@ProgramLoad.",
+      "[19:21:20.133] [Thread 0:ThreadMain] [UserPanelOpen] Requested panel 'UserPanel.csvi'",
+      "[19:21:20.136] [Thread 0:ThreadMain] Status = READY (測試)",
+      "[19:21:20.202] [Thread 0:ThreadMain] [UserPanelOpen] Mounted User Panel 'UserPanel' (UserPanel.csvi) [Total=1, Active=UserPanel]"
+    ]
+  },
+  "variables": {
+    "success": true,
+    "engine": "VARIABLE",
+    "sections": [
+      "Global"
+    ],
+    "section": "Global",
+    "variables": {
+      "TotalCount": "42"
+    }
+  }
+}

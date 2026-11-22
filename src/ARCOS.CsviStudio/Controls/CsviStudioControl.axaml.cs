@@ -80,7 +80,7 @@ public partial class CsviStudioControl : UserControl
         var cmdArgs = Environment.GetCommandLineArgs();
         if (string.IsNullOrEmpty(initialFilePath))
         {
-            initialFilePath = cmdArgs
+            initialFilePath = cmdArgs.Skip(1)
                 .Select(a => a.Trim('"').Trim())
                 .FirstOrDefault(a => !a.StartsWith("-") && (a.EndsWith(".csvi", StringComparison.OrdinalIgnoreCase) || a.EndsWith(".dll", StringComparison.OrdinalIgnoreCase)));
         }
@@ -93,6 +93,7 @@ public partial class CsviStudioControl : UserControl
         {
             var candidates = new[]
             {
+                Path.Combine(AppContext.BaseDirectory, "MODULES", "IO", "DRIVER", "MockIO.csvi"),
                 Path.Combine(AppContext.BaseDirectory, "MockIO.csvi"),
                 Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "MODULES", "IO", "DRIVER", "MockIO.csvi"),
                 Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "src", "MODULES", "IO", "DRIVER", "MockIO.csvi"),

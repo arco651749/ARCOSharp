@@ -81,6 +81,7 @@ public partial class MainWindow : Window
         if (string.IsNullOrEmpty(initialFilePath))
         {
             initialFilePath = cmdArgs
+                .Skip(1)
                 .Select(a => a.Trim('"').Trim())
                 .FirstOrDefault(a => !a.StartsWith("-") && (a.EndsWith(".csvi", StringComparison.OrdinalIgnoreCase) || a.EndsWith(".dll", StringComparison.OrdinalIgnoreCase)));
         }

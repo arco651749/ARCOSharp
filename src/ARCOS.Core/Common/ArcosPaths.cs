@@ -22,6 +22,16 @@ public static class ArcosPaths
         {
             if (_customRoot != null) return _customRoot;
 
+            // 1. 優先判定自包含 Runtime 部署目錄（AppContext.BaseDirectory 直接具備完整 MODULES/SYSTEM/ 核心指令包且不含 ARCOS.sln）
+            //    避免 dist/ARCOS_Runtime 執行時往上穿透讀到上層開發 Repo 的檔案，同時不誤判 bin/Debug/net8.0 下的局部 MODULES 驅動資料夾
+            string baseDir = AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            if (!string.IsNullOrEmpty(baseDir) &&
+                File.Exists(Path.Combine(baseDir, "MODULES", "SYSTEM", "Delay.csvi")) &&
+                !File.Exists(Path.Combine(baseDir, "ARCOS.sln")))
+            {
+                return baseDir;
+            }
+
             var dir = new DirectoryInfo(Directory.GetCurrentDirectory());
             while (dir != null)
             {

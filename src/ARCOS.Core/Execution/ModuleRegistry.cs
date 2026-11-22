@@ -29,7 +29,17 @@ public sealed class ModuleRegistry
         }
 
         string baseDir = AppDomain.CurrentDomain.BaseDirectory;
-        roots.Add(Path.Combine(baseDir, "MODULES"));
+        string baseModules = Path.Combine(baseDir, "MODULES");
+        bool isIsolatedRuntime = File.Exists(Path.Combine(baseModules, "SYSTEM", "Delay.csvi")) &&
+                                 !File.Exists(Path.Combine(baseDir, "ARCOS.sln"));
+
+        roots.Add(baseModules);
+        if (isIsolatedRuntime)
+        {
+            // 自包含 Runtime 部署環境：嚴格限定只掃描自身 MODULES/，避免穿透上層開發 Repo 漏出測試模組（如 HELLO）
+            return roots.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        }
+
         roots.Add(Path.Combine(Directory.GetCurrentDirectory(), "MODULES"));
         try
         {

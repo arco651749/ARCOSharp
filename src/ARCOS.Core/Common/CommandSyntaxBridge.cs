@@ -591,6 +591,33 @@ public static class CommandSyntaxBridge
                 parsed.AllArgs["expr"] = rawParam.Substring(eqIdx + 1).Trim();
             }
         }
+        else if (key is "System@Log Message" or "System@Log Error" or "System@Note" or "System@MessageBox")
+        {
+            string textKey = key == "System@Note" ? "text" : "msg";
+            if (!parsed.HasOptionalBlock && !parsed.HasOutputBlock && !parsed.AllArgs.ContainsKey(textKey))
+            {
+                parsed.AllArgs.Clear();
+                parsed.AllArgs[textKey] = rawParam.Trim();
+            }
+        }
+        else if (key == "Motion@ExtraCMD" && !parsed.HasOptionalBlock && !parsed.HasOutputBlock && !parsed.AllArgs.ContainsKey("cmd"))
+        {
+            string body = rawParam.Trim();
+            int trapIdx = body.IndexOf("[[", StringComparison.Ordinal);
+            if (trapIdx >= 0) body = body.Substring(0, trapIdx).Trim().TrimEnd(',').Trim();
+            int comma = body.IndexOf(',');
+            if (comma > 0 && comma < body.Length - 1)
+            {
+                string mot = body.Substring(0, comma).Trim();
+                string cmd = body.Substring(comma + 1).Trim();
+                if (!string.IsNullOrEmpty(mot) && !string.IsNullOrEmpty(cmd))
+                {
+                    parsed.AllArgs.Clear();
+                    parsed.AllArgs["mot"] = mot;
+                    parsed.AllArgs["cmd"] = cmd;
+                }
+            }
+        }
 
         return CommandFormatter.FormatParameter(parsed, schema);
     }
@@ -917,7 +944,7 @@ public static class CommandSyntaxBridge
                 sec = work.Substring(commaIdx + 1).Trim();
                 work = work.Substring(0, commaIdx).Trim();
             }
-            var m = System.Text.RegularExpressions.Regex.Match(work, @"^([a-zA-Z0-9_$]+)=([XYZUVWHxyzuvwh](?:\.[a-zA-Z0-9_]+)?)\(([^)]+)\)$");
+            var m = System.Text.RegularExpressions.Regex.Match(work, @"^([a-zA-Z0-9_$]+)=([a-zA-Z_][a-zA-Z0-9_.]*)\(([^)]+)\)$");
             if (m.Success)
             {
                 parsed.AllArgs.Clear();

@@ -3,6 +3,22 @@
              x:Class="ARCOS.App.Controls.SequencerEditorControl"
              Background="#FFFFFF">
 
+    <UserControl.Styles>
+        <!-- 防止 Avalonia Fluent 預設 pointerover 把深藍/深綠主按鈕蓋成淺灰導致白字消失 -->
+        <Style Selector="Button.primary-sky:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="#0369A1"/>
+        </Style>
+        <Style Selector="Button.primary-sky:pressed /template/ ContentPresenter">
+            <Setter Property="Background" Value="#075985"/>
+        </Style>
+        <Style Selector="Button.primary-emerald:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="#047857"/>
+        </Style>
+        <Style Selector="Button.primary-emerald:pressed /template/ ContentPresenter">
+            <Setter Property="Background" Value="#065F46"/>
+        </Style>
+    </UserControl.Styles>
+
     <UserControl.Resources>
         <!-- ========================================================= -->
         <!-- 全套 Avalonia 11 原生標準向量圖標庫 (拒絕粗糙 Emoji) -->
@@ -68,7 +84,7 @@
 
                 <!-- PROG & INIT 專用操作工具列 -->
                 <Grid Grid.Row="1" ColumnDefinitions="*,*,*,*" Margin="0,1,0,1">
-                    <Button x:Name="BtnReadPro" Grid.Column="0" Height="23" Margin="1,0" Padding="4,0"
+                    <Button x:Name="BtnReadPro" Classes="primary-sky" AutomationProperties.Name="READ .PROG" Grid.Column="0" Height="23" Margin="1,0" Padding="4,0"
                             Background="#0284C7" Foreground="White" FontWeight="Bold" FontSize="9.5"
                             HorizontalContentAlignment="Center" VerticalContentAlignment="Center" CornerRadius="3"
                             ToolTip.Tip="從 ARCOSharp 根目錄讀取 .prog 專案檔">
@@ -77,7 +93,7 @@
                             <TextBlock Text="READ .PROG" FontSize="9.5" FontWeight="Bold" Foreground="White" VerticalAlignment="Center"/>
                         </StackPanel>
                     </Button>
-                    <Button x:Name="BtnSavePro" Grid.Column="1" Height="23" Margin="1,0" Padding="4,0"
+                    <Button x:Name="BtnSavePro" Classes="primary-sky" AutomationProperties.Name="SAVE .PROG" Grid.Column="1" Height="23" Margin="1,0" Padding="4,0"
                             Background="#0369A1" Foreground="White" FontWeight="Bold" FontSize="9.5"
                             HorizontalContentAlignment="Center" VerticalContentAlignment="Center" CornerRadius="3"
                             ToolTip.Tip="儲存至 ARCOSharp 根目錄 .prog 專案檔">
@@ -86,7 +102,7 @@
                             <TextBlock Text="SAVE .PROG" FontSize="9.5" FontWeight="Bold" Foreground="White" VerticalAlignment="Center"/>
                         </StackPanel>
                     </Button>
-                    <Button x:Name="BtnReadInit" Grid.Column="2" Height="23" Margin="1,0" Padding="4,0"
+                    <Button x:Name="BtnReadInit" Classes="primary-emerald" AutomationProperties.Name="READ .INIT" Grid.Column="2" Height="23" Margin="1,0" Padding="4,0"
                             Background="#059669" Foreground="White" FontWeight="Bold" FontSize="9.5"
                             HorizontalContentAlignment="Center" VerticalContentAlignment="Center" CornerRadius="3"
                             ToolTip.Tip="從 SCRIPT/ 目錄讀取單一 .init 腳本">
@@ -95,7 +111,7 @@
                             <TextBlock Text="READ .INIT" FontSize="9.5" FontWeight="Bold" Foreground="White" VerticalAlignment="Center"/>
                         </StackPanel>
                     </Button>
-                    <Button x:Name="BtnSaveInit" Grid.Column="3" Height="23" Margin="1,0" Padding="4,0"
+                    <Button x:Name="BtnSaveInit" Classes="primary-emerald" AutomationProperties.Name="SAVE .INIT" Grid.Column="3" Height="23" Margin="1,0" Padding="4,0"
                             Background="#047857" Foreground="White" FontWeight="Bold" FontSize="9.5"
                             HorizontalContentAlignment="Center" VerticalContentAlignment="Center" CornerRadius="3"
                             ToolTip.Tip="儲存至 SCRIPT/ 目錄 .init 腳本">
@@ -170,8 +186,8 @@
                     </Style>
                 </DataGrid.Styles>
                 <DataGrid.Columns>
-                    <!-- 行號 i (專屬指示運行位置 PC，完全獨立於範圍選取) -->
-                    <DataGridTemplateColumn Header="i" Width="44">
+                    <!-- 行號 # (專屬指示運行位置 PC，完全獨立於範圍選取) -->
+                    <DataGridTemplateColumn Header="#" Width="44">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate>
                                 <Panel HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
@@ -268,24 +284,24 @@
         <Border Grid.Row="3" Background="#FFFFFF" BorderBrush="#CBD5E1" BorderThickness="1" CornerRadius="4" Margin="2,1">
             <Grid RowDefinitions="Auto,*">
                 <!-- 頂部 Segmented 角色切換膠囊 (極簡現代 Pill Bar) -->
-                <Border Grid.Row="0" Background="#F1F5F9" CornerRadius="4" Margin="4,4,4,2" Padding="2">
+                <Border Grid.Row="0" Background="#E2E8F0" CornerRadius="4" Margin="4,4,4,2" Padding="2">
                     <Grid ColumnDefinitions="*,*">
-                        <Button x:Name="BtnTabOp" Grid.Column="0" Height="24" CornerRadius="3"
-                                Background="#FFFFFF" BorderBrush="#CBD5E1" BorderThickness="1"
+                        <Button x:Name="BtnTabOp" AutomationProperties.Name="OPERATOR" Grid.Column="0" Height="24" CornerRadius="3"
+                                Background="#0284C7" BorderBrush="#0369A1" BorderThickness="1"
                                 HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
                                 Click="OnTabOpClick">
                             <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-                                <Path Data="{StaticResource IconKey}" Fill="#0284C7" Width="11" Height="11" Stretch="Uniform" VerticalAlignment="Center"/>
-                                <TextBlock Text="OPERATOR" FontWeight="Bold" FontSize="11" Foreground="#0284C7" VerticalAlignment="Center"/>
+                                <Path x:Name="IconTabOp" Data="{StaticResource IconKey}" Fill="#FFFFFF" Width="11" Height="11" Stretch="Uniform" VerticalAlignment="Center"/>
+                                <TextBlock x:Name="TxtTabOp" Text="OPERATOR" FontWeight="Bold" FontSize="11" Foreground="#FFFFFF" VerticalAlignment="Center"/>
                             </StackPanel>
                         </Button>
-                        <Button x:Name="BtnTabSup" Grid.Column="1" Height="24" CornerRadius="3"
+                        <Button x:Name="BtnTabSup" AutomationProperties.Name="SUPERVISOR" Grid.Column="1" Height="24" CornerRadius="3"
                                 Background="Transparent" BorderThickness="0"
                                 HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
                                 Click="OnTabSupClick">
                             <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-                                <Path Data="{StaticResource IconUser}" Fill="#64748B" Width="11" Height="11" Stretch="Uniform" VerticalAlignment="Center"/>
-                                <TextBlock Text="SUPERVISOR" FontWeight="SemiBold" FontSize="11" Foreground="#64748B" VerticalAlignment="Center"/>
+                                <Path x:Name="IconTabSup" Data="{StaticResource IconUser}" Fill="#475569" Width="11" Height="11" Stretch="Uniform" VerticalAlignment="Center"/>
+                                <TextBlock x:Name="TxtTabSup" Text="SUPERVISOR" FontWeight="SemiBold" FontSize="11" Foreground="#475569" VerticalAlignment="Center"/>
                             </StackPanel>
                         </Button>
                     </Grid>
@@ -311,7 +327,7 @@
                                 <Path Data="{StaticResource IconFolderOpen}" Fill="#0284C7" Width="13" Height="13" Stretch="Uniform"/>
                             </Button>
 
-                            <Button x:Name="BtnBigRunOp" Grid.Column="1" Width="78" Height="46" Margin="0,0,8,0"
+                            <Button x:Name="BtnBigRunOp" Classes="primary-sky" AutomationProperties.Name="Run (Operator)" Grid.Column="1" Width="78" Height="46" Margin="0,0,8,0"
                                     Background="#0284C7" BorderThickness="0" CornerRadius="4">
                                 <StackPanel Orientation="Horizontal" Spacing="5" HorizontalAlignment="Center" VerticalAlignment="Center">
                                     <Path Data="{StaticResource IconPlay}" Fill="#FFFFFF" Width="13" Height="13" Stretch="Uniform"/>
@@ -391,7 +407,7 @@
 
                             <!-- 第二行：中型 Run + 行增刪 (存行, 刪行-, 加行+, 清空x, Save) -->
                             <Grid Grid.Row="1" ColumnDefinitions="Auto,*" Margin="0,0,0,4">
-                                <Button x:Name="BtnRunSup" Grid.Column="0" Width="68" Height="26" 
+                                <Button x:Name="BtnRunSup" Classes="primary-sky" AutomationProperties.Name="Run" Grid.Column="0" Width="68" Height="26" 
                                         Background="#0284C7" BorderThickness="0" CornerRadius="3">
                                     <StackPanel Orientation="Horizontal" Spacing="4">
                                         <Path Data="{StaticResource IconPlay}" Fill="#FFFFFF" Width="10" Height="10" Stretch="Uniform"/>
@@ -399,23 +415,23 @@
                                     </StackPanel>
                                 </Button>
                                 <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="2" HorizontalAlignment="Right">
-                                    <Button x:Name="BtnSaveLine" Width="26" Height="26" Padding="0" 
+                                    <Button x:Name="BtnSaveLine" AutomationProperties.Name="儲存修改" Width="26" Height="26" Padding="0" 
                                             Background="#FFFFFF" BorderBrush="#CBD5E1" BorderThickness="1" CornerRadius="2" ToolTip.Tip="儲存修改">
                                         <Path Data="{StaticResource IconFloppySave}" Fill="#475569" Width="11" Height="11" Stretch="Uniform"/>
                                     </Button>
-                                    <Button x:Name="BtnMinusLine" Width="26" Height="26" Padding="0" 
+                                    <Button x:Name="BtnMinusLine" AutomationProperties.Name="刪除所選行" Width="26" Height="26" Padding="0" 
                                             Background="#FEF2F2" BorderBrush="#FECACA" BorderThickness="1" CornerRadius="2" ToolTip.Tip="刪除所選行">
                                         <Rectangle Width="11" Height="2" Fill="#EF4444" RadiusX="0.5" RadiusY="0.5" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                     </Button>
-                                    <Button x:Name="BtnAdd" Width="26" Height="26" Padding="0" 
+                                    <Button x:Name="BtnAdd" AutomationProperties.Name="插入新行" Width="26" Height="26" Padding="0" 
                                             Background="#F0FDF4" BorderBrush="#BBF7D0" BorderThickness="1" CornerRadius="2" ToolTip.Tip="在所選位置插入新行 (同 Ctrl+Click)">
                                         <Path Data="{StaticResource IconRowAdd}" Fill="#10B981" Width="11" Height="11" Stretch="Uniform"/>
                                     </Button>
-                                    <Button x:Name="BtnDelete" Width="26" Height="26" Padding="0" 
+                                    <Button x:Name="BtnDelete" AutomationProperties.Name="清空當前程式區" Width="26" Height="26" Padding="0" 
                                             Background="#FEF2F2" BorderBrush="#FECACA" BorderThickness="1" CornerRadius="2" ToolTip.Tip="清空當前程式區 (Clear Section)">
                                         <Path Data="{StaticResource IconCross}" Fill="#EF4444" Width="11" Height="11" Stretch="Uniform"/>
                                     </Button>
-                                    <Button x:Name="BtnSave" Height="26" Padding="6,0" 
+                                    <Button x:Name="BtnSave" AutomationProperties.Name="Save" Height="26" Padding="6,0" 
                                             Background="#F0F9FF" BorderBrush="#BAE6FD" BorderThickness="1" CornerRadius="2">
                                         <StackPanel Orientation="Horizontal" Spacing="3">
                                             <Path Data="{StaticResource IconFloppySave}" Fill="#0284C7" Width="11" Height="11" Stretch="Uniform"/>
@@ -427,21 +443,21 @@
 
                             <!-- 第三行：流程單步控制 5 等分欄 (Auto, Jump, Step, Pause, Reset，全原生向量圖標) -->
                             <Grid Grid.Row="2" ColumnDefinitions="*,*,*,*,*" Margin="0">
-                                <Button x:Name="BtnAuto" Grid.Column="0" Margin="1,0" Height="26" 
+                                <Button x:Name="BtnAuto" AutomationProperties.Name="Auto" Grid.Column="0" Margin="1,0" Height="26" 
                                         Background="#FFFFFF" BorderBrush="#CBD5E1" BorderThickness="1" CornerRadius="2">
                                     <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Center" VerticalAlignment="Center">
                                         <Path Data="{StaticResource IconPlay}" Fill="#0284C7" Width="9" Height="9" Stretch="Uniform"/>
                                         <TextBlock Text="Auto" FontWeight="Bold" FontSize="10.5" Foreground="#0284C7"/>
                                     </StackPanel>
                                 </Button>
-                                <Button x:Name="BtnJump" Grid.Column="1" Margin="1,0" Height="26" 
+                                <Button x:Name="BtnJump" AutomationProperties.Name="Jump" Grid.Column="1" Margin="1,0" Height="26" 
                                         Background="#FFFFFF" BorderBrush="#CBD5E1" BorderThickness="1" CornerRadius="2">
                                     <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Center" VerticalAlignment="Center">
                                         <Path Data="{StaticResource IconJump}" Fill="#334155" Width="10" Height="10" Stretch="Uniform"/>
                                         <TextBlock Text="Jump" FontWeight="Bold" FontSize="10.5" Foreground="#334155"/>
                                     </StackPanel>
                                 </Button>
-                                <Button x:Name="BtnStep" Grid.Column="2" Margin="1,0" Height="26" 
+                                <Button x:Name="BtnStep" AutomationProperties.Name="Step" Grid.Column="2" Margin="1,0" Height="26" 
                                         Background="#FFFFFF" BorderBrush="#CBD5E1" BorderThickness="1" CornerRadius="2">
                                     <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Center" VerticalAlignment="Center">
                                         <Path Data="{StaticResource IconStep}" Fill="#10B981" Width="10" Height="10" Stretch="Uniform"/>
