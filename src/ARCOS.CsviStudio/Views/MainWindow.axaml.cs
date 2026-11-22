@@ -93,11 +93,12 @@ public partial class MainWindow : Window
         {
             var candidates = new[]
             {
+                Path.Combine(AppContext.BaseDirectory, "MODULES", "IO", "DRIVER", "MockIO.csvi"),
                 Path.Combine(AppContext.BaseDirectory, "MockIO.csvi"),
-                Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "MODULES", "IO", "DRIVER", "MockIO", "MockIO.csvi"),
-                Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "src", "MODULES", "IO", "DRIVER", "MockIO", "MockIO.csvi"),
-                Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "src", "MODULES", "IO", "DRIVER", "MockIO", "MockIO.csvi"),
-                @"D:\AntiGravity\ARCOSharp\src\MODULES\IO\DRIVER\MockIO\MockIO.csvi"
+                Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "MODULES", "IO", "DRIVER", "MockIO.csvi"),
+                Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "src", "MODULES", "IO", "DRIVER", "MockIO.csvi"),
+                Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "src", "MODULES", "IO", "DRIVER", "MockIO.csvi"),
+                @"D:\AntiGravity\ARCOSharp\src\MODULES\IO\DRIVER\MockIO.csvi"
             };
             initialFilePath = candidates.FirstOrDefault(File.Exists);
         }

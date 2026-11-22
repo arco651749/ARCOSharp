@@ -23,20 +23,22 @@ if (Test-Path "$OutputDir") {
 }
 
 # 1. Create standard topology directories
-$modules = @("IO", "CAPTURE", "MOTION", "DAQ", "SYSTEM", "THREAD", "VARIABLE", "PYTHON")
-foreach ($m in $modules) {
+# 僅有硬體驅動的模組 (IO, CAPTURE, MOTION, DAQ) 建立 DRIVER 目錄；已廢棄 USERPARAMETEREDITOR 目錄 (CSVI 3.0 內建 Guide UI)
+$driverModules = @("IO", "CAPTURE", "MOTION", "DAQ")
+foreach ($m in $driverModules) {
     New-Item -ItemType Directory -Path "$OutputDir\MODULES\$m\DRIVER" -Force | Out-Null
-    New-Item -ItemType Directory -Path "$OutputDir\MODULES\$m\USERPARAMETEREDITOR" -Force | Out-Null
 }
-New-Item -ItemType Directory -Path "$OutputDir\EXTRACMD\USERPARAMETEREDITOR" -Force | Out-Null
+foreach ($m in @("SYSTEM", "THREAD", "VARIABLE", "PYTHON")) {
+    New-Item -ItemType Directory -Path "$OutputDir\MODULES\$m" -Force | Out-Null
+}
+New-Item -ItemType Directory -Path "$OutputDir\EXTRACMD" -Force | Out-Null
 New-Item -ItemType Directory -Path "$OutputDir\SCRIPT" -Force | Out-Null
 New-Item -ItemType Directory -Path "$OutputDir\LOGS" -Force | Out-Null
-New-Item -ItemType Directory -Path "$OutputDir\PICTURE\CAM0" -Force | Out-Null
-New-Item -ItemType Directory -Path "$OutputDir\PICTURE\CAM1" -Force | Out-Null
-New-Item -ItemType Directory -Path "$OutputDir\PICTURE\CamTop" -Force | Out-Null
+New-Item -ItemType Directory -Path "$OutputDir\PICTURE" -Force | Out-Null
 New-Item -ItemType Directory -Path "$OutputDir\WAVEFORM" -Force | Out-Null
 New-Item -ItemType Directory -Path "$OutputDir\POINT&PATH" -Force | Out-Null
 New-Item -ItemType Directory -Path "$OutputDir\Python" -Force | Out-Null
+New-Item -ItemType Directory -Path "$OutputDir\PANELS" -Force | Out-Null
 
 New-Item -ItemType Directory -Path "$OutputDir\ExternalModules" -Force | Out-Null
 New-Item -ItemType Directory -Path "$OutputDir\RULES" -Force | Out-Null
@@ -82,21 +84,18 @@ foreach ($d in $driverProjects) {
         Remove-Item -Path $nativeDir -Recurse -Force
     }
 
-    # 若為 MockIO 驅動，優先保留並部署 CSVI 3.0 封裝檔 (絕不拿無 XAML 的舊版 DLL 覆蓋 src 內的 CSVI 3.0)
+    # 若為 MockIO / MockMotion 驅動，統一只將 CSVI 3.0 封裝檔放在 DRIVER\ 下層 (不重複放進 DRIVER\Mock*\)
     if ($driverName -eq "MockIO.Driver") {
         $srcMockCsvi = "$PSScriptRoot\..\src\MODULES\IO\DRIVER\MockIO.csvi"
         if (Test-Path -LiteralPath $srcMockCsvi) {
-            Copy-Item -LiteralPath $srcMockCsvi -Destination "$outPath\MockIO.csvi" -Force
             Copy-Item -LiteralPath $srcMockCsvi -Destination "$OutputDir\MODULES\IO\DRIVER\MockIO.csvi" -Force
         } else {
-            Copy-Item "$outPath\MockIO.Driver.dll" "$outPath\MockIO.csvi" -Force
             Copy-Item "$outPath\MockIO.Driver.dll" "$OutputDir\MODULES\IO\DRIVER\MockIO.csvi" -Force
         }
     }
     if ($driverName -eq "MockMotion.Driver") {
         $srcMockMotionCsvi = "$PSScriptRoot\..\src\MODULES\MOTION\DRIVER\MockMotion.csvi"
         if (Test-Path -LiteralPath $srcMockMotionCsvi) {
-            Copy-Item -LiteralPath $srcMockMotionCsvi -Destination "$outPath\MockMotion.csvi" -Force
             Copy-Item -LiteralPath $srcMockMotionCsvi -Destination "$OutputDir\MODULES\MOTION\DRIVER\MockMotion.csvi" -Force
         }
     }
@@ -130,33 +129,32 @@ foreach ($csvi in $systemCsvis) {
     Copy-Item -LiteralPath $csvi.FullName -Destination "$OutputDir\MODULES\SYSTEM\$($csvi.Name)" -Force
 }
 
-# 部署 UserPanel.csvi (獨立 CSVI 3.0 前面板)
+# 部署 UserPanel.csvi (獨立 CSVI 3.0 前面板，統一部署於 PANELS\)
 Write-Host "Building and packaging UserPanel.csvi..." -ForegroundColor Magenta
 $userPanelProj = "$PSScriptRoot\..\src\PANELS\UserPanel\ARCOS.UserPanel.csproj"
+$panelsSrcDir = "$PSScriptRoot\..\PANELS"
+if (-not (Test-Path -LiteralPath $panelsSrcDir)) {
+    New-Item -ItemType Directory -Path $panelsSrcDir -Force | Out-Null
+}
 if (Test-Path -LiteralPath $userPanelProj) {
     $tempPanelBuild = "$OutputDir\temp_userpanel_build"
     dotnet build "$userPanelProj" -c Release -o "$tempPanelBuild" --nologo -v q
     $userPanelDll = "$tempPanelBuild\UserPanel.dll"
     if (Test-Path -LiteralPath $userPanelDll) {
-        Copy-Item -LiteralPath $userPanelDll -Destination "$OutputDir\UserPanel.csvi" -Force
-        Copy-Item -LiteralPath $userPanelDll -Destination "$OutputDir\MODULES\SYSTEM\UserPanel.csvi" -Force
-        Copy-Item -LiteralPath $userPanelDll -Destination "$PSScriptRoot\..\src\MODULES\SYSTEM\UserPanel.csvi" -Force
-        Copy-Item -LiteralPath $userPanelDll -Destination "$PSScriptRoot\..\UserPanel.csvi" -Force
-        Write-Host "  -> Successfully deployed UserPanel.csvi to root and MODULES\SYSTEM" -ForegroundColor Cyan
+        Copy-Item -LiteralPath $userPanelDll -Destination "$OutputDir\PANELS\UserPanel.csvi" -Force
+        Copy-Item -LiteralPath $userPanelDll -Destination "$panelsSrcDir\UserPanel.csvi" -Force
+        Write-Host "  -> Successfully deployed UserPanel.csvi to PANELS\" -ForegroundColor Cyan
     }
     Remove-Item -Path "$tempPanelBuild" -Recurse -Force -ErrorAction SilentlyContinue
 }
 
-# 部署自訂多面板與測試面板 PANELS/*.csvi (不放入 MODULES\SYSTEM 以避免汙染 System@getCMD)
-$panelsSrcDir = "$PSScriptRoot\..\PANELS"
+# 部署所有 PANELS/*.csvi 到 Runtime 的 PANELS\ (不放入根目錄或 MODULES\SYSTEM)
 if (Test-Path -LiteralPath $panelsSrcDir) {
     New-Item -ItemType Directory -Path "$OutputDir\PANELS" -Force | Out-Null
     $customPanelCsvis = Get-ChildItem -LiteralPath $panelsSrcDir -Filter "*.csvi" -File
     foreach ($pCsvi in $customPanelCsvis) {
         Copy-Item -LiteralPath $pCsvi.FullName -Destination "$OutputDir\PANELS\$($pCsvi.Name)" -Force
-        Copy-Item -LiteralPath $pCsvi.FullName -Destination "$OutputDir\$($pCsvi.Name)" -Force
-        Copy-Item -LiteralPath $pCsvi.FullName -Destination "$PSScriptRoot\..\$($pCsvi.Name)" -Force
-        Write-Host "  -> Deployed UserPanel package: $($pCsvi.Name)" -ForegroundColor Cyan
+        Write-Host "  -> Deployed UserPanel package to PANELS\: $($pCsvi.Name)" -ForegroundColor Cyan
     }
 }
 
@@ -205,8 +203,8 @@ foreach ($csvi in $motionCsvis) {
     Copy-Item -LiteralPath $csvi.FullName -Destination $dest -Force
 }
 
-# 部署 CALL、POINT&PATH、USER、AIAGENT、MULTISTATION、REDIS、HELLO 等純 CSVI 模組
-foreach ($pureMod in @("CALL", "POINT&PATH", "USER", "AIAGENT", "MULTISTATION", "REDIS", "HELLO")) {
+# 部署 CALL、POINT&PATH、USER、AIAGENT、MULTISTATION、REDIS 等純 CSVI 正式模組 (排除文件測試用 HELLO)
+foreach ($pureMod in @("CALL", "POINT&PATH", "USER", "AIAGENT", "MULTISTATION", "REDIS")) {
     $srcPureDir = "$PSScriptRoot\..\src\MODULES\$pureMod"
     if (Test-Path -LiteralPath $srcPureDir) {
         New-Item -ItemType Directory -Path "$OutputDir\MODULES\$pureMod" -Force | Out-Null
