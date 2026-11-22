@@ -29,4 +29,8 @@
     <ProjectReference Include="..\..\src\MODULES\IO\DRIVER\MockIO\ARCOS.Driver.MockIO.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Compile Include="..\..\verification\2026-11-22\tests\**\*.cs" LinkBase="Verification_2026_11_22" />
+  </ItemGroup>
+
 </Project>
